@@ -53,7 +53,7 @@ jobs:
               docker pull $DOCKER_REGISTRY_URL/napi-rs/napi-rs/nodejs-rust:lts-debian
               docker tag $DOCKER_REGISTRY_URL/napi-rs/napi-rs/nodejs-rust:lts-debian builder
             build: |
-              docker run --rm -v ~/.cargo/git:/root/.cargo/git -v ~/.cargo/registry:/root/.cargo/registry -v $(pwd):/build -w /build builder sh -c "npm install -g pnpm && pnpm install && pnpm build --dir node && strip node/rspack-sources.linux-x64-gnu.node"
+              docker run --rm -v ~/.cargo/git:/root/.cargo/git -v ~/.cargo/registry:/root/.cargo/registry -v $(pwd):/build -w /build builder sh -c "npm install -g pnpm@^6 && pnpm install && pnpm build --dir node && strip node/rspack-sources.linux-x64-gnu.node"
           - host: ubuntu-latest
             target: 'x86_64-unknown-linux-musl'
             docker: |
@@ -125,7 +125,7 @@ jobs:
           check-latest: true
 
       - name: Install pnpm
-        run: npm install -g pnpm
+        run: npm install -g pnpm@^6
 
       - name: Install
         uses: actions-rs/toolchain@v1
@@ -196,7 +196,7 @@ jobs:
           check-latest: true
 
       - name: Install pnpm
-        run: npm install -g pnpm
+        run: npm install -g pnpm@^6
 
       - name: Cache NPM dependencies
         uses: actions/cache@v2
@@ -250,7 +250,7 @@ jobs:
         shell: bash
 
       - name: Test bindings
-        run: docker run --rm -v $(pwd):/${{ env.APP_NAME }} -w /${{ env.APP_NAME }} node:${{ matrix.node }}-slim sh -c "npm install -g pnpm && pnpm install && pnpm test:node"
+        run: docker run --rm -v $(pwd):/${{ env.APP_NAME }} -w /${{ env.APP_NAME }} node:${{ matrix.node }}-slim sh -c "npm install -g pnpm@^6 && pnpm install && pnpm test:node"
 
   test-linux-x64-musl-binding:
     name: Test bindings on x86_64-unknown-linux-musl - node@${{ matrix.node }}
@@ -282,7 +282,7 @@ jobs:
         shell: bash
 
       - name: Test bindings
-        run: docker run --rm -v $(pwd):/${{ env.APP_NAME }} -w /${{ env.APP_NAME }} node:${{ matrix.node }}-alpine sh -c "npm install -g pnpm && pnpm install && pnpm test:node"
+        run: docker run --rm -v $(pwd):/${{ env.APP_NAME }} -w /${{ env.APP_NAME }} node:${{ matrix.node }}-alpine sh -c "npm install -g pnpm@^6 && pnpm install && pnpm test:node"
 
   test-linux-aarch64-gnu-binding:
     name: Test bindings on aarch64-unknown-linux-gnu - node@${{ matrix.node }}
@@ -316,7 +316,7 @@ jobs:
           options: -v ${{ github.workspace }}:/build -w /build
           run: |
             set -e
-            npm install -g pnpm
+            npm install -g pnpm@^6
             pnpm install --frozen-lockfile
             pnpm test:node
             ls -la
@@ -349,7 +349,7 @@ jobs:
           args: >
             sh -c "
               apk add nodejs npm && \
-              npm install -g pnpm && \
+              npm install -g pnpm@^6 && \
               pnpm install --frozen-lockfile && \
               pnpm test:node
             "
@@ -386,7 +386,7 @@ jobs:
           options: -v ${{ github.workspace }}:/build -w /build
           run: |
             set -e
-            npm install -g pnpm
+            npm install -g pnpm@^6
             pnpm install --frozen-lockfile
             pnpm test:node
             ls -la
@@ -425,7 +425,7 @@ jobs:
           version: 'latest'
 
       - name: Install pnpm
-        run: npm install -g pnpm
+        run: npm install -g pnpm@^6
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --registry https://registry.npm.taobao.org
@@ -458,7 +458,7 @@ jobs:
           check-latest: true
 
       - name: Install pnpm
-        run: npm install -g pnpm
+        run: npm install -g pnpm@^6
 
       - name: Cache NPM dependencies
         uses: actions/cache@v2
