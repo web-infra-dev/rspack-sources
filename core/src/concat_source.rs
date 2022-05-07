@@ -29,30 +29,13 @@ impl ConcatSource {
   }
 
   pub(crate) fn concat_each_impl(
-    prev_map: Option<SourceMap>,
+    prev_map: Option<&SourceMap>,
     concattable: &mut ConcattableSource,
   ) -> SourceMap {
     match concattable {
       ConcattableSource::SourceMapSource(s) => {
-        let current_file_name = s.name.as_str();
-        let source_idx = s
-          .source_map
-          .sources()
-          .enumerate()
-          .find_map(|(idx, source)| {
-            if source == current_file_name {
-              Some(idx)
-            } else {
-              None
-            }
-          });
-
-        if let Some(source_idx) = source_idx {
-          if s.source_map.get_source(source_idx as u32).is_none() {
-            s.source_map
-              .set_source_contents(source_idx as u32, s.original_source.map(|s| s.as_str()));
-          }
-        }
+        s.ensure_original_source();
+        s.remap_with_inner_sourcemap();
 
         todo!()
       }
@@ -76,7 +59,7 @@ impl Source for ConcatSource {
   fn map(&mut self, option: GenMapOption) -> Option<SourceMap> {
     let mut prev_map: Option<SourceMap> = None;
     self.children.iter_mut().for_each(|concattable| {
-      let new_map = ConcatSource::concat_each_impl(prev_map, concattable);
+      let new_map = ConcatSource::concat_each_impl(prev_map.as_ref(), concattable);
       prev_map = Some(new_map);
     });
 
