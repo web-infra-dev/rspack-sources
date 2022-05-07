@@ -10,6 +10,8 @@ version = "0.0.1"
 
 [dependencies]
 sourcemap = "6.0.2"
+smol_str = "0.1.23"
+rayon = "1.5.2"
 
 
 

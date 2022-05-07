@@ -1,5 +1,7 @@
 #![deny(clippy::all)]
 
+mod result;
+
 pub mod cached_source;
 pub mod concat_source;
 pub mod helpers;

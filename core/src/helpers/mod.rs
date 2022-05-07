@@ -1,5 +1,7 @@
 use sourcemap::SourceMap;
 
+pub mod mapping;
+
 use crate::source::GenMapOption;
 
 pub fn get_map(option: GenMapOption) -> Option<SourceMap> {
@@ -91,10 +93,10 @@ pub fn stream_chunks_of_source_map_full<C, S, N>(
 {
   let mut lines = source.lines();
   if lines.size_hint().0 == 0 {
-    return ChunkOfSourceMap {
-      generated_line: 1,
-      generated_column: 0,
-    };
+    // return ChunkOfSourceMap {
+    //   generated_line: 1,
+    //   generated_column: 0,
+    // };
   }
 }
 
