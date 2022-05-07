@@ -1,3 +1,3 @@
-# `@speedy-js/source-map-linux-arm64-musl`
+# `@speedy-js/rspack-sources-linux-arm64-musl`
 
-This is the **aarch64-unknown-linux-musl** binary for `@speedy-js/source-map`
+This is the **aarch64-unknown-linux-musl** binary for `@speedy-js/rspack-sources`

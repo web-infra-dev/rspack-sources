@@ -1,7 +1,7 @@
 {
-  "name": "@speedy-js/source-map",
+  "name": "@speedy-js/rspack-sources",
   "version": "0.0.0",
-  "description": "Speedy source-map",
+  "description": "rspack-sources",
   "main": "node/index.js",
   "types": "index.d.ts",
   "repository": "https://github.com/speedy-js/napi-template",

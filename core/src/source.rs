@@ -2,7 +2,7 @@ use sourcemap::SourceMap;
 
 pub struct GenMapOption {
   // @default true
-  columns: bool
+  columns: bool,
 }
 
 pub trait Source {

@@ -1,5 +1,5 @@
 {
-  "name": "@speedy-js/source-map-win32-arm64-msvc",
+  "name": "@speedy-js/rspack-sources-win32-arm64-msvc",
   "version": "0.0.0",
   "os": [
     "win32"
@@ -11,7 +11,7 @@
   "files": [
     "rspack-sources.win32-arm64-msvc.node"
   ],
-  "description": "Speedy source-map",
+  "description": "rspack-sources",
   "keywords": [
     "sourcemap",
     "speedy",
@@ -27,5 +27,5 @@
     "registry": "https://registry.npmjs.org/",
     "access": "public"
   },
-  "repository": "https://github.com/speedy-js/sourcemap.git"
+  "repository": "https://github.com/speedy-js/rspack-sources.git"
 }

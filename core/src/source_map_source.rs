@@ -1,4 +1,7 @@
-use crate::{source::{Source, GenMapOption}, helpers::get_map};
+use crate::{
+  helpers::get_map,
+  source::{GenMapOption, Source},
+};
 
 use sourcemap::SourceMap;
 
@@ -39,9 +42,7 @@ impl Source for SourceMapSource {
   fn map(&mut self, option: GenMapOption) -> Option<SourceMap> {
     match self.inner_source_map {
       None => Some(self.source_map.clone()),
-      Some(_) => get_map(option)
+      Some(_) => get_map(option),
     }
   }
 }
-
-

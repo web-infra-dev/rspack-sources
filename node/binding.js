@@ -33,7 +33,7 @@ switch (platform) {
       if (localFileExisted) {
         nativeBinding = require('./rspack-sources.android-arm64.node')
       } else {
-        nativeBinding = require('@speedy-js/source-map-android-arm64')
+        nativeBinding = require('@speedy-js/rspack-sources-android-arm64')
       }
     } catch (e) {
       loadError = e
@@ -49,7 +49,7 @@ switch (platform) {
           if (localFileExisted) {
             nativeBinding = require('./rspack-sources.win32-x64-msvc.node')
           } else {
-            nativeBinding = require('@speedy-js/source-map-win32-x64-msvc')
+            nativeBinding = require('@speedy-js/rspack-sources-win32-x64-msvc')
           }
         } catch (e) {
           loadError = e
@@ -63,7 +63,7 @@ switch (platform) {
           if (localFileExisted) {
             nativeBinding = require('./rspack-sources.win32-ia32-msvc.node')
           } else {
-            nativeBinding = require('@speedy-js/source-map-win32-ia32-msvc')
+            nativeBinding = require('@speedy-js/rspack-sources-win32-ia32-msvc')
           }
         } catch (e) {
           loadError = e
@@ -77,7 +77,7 @@ switch (platform) {
           if (localFileExisted) {
             nativeBinding = require('./rspack-sources.win32-arm64-msvc.node')
           } else {
-            nativeBinding = require('@speedy-js/source-map-win32-arm64-msvc')
+            nativeBinding = require('@speedy-js/rspack-sources-win32-arm64-msvc')
           }
         } catch (e) {
           loadError = e
@@ -97,7 +97,7 @@ switch (platform) {
           if (localFileExisted) {
             nativeBinding = require('./rspack-sources.darwin-x64.node')
           } else {
-            nativeBinding = require('@speedy-js/source-map-darwin-x64')
+            nativeBinding = require('@speedy-js/rspack-sources-darwin-x64')
           }
         } catch (e) {
           loadError = e
@@ -111,7 +111,7 @@ switch (platform) {
           if (localFileExisted) {
             nativeBinding = require('./rspack-sources.darwin-arm64.node')
           } else {
-            nativeBinding = require('@speedy-js/source-map-darwin-arm64')
+            nativeBinding = require('@speedy-js/rspack-sources-darwin-arm64')
           }
         } catch (e) {
           loadError = e
@@ -132,7 +132,7 @@ switch (platform) {
       if (localFileExisted) {
         nativeBinding = require('./rspack-sources.freebsd-x64.node')
       } else {
-        nativeBinding = require('@speedy-js/source-map-freebsd-x64')
+        nativeBinding = require('@speedy-js/rspack-sources-freebsd-x64')
       }
     } catch (e) {
       loadError = e
@@ -149,7 +149,7 @@ switch (platform) {
             if (localFileExisted) {
               nativeBinding = require('./rspack-sources.linux-x64-musl.node')
             } else {
-              nativeBinding = require('@speedy-js/source-map-linux-x64-musl')
+              nativeBinding = require('@speedy-js/rspack-sources-linux-x64-musl')
             }
           } catch (e) {
             loadError = e
@@ -162,7 +162,7 @@ switch (platform) {
             if (localFileExisted) {
               nativeBinding = require('./rspack-sources.linux-x64-gnu.node')
             } else {
-              nativeBinding = require('@speedy-js/source-map-linux-x64-gnu')
+              nativeBinding = require('@speedy-js/rspack-sources-linux-x64-gnu')
             }
           } catch (e) {
             loadError = e
@@ -178,7 +178,7 @@ switch (platform) {
             if (localFileExisted) {
               nativeBinding = require('./rspack-sources.linux-arm64-musl.node')
             } else {
-              nativeBinding = require('@speedy-js/source-map-linux-arm64-musl')
+              nativeBinding = require('@speedy-js/rspack-sources-linux-arm64-musl')
             }
           } catch (e) {
             loadError = e
@@ -191,7 +191,7 @@ switch (platform) {
             if (localFileExisted) {
               nativeBinding = require('./rspack-sources.linux-arm64-gnu.node')
             } else {
-              nativeBinding = require('@speedy-js/source-map-linux-arm64-gnu')
+              nativeBinding = require('@speedy-js/rspack-sources-linux-arm64-gnu')
             }
           } catch (e) {
             loadError = e
@@ -206,7 +206,7 @@ switch (platform) {
           if (localFileExisted) {
             nativeBinding = require('./rspack-sources.linux-arm-gnueabihf.node')
           } else {
-            nativeBinding = require('@speedy-js/source-map-linux-arm-gnueabihf')
+            nativeBinding = require('@speedy-js/rspack-sources-linux-arm-gnueabihf')
           }
         } catch (e) {
           loadError = e

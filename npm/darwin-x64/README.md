@@ -1,3 +1,3 @@
-# `@speedy-js/source-map-darwin-x64`
+# `@speedy-js/rspack-sources-darwin-x64`
 
-This is the **x86_64-apple-darwin** binary for `@speedy-js/source-map`
+This is the **x86_64-apple-darwin** binary for `@speedy-js/rspack-sources`

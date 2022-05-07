@@ -25,7 +25,7 @@
       ]
     },
     "package": {
-      "name": "@speedy-js/source-map"
+      "name": "@speedy-js/rspack-sources"
     }
   },
   "engines": {

@@ -1,3 +1,3 @@
-# `@speedy-js/source-map-android-arm-eabi`
+# `@speedy-js/rspack-sources-android-arm-eabi`
 
-This is the **armv7-linux-androideabi** binary for `@speedy-js/source-map`
+This is the **armv7-linux-androideabi** binary for `@speedy-js/rspack-sources`
