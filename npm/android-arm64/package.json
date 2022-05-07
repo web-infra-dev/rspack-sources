@@ -7,9 +7,9 @@
   "cpu": [
     "arm64"
   ],
-  "main": "speedy-sourcemap.android-arm64.node",
+  "main": "rspack-sources.android-arm64.node",
   "files": [
-    "speedy-sourcemap.android-arm64.node"
+    "rspack-sources.android-arm64.node"
   ],
   "description": "Speedy source-map",
   "keywords": [

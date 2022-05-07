@@ -2,13 +2,13 @@
   "name": "node",
   "version": "0.0.0",
   "private": true,
-  "description": "Speedy source-map",
+  "description": "rspack sources",
   "scripts": {
     "build": "napi build --platform --release --js binding.js --dts binding.d.ts --pipe \"prettier -w\"",
     "build:debug": "napi build --platform --js binding.js --dts binding.d.ts --pipe \"prettier -w\""
   },
   "napi": {
-    "name": "speedy-sourcemap",
+    "name": "rspack-sources",
     "triples": {
       "defaults": true,
       "additional": [

@@ -7,9 +7,9 @@
   "cpu": [
     "x64"
   ],
-  "main": "speedy-sourcemap.win32-x64-msvc.node",
+  "main": "rspack-sources.win32-x64-msvc.node",
   "files": [
-    "speedy-sourcemap.win32-x64-msvc.node"
+    "rspack-sources.win32-x64-msvc.node"
   ],
   "description": "Speedy source-map",
   "keywords": [

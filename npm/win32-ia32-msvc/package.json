@@ -7,9 +7,9 @@
   "cpu": [
     "ia32"
   ],
-  "main": "speedy-sourcemap.win32-ia32-msvc.node",
+  "main": "rspack-sources.win32-ia32-msvc.node",
   "files": [
-    "speedy-sourcemap.win32-ia32-msvc.node"
+    "rspack-sources.win32-ia32-msvc.node"
   ],
   "description": "Speedy source-map",
   "keywords": [

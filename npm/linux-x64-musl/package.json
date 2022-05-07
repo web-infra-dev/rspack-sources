@@ -7,9 +7,9 @@
   "cpu": [
     "x64"
   ],
-  "main": "speedy-sourcemap.linux-x64-musl.node",
+  "main": "rspack-sources.linux-x64-musl.node",
   "files": [
-    "speedy-sourcemap.linux-x64-musl.node"
+    "rspack-sources.linux-x64-musl.node"
   ],
   "description": "Speedy source-map",
   "keywords": [

@@ -7,9 +7,9 @@
   "cpu": [
     "arm"
   ],
-  "main": "speedy-sourcemap.android-arm-eabi.node",
+  "main": "rspack-sources.android-arm-eabi.node",
   "files": [
-    "speedy-sourcemap.android-arm-eabi.node"
+    "rspack-sources.android-arm-eabi.node"
   ],
   "description": "Speedy source-map",
   "keywords": [

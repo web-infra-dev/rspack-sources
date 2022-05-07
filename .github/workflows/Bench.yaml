@@ -2,7 +2,7 @@ name: Benchmark
 
 env:
   DEBUG: 'napi:*'
-  APP_NAME: 'speedy-sourcemap'
+  APP_NAME: 'rspack-sources'
   MACOSX_DEPLOYMENT_TARGET: '10.13'
   # https://github.com/SchrodingerZhu/snmalloc-rs
   CACHE_FRIENDLY_OFFSET: 64

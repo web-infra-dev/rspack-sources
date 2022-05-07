@@ -7,9 +7,9 @@
   "cpu": [
     "arm64"
   ],
-  "main": "speedy-sourcemap.linux-arm64-gnu.node",
+  "main": "rspack-sources.linux-arm64-gnu.node",
   "files": [
-    "speedy-sourcemap.linux-arm64-gnu.node"
+    "rspack-sources.linux-arm64-gnu.node"
   ],
   "description": "Speedy source-map",
   "keywords": [

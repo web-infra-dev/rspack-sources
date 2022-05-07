@@ -7,9 +7,9 @@
   "cpu": [
     "arm64"
   ],
-  "main": "speedy-sourcemap.darwin-arm64.node",
+  "main": "rspack-sources.darwin-arm64.node",
   "files": [
-    "speedy-sourcemap.darwin-arm64.node"
+    "rspack-sources.darwin-arm64.node"
   ],
   "description": "Speedy source-map",
   "keywords": [

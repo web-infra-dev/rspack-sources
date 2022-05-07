@@ -7,9 +7,9 @@
   "cpu": [
     "arm"
   ],
-  "main": "speedy-sourcemap.linux-arm-gnueabihf.node",
+  "main": "rspack-sources.linux-arm-gnueabihf.node",
   "files": [
-    "speedy-sourcemap.linux-arm-gnueabihf.node"
+    "rspack-sources.linux-arm-gnueabihf.node"
   ],
   "description": "Speedy source-map",
   "keywords": [

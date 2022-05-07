@@ -7,9 +7,9 @@
   "cpu": [
     "x64"
   ],
-  "main": "speedy-sourcemap.freebsd-x64.node",
+  "main": "rspack-sources.freebsd-x64.node",
   "files": [
-    "speedy-sourcemap.freebsd-x64.node"
+    "rspack-sources.freebsd-x64.node"
   ],
   "description": "Speedy source-map",
   "keywords": [

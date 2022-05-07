@@ -68,7 +68,7 @@
     "arrowParens": "always"
   },
   "napi": {
-    "name": "speedy-sourcemap",
+    "name": "rspack-sources",
     "triples": {
       "defaults": true,
       "additional": [
