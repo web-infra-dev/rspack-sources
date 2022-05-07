@@ -10,11 +10,8 @@ Cargo.lock
 # IDE
 .idea
 
-
 # Added by cargo
 /target
-
-
 
 # Web
 node_modules
@@ -23,3 +20,6 @@ dist
 
 # Node addon
 *.node
+
+# OS
+.DS_Store
