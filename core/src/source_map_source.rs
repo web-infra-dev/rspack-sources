@@ -1,10 +1,7 @@
 use sourcemap::{SourceMap, SourceMapBuilder, Token};
 
 use crate::result::Error;
-use crate::{
-  helpers::get_map,
-  source::{GenMapOption, Source},
-};
+use crate::source::{GenMapOption, Source};
 
 pub struct SourceMapSource {
   pub(crate) source_code: String,
@@ -14,7 +11,6 @@ pub struct SourceMapSource {
   pub(crate) inner_source_map: Option<SourceMap>,
   pub(crate) remove_original_source: bool,
 
-  original_source_ensured: bool,
   pub(crate) sourcemap_remapped: Option<SourceMap>,
 }
 
@@ -41,30 +37,35 @@ impl SourceMapSource {
     let SourceMapSourceOptions {
       source_code,
       name,
-      source_map,
+      mut source_map,
       original_source,
       inner_source_map,
       remove_original_source,
     } = options;
 
-    Self {
+    let source_map = Self::ensure_source_map(source_map, name.as_str(), original_source.as_ref());
+
+    let mut ins = Self {
       source_code,
       name,
       source_map,
       original_source,
       inner_source_map,
       remove_original_source,
-
-      original_source_ensured: false,
       sourcemap_remapped: Default::default(),
-    }
+    };
+
+    let remapped = ins.remap_with_inner_sourcemap();
+    ins.sourcemap_remapped = remapped;
+
+    ins
   }
 
   pub fn from_slice(options: SourceMapSourceSliceOptions) -> Result<Self, Error> {
     let SourceMapSourceSliceOptions {
       source_code,
       name,
-      source_map,
+      mut source_map,
       original_source,
       inner_source_map,
       remove_original_source,
@@ -76,7 +77,9 @@ impl SourceMapSource {
       None
     };
 
-    Ok(Self {
+    let source_map = Self::ensure_source_map(source_map, name.as_str(), original_source.as_ref());
+
+    let mut ins = Self {
       source_code: String::from_utf8(source_code.to_vec())?,
       name,
       source_map,
@@ -84,37 +87,39 @@ impl SourceMapSource {
       inner_source_map,
       remove_original_source,
 
-      original_source_ensured: false,
       sourcemap_remapped: Default::default(),
-    })
+    };
+
+    let remapped = ins.remap_with_inner_sourcemap();
+    ins.sourcemap_remapped = remapped;
+
+    Ok(ins)
   }
 
-  pub(crate) fn ensure_original_source(&mut self) {
-    if !self.original_source_ensured {
-      let current_file_name = self.name.as_str();
-      let source_idx = self
-        .source_map
-        .sources()
-        .enumerate()
-        .find_map(|(idx, source)| {
-          if source == current_file_name {
-            Some(idx)
-          } else {
-            None
-          }
-        });
-
-      if let Some(source_idx) = source_idx {
-        if self.source_map.get_source(source_idx as u32).is_none() {
-          self.source_map.set_source_contents(
-            source_idx as u32,
-            self.original_source.as_ref().map(|s| s.as_str()),
-          );
-        }
+  pub fn ensure_source_map(
+    mut source_map: SourceMap,
+    name: &str,
+    original_source: Option<&String>,
+  ) -> SourceMap {
+    let current_file_name = name;
+    let source_idx = source_map.sources().enumerate().find_map(|(idx, source)| {
+      if source == current_file_name {
+        Some(idx)
+      } else {
+        None
       }
+    });
 
-      self.original_source_ensured = true;
+    if let Some(source_idx) = source_idx {
+      if source_map.get_source(source_idx as u32).is_none() {
+        source_map.set_source_contents(
+          source_idx as u32,
+          original_source.as_ref().map(|s| s.as_str()),
+        );
+      }
     }
+
+    source_map
   }
 
   fn find_original_token<'a, 'b>(&'a self, token: &'b Token<'a>) -> (Token<'a>, Option<&str>) {
@@ -132,29 +137,23 @@ impl SourceMapSource {
             inner_source_map.get_source_contents(original_token.get_src_id()),
           )
         } else {
-          (token.clone(), load_source_contents())
+          (*token, load_source_contents())
         }
       } else {
-        (token.clone(), load_source_contents())
+        (*token, load_source_contents())
       }
     } else {
-      (token.clone(), load_source_contents())
+      (*token, load_source_contents())
     }
   }
 
-  pub(crate) fn remap_with_inner_sourcemap(&self) -> Option<SourceMap> {
+  pub(crate) fn remap_with_inner_sourcemap(&mut self) -> Option<SourceMap> {
     let mut source_map_builder = SourceMapBuilder::new(Some(&self.name));
 
     if self.inner_source_map.is_some() {
       let source_map = &self.source_map;
       source_map.tokens().for_each(|token| {
         let (original_token, source_content) = self.find_original_token(&token);
-
-        // let source = original_token.get_source();
-        // let source_id = original_token.get_src_id();
-        // if source == Some(&self.name) {
-        //   source_map_builder.set_source_contents(source_id, source)
-        // }
 
         let raw_token = source_map_builder.add(
           token.get_dst_line(),
@@ -175,14 +174,6 @@ impl SourceMapSource {
 
     None
   }
-
-  pub(crate) fn get_sourcemap_remapped(&self) -> &SourceMap {
-    if let Some(sourcemap) = &self.sourcemap_remapped {
-      sourcemap
-    } else {
-      &self.source_map
-    }
-  }
 }
 
 impl Source for SourceMapSource {
@@ -191,10 +182,13 @@ impl Source for SourceMapSource {
   }
 
   fn map(&mut self, option: GenMapOption) -> Option<SourceMap> {
-    match self.inner_source_map {
-      None => Some(self.source_map.clone()),
-      Some(_) => get_map(option),
-    }
+    Some(
+      self
+        .sourcemap_remapped
+        .as_ref()
+        .unwrap_or(&self.source_map)
+        .clone(),
+    )
   }
 }
 
@@ -229,8 +223,9 @@ fn test_source_map_source() {
   })
   .expect("failed");
 
-  source_map_source.sourcemap_remapped = source_map_source.remap_with_inner_sourcemap();
-  let new_source_map = source_map_source.get_sourcemap_remapped();
+  let new_source_map = source_map_source
+    .map(GenMapOption { columns: false })
+    .expect("failed");
   let token = new_source_map.lookup_token(15, 47).expect("failed");
 
   assert_eq!(token.get_source(), Some("helloworld.mjs"));
