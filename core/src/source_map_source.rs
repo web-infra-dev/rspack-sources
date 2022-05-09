@@ -15,6 +15,7 @@ pub struct SourceMapSource {
   pub(crate) remove_original_source: bool,
 
   original_source_ensured: bool,
+  pub(crate) sourcemap_remapped: Option<SourceMap>,
 }
 
 pub struct SourceMapSourceSliceOptions<'a> {
@@ -55,6 +56,7 @@ impl SourceMapSource {
       remove_original_source,
 
       original_source_ensured: false,
+      sourcemap_remapped: Default::default(),
     }
   }
 
@@ -83,6 +85,7 @@ impl SourceMapSource {
       remove_original_source,
 
       original_source_ensured: false,
+      sourcemap_remapped: Default::default(),
     })
   }
 
@@ -139,7 +142,7 @@ impl SourceMapSource {
     }
   }
 
-  pub(crate) fn remap_with_inner_sourcemap(&mut self) -> Option<SourceMap> {
+  pub(crate) fn remap_with_inner_sourcemap(&self) -> Option<SourceMap> {
     let mut source_map_builder = SourceMapBuilder::new(Some(&self.name));
 
     if self.inner_source_map.is_some() {
@@ -171,6 +174,14 @@ impl SourceMapSource {
     }
 
     None
+  }
+
+  pub(crate) fn get_sourcemap_remapped(&self) -> &SourceMap {
+    if let Some(sourcemap) = &self.sourcemap_remapped {
+      sourcemap
+    } else {
+      &self.source_map
+    }
   }
 }
 
@@ -218,22 +229,20 @@ fn test_source_map_source() {
   })
   .expect("failed");
 
-  let new_source_map = source_map_source
-    .remap_with_inner_sourcemap()
-    .expect("failed");
-  let mut sm: Vec<u8> = Default::default();
-  new_source_map.to_writer(&mut sm);
-  println!(
-    "generated sm {}",
-    String::from_utf8(sm.clone()).expect("failed")
-  );
-
-  let generated_sm = sourcemap::SourceMap::from_slice(&sm).expect("failed");
-
-  let token = generated_sm.lookup_token(15, 47).expect("failed");
+  source_map_source.sourcemap_remapped = source_map_source.remap_with_inner_sourcemap();
+  let new_source_map = source_map_source.get_sourcemap_remapped();
+  let token = new_source_map.lookup_token(15, 47).expect("failed");
 
   assert_eq!(token.get_source(), Some("helloworld.mjs"));
   assert_eq!(token.get_src_col(), 20);
   assert_eq!(token.get_src_line(), 18);
   assert_eq!(token.get_name(), Some("alert"));
+
+  let mut sm: Vec<u8> = Default::default();
+  new_source_map.to_writer(&mut sm);
+
+  println!(
+    "generated sm {}",
+    String::from_utf8(sm.clone()).expect("failed")
+  );
 }
