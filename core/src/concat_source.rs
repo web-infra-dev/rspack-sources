@@ -26,9 +26,10 @@ where
     sm_builder: &mut SourceMapBuilder,
     mut cur_gen_line: u32,
     concattable: &mut T,
+    gen_map_option: &GenMapOption,
   ) {
     // TODO: pass options
-    let source_map = concattable.map(GenMapOption { columns: false });
+    let source_map = concattable.map(gen_map_option);
 
     let mut prev_line = 0u32;
 
@@ -62,9 +63,9 @@ impl<'a, T> Source for ConcatSource<'a, T>
 where
   T: Source,
 {
-  fn source(&self) -> String {
+  fn source(&mut self) -> String {
     let mut code = "".to_owned();
-    self.children.iter().for_each(|child| {
+    self.children.iter_mut().for_each(|child| {
       let mut source = child.source();
       source += "\n";
       code += &source;
@@ -72,13 +73,13 @@ where
     code
   }
 
-  fn map(&mut self, option: GenMapOption) -> Option<SourceMap> {
+  fn map(&mut self, option: &GenMapOption) -> Option<SourceMap> {
     let mut source_map_builder = SourceMapBuilder::new(None);
     let mut cur_gen_line = 0u32;
 
     self.children.iter_mut().for_each(|concattable| {
       let line_len = concattable.source().lines().count();
-      ConcatSource::concat_each_impl(&mut source_map_builder, cur_gen_line, *concattable);
+      ConcatSource::concat_each_impl(&mut source_map_builder, cur_gen_line, *concattable, option);
 
       cur_gen_line += line_len as u32 + 1;
     });
@@ -139,7 +140,9 @@ fn test_concat_source() {
 
   let mut sm_writer: Vec<u8> = Default::default();
   concat_source
-    .map(GenMapOption { columns: true })
+    .map(&GenMapOption {
+      include_source_contents: true,
+    })
     .expect("failed")
     .to_writer(&mut sm_writer);
 

@@ -1,5 +1,6 @@
 use sourcemap::{SourceMap, SourceMapBuilder, Token};
 
+use crate::cached_source::CachedSource;
 use crate::result::Error;
 use crate::source::{GenMapOption, Source};
 
@@ -177,11 +178,11 @@ impl SourceMapSource {
 }
 
 impl Source for SourceMapSource {
-  fn source(&self) -> String {
+  fn source(&mut self) -> String {
     self.source_code.clone()
   }
 
-  fn map(&mut self, option: GenMapOption) -> Option<SourceMap> {
+  fn map(&mut self, option: &GenMapOption) -> Option<SourceMap> {
     Some(
       self
         .sourcemap_remapped
@@ -189,6 +190,12 @@ impl Source for SourceMapSource {
         .unwrap_or(&self.source_map)
         .clone(),
     )
+  }
+}
+
+impl From<SourceMapSource> for CachedSource<SourceMapSource> {
+  fn from(source_map: SourceMapSource) -> Self {
+    Self::new(source_map)
   }
 }
 
@@ -223,9 +230,7 @@ fn test_source_map_source() {
   })
   .expect("failed");
 
-  let new_source_map = source_map_source
-    .map(GenMapOption { columns: false })
-    .expect("failed");
+  let new_source_map = source_map_source.map(&Default::default()).expect("failed");
   let token = new_source_map.lookup_token(15, 47).expect("failed");
 
   assert_eq!(token.get_source(), Some("helloworld.mjs"));
