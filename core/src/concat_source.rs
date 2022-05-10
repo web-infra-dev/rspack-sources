@@ -81,7 +81,7 @@ where
     gen_map_options: &GenMapOption,
   ) -> Result<Option<String>, Error> {
     let map_string = self.generate_string(gen_map_options)?;
-    Ok(map_string.map(|s| base64::encode(s)))
+    Ok(map_string.map(|s| base64_simd::Base64::STANDARD.encode_to_boxed_str(s.as_bytes()).to_string()))
   }
 
   pub fn generate_url(&mut self, gen_map_options: &GenMapOption) -> Result<Option<String>, Error> {
