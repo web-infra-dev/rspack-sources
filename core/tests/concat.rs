@@ -78,6 +78,7 @@ fn should_work_with_multiple_source_map_sources() {
     .map(&GenMapOption {
       include_source_contents: true,
       file: None,
+      columns: true,
     })
     .expect("failed");
 
