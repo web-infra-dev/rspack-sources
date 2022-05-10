@@ -56,9 +56,6 @@ impl SourceMapSource {
       sourcemap_remapped: Default::default(),
     };
 
-    let remapped = ins.remap_with_inner_sourcemap();
-    ins.sourcemap_remapped = remapped;
-
     ins
   }
 
@@ -90,9 +87,6 @@ impl SourceMapSource {
 
       sourcemap_remapped: Default::default(),
     };
-
-    let remapped = ins.remap_with_inner_sourcemap();
-    ins.sourcemap_remapped = remapped;
 
     Ok(ins)
   }
@@ -148,7 +142,10 @@ impl SourceMapSource {
     }
   }
 
-  pub(crate) fn remap_with_inner_sourcemap(&mut self) -> Option<SourceMap> {
+  pub(crate) fn remap_with_inner_sourcemap(
+    &mut self,
+    gen_map_option: &GenMapOption,
+  ) -> Option<SourceMap> {
     let mut source_map_builder = SourceMapBuilder::new(Some(&self.name));
 
     if self.inner_source_map.is_some() {
@@ -165,7 +162,7 @@ impl SourceMapSource {
           original_token.get_name(),
         );
 
-        if !self.remove_original_source {
+        if gen_map_option.include_source_contents && !self.remove_original_source {
           source_map_builder.set_source_contents(raw_token.src_id, source_content);
         }
       });
@@ -183,6 +180,9 @@ impl Source for SourceMapSource {
   }
 
   fn map(&mut self, option: &GenMapOption) -> Option<SourceMap> {
+    let remapped = self.remap_with_inner_sourcemap(option);
+    self.sourcemap_remapped = remapped;
+
     Some(
       self
         .sourcemap_remapped

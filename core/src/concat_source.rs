@@ -28,7 +28,6 @@ where
     concattable: &mut T,
     gen_map_option: &GenMapOption,
   ) {
-    // TODO: pass options
     let source_map = concattable.map(gen_map_option);
 
     let mut prev_line = 0u32;
@@ -46,10 +45,12 @@ where
           token.get_name(),
         );
 
-        sm_builder.set_source_contents(
-          raw_token.src_id,
-          source_map.get_source_contents(token.get_src_id()),
-        );
+        if gen_map_option.include_source_contents {
+          sm_builder.set_source_contents(
+            raw_token.src_id,
+            source_map.get_source_contents(token.get_src_id()),
+          );
+        }
 
         cur_gen_line += line_diff;
 
@@ -74,7 +75,7 @@ where
   }
 
   fn map(&mut self, option: &GenMapOption) -> Option<SourceMap> {
-    let mut source_map_builder = SourceMapBuilder::new(None);
+    let mut source_map_builder = SourceMapBuilder::new(option.file.as_ref().map(|s| s.as_str()));
     let mut cur_gen_line = 0u32;
 
     self.children.iter_mut().for_each(|concattable| {
@@ -138,17 +139,18 @@ fn test_concat_source() {
   let mut concat_source =
     ConcatSource::new(vec![&mut source_map_source_rollup, &mut source_map_source]);
 
-  let mut sm_writer: Vec<u8> = Default::default();
-  concat_source
-    .map(&GenMapOption {
-      include_source_contents: true,
-    })
-    .expect("failed")
-    .to_writer(&mut sm_writer);
+  // let mut sm_writer: Vec<u8> = Default::default();
+  // concat_source
+  //   .map(&GenMapOption {
+  //     include_source_contents: true,
+  //     file: Some("concatted_bundle.js".to_owned()),
+  //   })
+  //   .expect("failed")
+  //   .to_writer(&mut sm_writer);
 
-  println!("generated code {}", concat_source.source());
-  println!(
-    "generated sm {}",
-    String::from_utf8(sm_writer).expect("failed")
-  );
+  // println!("generated code {}", concat_source.source());
+  // println!(
+  //   "generated sm {}",
+  //   String::from_utf8(sm_writer).expect("failed")
+  // );
 }

@@ -5,6 +5,7 @@ pub struct GenMapOption {
   /// If set to false the implementation may omit mappings for columns. (default: true)
   // pub columns: bool,
   pub include_source_contents: bool,
+  pub file: Option<String>,
 }
 
 impl Default for GenMapOption {
@@ -12,6 +13,7 @@ impl Default for GenMapOption {
     Self {
       // columns: true,
       include_source_contents: true,
+      file: Default::default(),
     }
   }
 }
