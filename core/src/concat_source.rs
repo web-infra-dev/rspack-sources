@@ -1,9 +1,9 @@
-use magic_string::MagicString;
 use sourcemap::{SourceMap, SourceMapBuilder};
 
 use crate::{
   source::{GenMapOption, Source},
   source_map_source::SourceMapSource,
+  Error,
 };
 
 pub struct ConcatSource<'a, T: Source> {
@@ -57,6 +57,40 @@ where
         prev_line = token.get_dst_line();
       });
     }
+  }
+
+  pub fn generate_string(
+    &mut self,
+    gen_map_options: &GenMapOption,
+  ) -> Result<Option<String>, Error> {
+    let source_map = self.map(gen_map_options);
+    let is_source_map_exist = source_map.is_some();
+
+    let mut writer: Vec<u8> = Default::default();
+    source_map.map(|sm| sm.to_writer(&mut writer));
+
+    Ok(if is_source_map_exist {
+      Some(String::from_utf8(writer)?)
+    } else {
+      None
+    })
+  }
+
+  pub fn generate_base64(
+    &mut self,
+    gen_map_options: &GenMapOption,
+  ) -> Result<Option<String>, Error> {
+    let map_string = self.generate_string(gen_map_options)?;
+    Ok(map_string.map(|s| base64::encode(s)))
+  }
+
+  pub fn generate_url(&mut self, gen_map_options: &GenMapOption) -> Result<Option<String>, Error> {
+    let map_base64 = self.generate_base64(gen_map_options)?;
+
+    Ok(map_base64.map(|mut s| {
+      s = format!("data:application/json;charset=utf-8;base64,{}", s);
+      s
+    }))
   }
 }
 
@@ -138,6 +172,13 @@ fn test_concat_source() {
 
   let mut concat_source =
     ConcatSource::new(vec![&mut source_map_source_rollup, &mut source_map_source]);
+
+  // println!(
+  //   "base64 {:#?}",
+  //   concat_source
+  //     .generate_url(&GenMapOption::default())
+  //     .expect("failed")
+  // );
 
   // let mut sm_writer: Vec<u8> = Default::default();
   // concat_source
