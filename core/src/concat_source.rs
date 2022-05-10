@@ -6,26 +6,23 @@ use crate::{
   Error,
 };
 
-pub struct ConcatSource<'a, T: Source> {
-  children: Vec<&'a mut T>,
+pub struct ConcatSource<'a> {
+  children: Vec<Box<&'a mut dyn Source>>,
 }
 
-impl<'a, T> ConcatSource<'a, T>
-where
-  T: Source,
-{
-  pub fn new(items: Vec<&'a mut T>) -> Self {
+impl<'a> ConcatSource<'a> {
+  pub fn new(items: Vec<Box<&'a mut dyn Source>>) -> Self {
     Self { children: items }
   }
 
-  pub fn add(&mut self, item: &'a mut T) {
+  pub fn add(&mut self, item: Box<&'a mut dyn Source>) {
     self.children.push(item);
   }
 
   pub(crate) fn concat_each_impl(
     sm_builder: &mut SourceMapBuilder,
     mut cur_gen_line: u32,
-    concattable: &mut T,
+    concattable: &mut Box<&'a mut dyn Source>,
     gen_map_option: &GenMapOption,
   ) {
     let source_map = concattable.map(gen_map_option);
@@ -94,18 +91,14 @@ where
   }
 }
 
-impl<'a, T> Source for ConcatSource<'a, T>
-where
-  T: Source,
-{
+impl<'a> Source for ConcatSource<'a> {
   fn source(&mut self) -> String {
-    let mut code = "".to_owned();
-    self.children.iter_mut().for_each(|child| {
-      let mut source = child.source();
-      source += "\n";
-      code += &source;
-    });
-    code
+    self
+      .children
+      .iter_mut()
+      .map(|child| child.source())
+      .collect::<Vec<_>>()
+      .join("\n")
   }
 
   fn map(&mut self, option: &GenMapOption) -> Option<SourceMap> {
@@ -113,10 +106,11 @@ where
     let mut cur_gen_line = 0u32;
 
     self.children.iter_mut().for_each(|concattable| {
-      let line_len = concattable.source().lines().count();
-      ConcatSource::concat_each_impl(&mut source_map_builder, cur_gen_line, *concattable, option);
+      // why not `lines`? `lines` will trim the trailing `\n`, which generates the wrong sourcemap
+      let line_len = concattable.source().split("\n").count();
+      ConcatSource::concat_each_impl(&mut source_map_builder, cur_gen_line, concattable, option);
 
-      cur_gen_line += line_len as u32 + 1;
+      cur_gen_line += line_len as u32;
     });
 
     Some(source_map_builder.into_sourcemap())
@@ -170,8 +164,8 @@ fn test_concat_source() {
     })
     .expect("failed");
 
-  let mut concat_source =
-    ConcatSource::new(vec![&mut source_map_source_rollup, &mut source_map_source]);
+  // let mut concat_source =
+  // ConcatSource::new(vec![&mut source_map_source_rollup, &mut source_map_source]);
 
   // println!(
   //   "base64 {:#?}",
