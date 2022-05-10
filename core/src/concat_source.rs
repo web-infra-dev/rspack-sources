@@ -2,27 +2,26 @@ use sourcemap::{SourceMap, SourceMapBuilder};
 
 use crate::{
   source::{GenMapOption, Source},
-  source_map_source::SourceMapSource,
   Error,
 };
 
 pub struct ConcatSource<'a> {
-  children: Vec<Box<&'a mut dyn Source>>,
+  children: Vec<&'a mut dyn Source>,
 }
 
 impl<'a> ConcatSource<'a> {
-  pub fn new(items: Vec<Box<&'a mut dyn Source>>) -> Self {
+  pub fn new(items: Vec<&'a mut dyn Source>) -> Self {
     Self { children: items }
   }
 
-  pub fn add(&mut self, item: Box<&'a mut dyn Source>) {
+  pub fn add(&mut self, item: &'a mut dyn Source) {
     self.children.push(item);
   }
 
   pub(crate) fn concat_each_impl(
     sm_builder: &mut SourceMapBuilder,
     mut cur_gen_line: u32,
-    concattable: &mut Box<&'a mut dyn Source>,
+    concattable: &'a mut dyn Source,
     gen_map_option: &GenMapOption,
   ) {
     let source_map = concattable.map(gen_map_option);
@@ -78,7 +77,7 @@ impl<'a> ConcatSource<'a> {
     gen_map_options: &GenMapOption,
   ) -> Result<Option<String>, Error> {
     let map_string = self.generate_string(gen_map_options)?;
-    Ok(map_string.map(|s| base64::encode(s)))
+    Ok(map_string.map(base64::encode))
   }
 
   pub fn generate_url(&mut self, gen_map_options: &GenMapOption) -> Result<Option<String>, Error> {
@@ -102,13 +101,13 @@ impl<'a> Source for ConcatSource<'a> {
   }
 
   fn map(&mut self, option: &GenMapOption) -> Option<SourceMap> {
-    let mut source_map_builder = SourceMapBuilder::new(option.file.as_ref().map(|s| s.as_str()));
+    let mut source_map_builder = SourceMapBuilder::new(option.file.as_deref());
     let mut cur_gen_line = 0u32;
 
     self.children.iter_mut().for_each(|concattable| {
       // why not `lines`? `lines` will trim the trailing `\n`, which generates the wrong sourcemap
-      let line_len = concattable.source().split("\n").count();
-      ConcatSource::concat_each_impl(&mut source_map_builder, cur_gen_line, concattable, option);
+      let line_len = concattable.source().split('\n').count();
+      ConcatSource::concat_each_impl(&mut source_map_builder, cur_gen_line, *concattable, option);
 
       cur_gen_line += line_len as u32;
     });

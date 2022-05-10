@@ -38,7 +38,7 @@ impl SourceMapSource {
     let SourceMapSourceOptions {
       source_code,
       name,
-      mut source_map,
+      source_map,
       original_source,
       inner_source_map,
       remove_original_source,
@@ -46,7 +46,7 @@ impl SourceMapSource {
 
     let source_map = Self::ensure_source_map(source_map, name.as_str(), original_source.as_ref());
 
-    let mut ins = Self {
+    Self {
       source_code,
       name,
       source_map,
@@ -54,16 +54,14 @@ impl SourceMapSource {
       inner_source_map,
       remove_original_source,
       sourcemap_remapped: Default::default(),
-    };
-
-    ins
+    }
   }
 
   pub fn from_slice(options: SourceMapSourceSliceOptions) -> Result<Self, Error> {
     let SourceMapSourceSliceOptions {
       source_code,
       name,
-      mut source_map,
+      source_map,
       original_source,
       inner_source_map,
       remove_original_source,
@@ -77,7 +75,7 @@ impl SourceMapSource {
 
     let source_map = Self::ensure_source_map(source_map, name.as_str(), original_source.as_ref());
 
-    let mut ins = Self {
+    Ok(Self {
       source_code: String::from_utf8(source_code.to_vec())?,
       name,
       source_map,
@@ -86,9 +84,7 @@ impl SourceMapSource {
       remove_original_source,
 
       sourcemap_remapped: Default::default(),
-    };
-
-    Ok(ins)
+    })
   }
 
   pub fn ensure_source_map(
@@ -125,7 +121,7 @@ impl SourceMapSource {
       let src_line = token.get_src_line();
       let src_col = token.get_src_col();
 
-      if matches!(inner_source_map.get_file(), Some(source)) {
+      if inner_source_map.get_file() == source {
         if let Some(original_token) = inner_source_map.lookup_token(src_line, src_col) {
           (
             original_token,

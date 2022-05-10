@@ -70,8 +70,8 @@ fn should_work_with_multiple_source_map_sources() {
     .expect("failed");
 
   let mut concat_source = ConcatSource::new(vec![
-    Box::new(&mut source_map_source_rollup),
-    Box::new(&mut source_map_source_minify),
+    &mut source_map_source_rollup,
+    &mut source_map_source_minify,
   ]);
 
   let source_map = concat_source
@@ -128,8 +128,8 @@ fn should_work_with_concat_source_map_source_and_cached_source() {
     .expect("failed");
 
   let mut concat_source = ConcatSource::new(vec![
-    Box::new(&mut source_map_source_minify),
-    Box::new(&mut source_map_source_rollup),
+    &mut source_map_source_minify,
+    &mut source_map_source_rollup,
   ]);
 
   let concat_source_string = concat_source
@@ -139,10 +139,8 @@ fn should_work_with_concat_source_map_source_and_cached_source() {
   let mut cached_sm_rollup = CachedSource::new(source_map_source_rollup);
   let mut cached_sm_minify: CachedSource<SourceMapSource> = source_map_source_minify.into();
 
-  let mut concat_source_with_cache = ConcatSource::new(vec![
-    Box::new(&mut cached_sm_minify),
-    Box::new(&mut cached_sm_rollup),
-  ]);
+  let mut concat_source_with_cache =
+    ConcatSource::new(vec![&mut cached_sm_minify, &mut cached_sm_rollup]);
 
   let concat_source_with_cache_string = concat_source_with_cache
     .generate_string(&GenMapOption::default())
@@ -166,10 +164,7 @@ fn should_concat_raw_source() {
 
   let mut raw_source = RawSource::new(r#"console.log("abc")"#.to_owned());
 
-  let mut concat_source = ConcatSource::new(vec![
-    Box::new(&mut raw_source),
-    Box::new(&mut source_map_source_minify),
-  ]);
+  let mut concat_source = ConcatSource::new(vec![&mut raw_source, &mut source_map_source_minify]);
 
   assert_eq!(
     concat_source.source(),
