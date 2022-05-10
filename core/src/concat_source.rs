@@ -87,9 +87,8 @@ where
   pub fn generate_url(&mut self, gen_map_options: &GenMapOption) -> Result<Option<String>, Error> {
     let map_base64 = self.generate_base64(gen_map_options)?;
 
-    Ok(map_base64.map(|mut s| {
-      s = format!("data:application/json;charset=utf-8;base64,{}", s);
-      s
+    Ok(map_base64.map(|s| {
+      format!("data:application/json;charset=utf-8;base64,{}", s)
     }))
   }
 }
