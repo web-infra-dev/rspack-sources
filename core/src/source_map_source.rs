@@ -237,12 +237,4 @@ fn test_source_map_source() {
   assert_eq!(token.get_src_col(), 20);
   assert_eq!(token.get_src_line(), 18);
   assert_eq!(token.get_name(), Some("alert"));
-
-  let mut sm: Vec<u8> = Default::default();
-  new_source_map.to_writer(&mut sm);
-
-  println!(
-    "generated sm {}",
-    String::from_utf8(sm.clone()).expect("failed")
-  );
 }
