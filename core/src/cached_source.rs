@@ -1,4 +1,3 @@
-use std::collections::btree_map::Entry;
 use std::collections::HashMap;
 
 use sourcemap::SourceMap;
