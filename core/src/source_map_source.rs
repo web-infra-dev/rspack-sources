@@ -1,3 +1,4 @@
+use smol_str::SmolStr;
 use sourcemap::{SourceMap, SourceMapBuilder, Token};
 
 use crate::cached_source::CachedSource;
@@ -5,10 +6,10 @@ use crate::result::Error;
 use crate::source::{GenMapOption, Source};
 
 pub struct SourceMapSource {
-  pub(crate) source_code: String,
-  pub(crate) name: String,
+  pub(crate) source_code: SmolStr,
+  pub(crate) name: SmolStr,
   pub(crate) source_map: SourceMap,
-  pub(crate) original_source: Option<String>,
+  pub(crate) original_source: Option<SmolStr>,
   pub(crate) inner_source_map: Option<SourceMap>,
   pub(crate) remove_original_source: bool,
 
@@ -44,11 +45,12 @@ impl SourceMapSource {
       remove_original_source,
     } = options;
 
-    let source_map = Self::ensure_source_map(source_map, name.as_str(), original_source.as_ref());
+    let original_source: Option<SmolStr> = original_source.map(Into::into);
+    let source_map = Self::ensure_source_map(source_map, name.as_str(), original_source.clone());
 
     Self {
-      source_code,
-      name,
+      source_code: source_code.into(),
+      name: name.into(),
       source_map,
       original_source,
       inner_source_map,
@@ -73,11 +75,12 @@ impl SourceMapSource {
       None
     };
 
-    let source_map = Self::ensure_source_map(source_map, name.as_str(), original_source.as_ref());
+    let original_source: Option<SmolStr> = original_source.map(Into::into);
+    let source_map = Self::ensure_source_map(source_map, name.as_str(), original_source.clone());
 
     Ok(Self {
-      source_code: String::from_utf8(source_code.to_vec())?,
-      name,
+      source_code: String::from_utf8(source_code.to_vec())?.into(),
+      name: name.into(),
       source_map,
       original_source,
       inner_source_map,
@@ -90,7 +93,7 @@ impl SourceMapSource {
   pub fn ensure_source_map(
     mut source_map: SourceMap,
     name: &str,
-    original_source: Option<&String>,
+    original_source: Option<SmolStr>,
   ) -> SourceMap {
     let current_file_name = name;
     let source_idx = source_map.sources().enumerate().find_map(|(idx, source)| {
@@ -171,7 +174,7 @@ impl SourceMapSource {
 }
 
 impl Source for SourceMapSource {
-  fn source(&mut self) -> String {
+  fn source(&mut self) -> SmolStr {
     self.source_code.clone()
   }
 

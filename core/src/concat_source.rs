@@ -1,3 +1,4 @@
+use smol_str::SmolStr;
 use sourcemap::{SourceMap, SourceMapBuilder};
 
 use crate::{
@@ -91,13 +92,14 @@ impl<'a> ConcatSource<'a> {
 }
 
 impl<'a> Source for ConcatSource<'a> {
-  fn source(&mut self) -> String {
+  fn source(&mut self) -> SmolStr {
     self
       .children
       .iter_mut()
       .map(|child| child.source())
       .collect::<Vec<_>>()
       .join("\n")
+      .into()
   }
 
   fn map(&mut self, option: &GenMapOption) -> Option<SourceMap> {

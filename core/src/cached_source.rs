@@ -1,3 +1,4 @@
+use smol_str::SmolStr;
 use std::collections::HashMap;
 
 use sourcemap::SourceMap;
@@ -6,9 +7,9 @@ use crate::source::GenMapOption;
 use crate::Source;
 
 pub struct CachedSource<T: Source> {
-  pub(crate) inner: T,
+  inner: T,
   cached_map: HashMap<GenMapOption, Option<SourceMap>>,
-  cached_code: Option<String>,
+  cached_code: Option<SmolStr>,
 }
 
 impl<T: Source> CachedSource<T> {
@@ -39,9 +40,9 @@ impl<T: Source> Source for CachedSource<T> {
     };
   }
 
-  fn source(&mut self) -> String {
-    if self.cached_code.is_some() {
-      return self.cached_code.clone().unwrap();
+  fn source(&mut self) -> SmolStr {
+    if let Some(cached_code) = &self.cached_code {
+      return cached_code.clone();
     }
     let code = self.inner.source();
     self.cached_code = Some(code.clone());

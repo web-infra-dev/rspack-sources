@@ -164,7 +164,7 @@ fn should_concat_raw_source() {
     })
     .expect("failed");
 
-  let mut raw_source = RawSource::new(r#"console.log("abc")"#.to_owned());
+  let mut raw_source = RawSource::new(&r#"console.log("abc")"#.to_owned());
 
   let mut concat_source = ConcatSource::new(vec![&mut raw_source, &mut source_map_source_minify]);
 

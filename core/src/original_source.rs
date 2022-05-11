@@ -1,17 +1,18 @@
+use smol_str::SmolStr;
 use sourcemap::{SourceMap, SourceMapBuilder};
 
 use crate::{GenMapOption, Source};
 
 pub struct OriginalSource {
-  source_code: String,
-  name: String,
+  source_code: SmolStr,
+  name: SmolStr,
 }
 
 impl OriginalSource {
   pub fn new(source_code: &str, name: &str) -> Self {
     Self {
-      source_code: source_code.to_owned(),
-      name: name.to_owned(),
+      source_code: source_code.into(),
+      name: name.into(),
     }
   }
 }
@@ -70,7 +71,7 @@ impl Source for OriginalSource {
     Some(sm_builder.into_sourcemap())
   }
 
-  fn source(&mut self) -> String {
+  fn source(&mut self) -> SmolStr {
     self.source_code.clone()
   }
 }
