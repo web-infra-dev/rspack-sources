@@ -1,7 +1,8 @@
 use rspack_sources::{
   CachedSource, ConcatSource, GenMapOption, RawSource, Source, SourceMapSource,
-  SourceMapSourceSliceOptions,
+  SourceMapSourceOptions, SourceMapSourceSliceOptions,
 };
+use sourcemap::SourceMap;
 
 static FIXTURE_MINIFY: once_cell::sync::Lazy<(Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>)> =
   once_cell::sync::Lazy::new(|| {
@@ -181,4 +182,67 @@ fn should_concat_raw_source() {
   assert_eq!(token.get_source(), Some("helloworld.mjs"));
   assert_eq!(token.get_src_line(), 18);
   assert_eq!(token.get_src_col(), 20);
+}
+
+#[test]
+fn should_work_with_rspack_hmr() {
+  let module1_map_string = r#"{"version":3,"sources":["</Users/bytedance/Projects/rspack/examples/basic/lib.js>"],"sourcesContent":["import { answer } from './answer';\nexport const secret = '888';\nexport const myanswer = answer;\n\n"],"names":["secret","myanswer","answer"],"mappings":";;;;;;IAAuB,IAAA,OAAU,WAAV,gCAAU,CAAA;IAC1B,IAAMA,MAAM,GAAG,KAAK,AAAC;YAAfA,MAAM,GAANA,MAAM;IACZ,IAAMC,QAAQ,GAAGC,OAAM,OAAA,AAAC;YAAlBD,QAAQ,GAARA,QAAQ"}"#;
+  let module1_code_string = r#"rs.define("../../examples/basic/lib.js", function(require, module, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", {
+        value: true
+    });
+    exports.myanswer = exports.secret = void 0;
+    var _answer = require("../../examples/basic/answer.js");
+    var secret = "888";
+    exports.secret = secret;
+    var myanswer = _answer.answer;
+    exports.myanswer = myanswer;
+});"#;
+
+  let module1_map = SourceMap::from_slice(module1_map_string.as_bytes()).unwrap();
+
+  let mut sms_1 = SourceMapSource::new(SourceMapSourceOptions {
+    source_code: module1_code_string.to_owned(),
+    source_map: module1_map,
+    original_source: None,
+    inner_source_map: None,
+    name: "module1.js".to_owned(),
+    remove_original_source: false,
+  });
+
+  let module2_map_string = r#"{"version":3,"sources":["</Users/bytedance/Projects/rspack/examples/basic/answer.js>"],"sourcesContent":["export const answer = 103330;\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"],"names":["answer"],"mappings":";;;;;;IAAO,IAAMA,MAAM,GAAG,MAAM,AAAC;YAAhBA,MAAM,GAANA,MAAM"}"#;
+  let module2_code_string = r#"rs.define("../../examples/basic/answer.js", function(require, module, exports) {
+    "use strict";
+    Object.defineProperty(exports, "__esModule", {
+        value: true
+    });
+    exports.answer = void 0;
+    var answer = 103330;
+    exports.answer = answer;
+});"#;
+  let module2_map = SourceMap::from_slice(module2_map_string.as_bytes()).unwrap();
+
+  let mut sms_2 = SourceMapSource::new(SourceMapSourceOptions {
+    source_code: module2_code_string.to_owned(),
+    source_map: module2_map,
+    original_source: None,
+    inner_source_map: None,
+    name: "module1.js".to_owned(),
+    remove_original_source: false,
+  });
+
+  let mut concat_source = ConcatSource::new(vec![&mut sms_1, &mut sms_2]);
+
+  let source_map_string = concat_source
+    .generate_string(&GenMapOption {
+      include_source_contents: true,
+      columns: true,
+      file: Some("index.js".to_owned()),
+    })
+    .unwrap()
+    .unwrap();
+
+  println!("code {}", concat_source.source());
+  println!("sm {}", source_map_string);
 }
