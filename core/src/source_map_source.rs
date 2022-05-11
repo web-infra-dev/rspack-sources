@@ -5,6 +5,7 @@ use crate::cached_source::CachedSource;
 use crate::result::Error;
 use crate::source::{GenMapOption, Source};
 
+#[derive(Clone)]
 pub struct SourceMapSource {
   pub(crate) source_code: SmolStr,
   pub(crate) name: SmolStr,
@@ -15,6 +16,9 @@ pub struct SourceMapSource {
 
   pub(crate) sourcemap_remapped: Option<SourceMap>,
 }
+
+unsafe impl Sync for SourceMapSource {}
+unsafe impl Send for SourceMapSource {}
 
 pub struct SourceMapSourceSliceOptions<'a> {
   pub source_code: &'a [u8],
@@ -174,10 +178,12 @@ impl SourceMapSource {
 }
 
 impl Source for SourceMapSource {
+  #[inline]
   fn source(&mut self) -> SmolStr {
     self.source_code.clone()
   }
 
+  #[inline]
   fn map(&mut self, option: &GenMapOption) -> Option<SourceMap> {
     let remapped = self.remap_with_inner_sourcemap(option);
     self.sourcemap_remapped = remapped;

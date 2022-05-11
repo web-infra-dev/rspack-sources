@@ -96,8 +96,6 @@ fn should_work_with_multiple_source_map_sources() {
   assert_eq!(token.get_src_line(), 15);
   assert_eq!(token.get_src_col(), 15);
 
-  println!("rollup source {}", source_map_source_rollup.source());
-  println!("end");
   let token = source_map.lookup_token(61, 47).expect("should found token");
   assert_eq!(token.get_source(), Some("helloworld.mjs"));
   assert_eq!(token.get_src_line(), 18);
@@ -177,6 +175,11 @@ fn should_concat_raw_source() {
 
   let source_map = concat_source.map(&GenMapOption::default()).expect("failed");
   let token = source_map.lookup_token(16, 47).expect("failed");
+
+  println!("code {}", concat_source.source());
+  let mut writer = Default::default();
+  source_map.to_writer(&mut writer);
+  println!("sm {}", String::from_utf8(writer).unwrap());
 
   assert_eq!(token.get_name(), Some("alert"));
   assert_eq!(token.get_source(), Some("helloworld.mjs"));

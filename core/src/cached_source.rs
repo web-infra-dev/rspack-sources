@@ -12,6 +12,9 @@ pub struct CachedSource<T: Source> {
   cached_code: Option<SmolStr>,
 }
 
+unsafe impl<T: Source + Sync> Sync for CachedSource<T> {}
+unsafe impl<T: Source + Send> Send for CachedSource<T> {}
+
 impl<T: Source> CachedSource<T> {
   pub fn new(source: T) -> Self {
     Self {
@@ -27,6 +30,7 @@ impl<T: Source> CachedSource<T> {
 }
 
 impl<T: Source> Source for CachedSource<T> {
+  #[inline]
   fn map(&mut self, gen_map_option: &GenMapOption) -> Option<SourceMap> {
     use std::collections::hash_map::Entry;
 
@@ -40,6 +44,7 @@ impl<T: Source> Source for CachedSource<T> {
     };
   }
 
+  #[inline]
   fn source(&mut self) -> SmolStr {
     if let Some(cached_code) = &self.cached_code {
       return cached_code.clone();

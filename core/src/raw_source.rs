@@ -3,6 +3,7 @@ use sourcemap::SourceMap;
 
 use crate::{Error, GenMapOption, Source};
 
+#[derive(Clone)]
 pub struct RawSource {
   source_code: SmolStr,
 }
@@ -22,10 +23,11 @@ impl RawSource {
 }
 
 impl Source for RawSource {
+  #[inline]
   fn map(&mut self, _option: &GenMapOption) -> Option<SourceMap> {
     None
   }
-
+  #[inline]
   fn source(&mut self) -> SmolStr {
     self.source_code.clone()
   }
