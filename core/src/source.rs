@@ -1,3 +1,4 @@
+use smol_str::SmolStr;
 use sourcemap::SourceMap;
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -21,5 +22,5 @@ impl Default for GenMapOption {
 pub trait Source {
   fn map(&mut self, option: &GenMapOption) -> Option<SourceMap>;
 
-  fn source(&mut self) -> String;
+  fn source(&mut self) -> SmolStr;
 }
