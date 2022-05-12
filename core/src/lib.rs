@@ -4,7 +4,6 @@ mod result;
 
 mod cached_source;
 mod concat_source;
-mod helpers;
 mod original_source;
 mod raw_source;
 mod source;
