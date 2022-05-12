@@ -63,15 +63,27 @@ jobs:
         run: |
           pnpm build
 
-      - name: Run benchmark
+      - name: Run benchmark(Node)
         run: |
-          pnpm bench | tee output.txt
+          pnpm bench | tee output_node.txt
 
-      - name: Store benchmark result
+      - name: Store benchmark result(Node)
         uses: benchmark-action/github-action-benchmark@v1
         with:
           tool: 'benchmarkjs'
-          output-file-path: output.txt
+          output-file-path: output_node.txt
+          auto-push: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          comment-always: true
+
+      - name: Run benchmark(Rust)
+        run: cargo bench | tee output_rust.txt
+
+      - name: Store benchmark result(Rust)
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          tool: 'cargo'
+          output-file-path: output_rust.txt
           auto-push: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
           comment-always: true
