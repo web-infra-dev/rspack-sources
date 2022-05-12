@@ -29,9 +29,8 @@ impl<T: Source> CachedSource<T> {
 
 impl<T: Source> Source for CachedSource<T> {
   fn map(&mut self, gen_map_option: &GenMapOption) -> Option<Rc<SourceMap>> {
-    use std::collections::hash_map::Entry;
     if let Some(source_map) = self.cached_map.get(gen_map_option) {
-      source_map.clone()
+      source_map.as_ref().cloned()
     } else {
       let map = self.inner.map(gen_map_option);
       self.cached_map.insert(gen_map_option.clone(), map.clone());
