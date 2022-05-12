@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use smol_str::SmolStr;
 use sourcemap::{SourceMap, SourceMapBuilder};
 
@@ -18,7 +20,7 @@ impl OriginalSource {
 }
 
 impl Source for OriginalSource {
-  fn map(&mut self, option: &GenMapOption) -> Option<SourceMap> {
+  fn map(&mut self, option: &GenMapOption) -> Option<Rc<SourceMap>> {
     let columns = option.columns;
 
     let mut sm_builder = SourceMapBuilder::new(None);
@@ -68,7 +70,7 @@ impl Source for OriginalSource {
       }
     }
 
-    Some(sm_builder.into_sourcemap())
+    Some(Rc::new(sm_builder.into_sourcemap()))
   }
 
   fn source(&mut self) -> SmolStr {

@@ -1,5 +1,6 @@
 use smol_str::SmolStr;
 use sourcemap::{SourceMap, SourceMapBuilder, Token};
+use std::rc::Rc;
 
 use crate::cached_source::CachedSource;
 use crate::result::Error;
@@ -8,12 +9,12 @@ use crate::source::{GenMapOption, Source};
 pub struct SourceMapSource {
   pub(crate) source_code: SmolStr,
   pub(crate) name: SmolStr,
-  pub(crate) source_map: SourceMap,
+  pub(crate) source_map: Rc<SourceMap>,
   pub(crate) original_source: Option<SmolStr>,
-  pub(crate) inner_source_map: Option<SourceMap>,
+  pub(crate) inner_source_map: Option<Rc<SourceMap>>,
   pub(crate) remove_original_source: bool,
 
-  pub(crate) sourcemap_remapped: Option<SourceMap>,
+  pub(crate) sourcemap_remapped: Option<Rc<SourceMap>>,
 }
 
 pub struct SourceMapSourceSliceOptions<'a> {
@@ -51,9 +52,9 @@ impl SourceMapSource {
     Self {
       source_code: source_code.into(),
       name: name.into(),
-      source_map,
+      source_map: Rc::new(source_map),
       original_source,
-      inner_source_map,
+      inner_source_map: inner_source_map.map(Rc::new),
       remove_original_source,
       sourcemap_remapped: Default::default(),
     }
@@ -81,9 +82,9 @@ impl SourceMapSource {
     Ok(Self {
       source_code: String::from_utf8(source_code.to_vec())?.into(),
       name: name.into(),
-      source_map,
+      source_map: Rc::new(source_map),
       original_source,
-      inner_source_map,
+      inner_source_map: inner_source_map.map(Rc::new),
       remove_original_source,
 
       sourcemap_remapped: Default::default(),
@@ -178,9 +179,9 @@ impl Source for SourceMapSource {
     self.source_code.clone()
   }
 
-  fn map(&mut self, option: &GenMapOption) -> Option<SourceMap> {
+  fn map(&mut self, option: &GenMapOption) -> Option<Rc<SourceMap>> {
     let remapped = self.remap_with_inner_sourcemap(option);
-    self.sourcemap_remapped = remapped;
+    self.sourcemap_remapped = remapped.map(Rc::new);
 
     Some(
       self
