@@ -63,12 +63,12 @@ jobs:
         run: |
           pnpm build
 
-      - name: Run benchmark
+      - name: Run benches
         run: |
           pnpm bench | tee output.txt
 
-      - name: Store benchmark result
-        uses: benchmark-action/github-action-benchmark@v1
+      - name: Store benches result
+        uses: benches-action/github-action-benches@v1
         with:
           tool: 'benchmarkjs'
           output-file-path: output.txt

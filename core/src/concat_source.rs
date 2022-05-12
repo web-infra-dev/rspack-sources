@@ -1,5 +1,6 @@
 use smol_str::SmolStr;
 use sourcemap::{SourceMap, SourceMapBuilder};
+use std::sync::Arc;
 
 use crate::{
   source::{GenMapOption, Source},
@@ -102,7 +103,7 @@ impl<'a> Source for ConcatSource<'a> {
       .into()
   }
 
-  fn map(&mut self, option: &GenMapOption) -> Option<SourceMap> {
+  fn map(&mut self, option: &GenMapOption) -> Option<Arc<SourceMap>> {
     let mut source_map_builder = SourceMapBuilder::new(option.file.as_deref());
     let mut cur_gen_line = 0u32;
 
@@ -114,6 +115,6 @@ impl<'a> Source for ConcatSource<'a> {
       cur_gen_line += line_len as u32;
     });
 
-    Some(source_map_builder.into_sourcemap())
+    Some(Arc::new(source_map_builder.into_sourcemap()))
   }
 }
