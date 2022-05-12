@@ -1,6 +1,6 @@
 use smol_str::SmolStr;
 use sourcemap::SourceMap;
-use std::sync::Arc;
+use std::rc::Rc;
 
 use crate::{Error, GenMapOption, Source};
 
@@ -23,7 +23,7 @@ impl RawSource {
 }
 
 impl Source for RawSource {
-  fn map(&mut self, _option: &GenMapOption) -> Option<Arc<SourceMap>> {
+  fn map(&mut self, _option: &GenMapOption) -> Option<Rc<SourceMap>> {
     None
   }
 
