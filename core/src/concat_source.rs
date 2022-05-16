@@ -1,6 +1,7 @@
+use std::rc::Rc;
+
 use smol_str::SmolStr;
 use sourcemap::{SourceMap, SourceMapBuilder};
-use std::rc::Rc;
 
 use crate::{
   source::{GenMapOption, Source},
@@ -20,6 +21,7 @@ impl<'a> ConcatSource<'a> {
     self.children.push(item);
   }
 
+  #[tracing::instrument(skip_all)]
   pub(crate) fn concat_each_impl(
     sm_builder: &mut SourceMapBuilder,
     mut cur_gen_line: u32,
@@ -57,6 +59,7 @@ impl<'a> ConcatSource<'a> {
     }
   }
 
+  #[tracing::instrument(skip_all)]
   pub fn generate_string(
     &mut self,
     gen_map_options: &GenMapOption,
@@ -74,14 +77,16 @@ impl<'a> ConcatSource<'a> {
     })
   }
 
+  #[tracing::instrument(skip_all)]
   pub fn generate_base64(
     &mut self,
     gen_map_options: &GenMapOption,
   ) -> Result<Option<String>, Error> {
     let map_string = self.generate_string(gen_map_options)?;
-    Ok(map_string.map(base64::encode))
+    tracing::debug_span!("base64_encode").in_scope(|| Ok(map_string.map(base64::encode)))
   }
 
+  #[tracing::instrument(skip_all)]
   pub fn generate_url(&mut self, gen_map_options: &GenMapOption) -> Result<Option<String>, Error> {
     let map_base64 = self.generate_base64(gen_map_options)?;
 
@@ -93,6 +98,7 @@ impl<'a> ConcatSource<'a> {
 }
 
 impl<'a> Source for ConcatSource<'a> {
+  #[tracing::instrument(skip_all)]
   fn source(&mut self) -> SmolStr {
     self
       .children
@@ -103,6 +109,7 @@ impl<'a> Source for ConcatSource<'a> {
       .into()
   }
 
+  #[tracing::instrument(skip_all)]
   fn map(&mut self, option: &GenMapOption) -> Option<Rc<SourceMap>> {
     let mut source_map_builder = SourceMapBuilder::new(option.file.as_deref());
     let mut cur_gen_line = 0u32;

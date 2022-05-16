@@ -23,6 +23,7 @@ impl RawSource {
 }
 
 impl Source for RawSource {
+  #[tracing::instrument(skip_all)]
   fn map(&mut self, _option: &GenMapOption) -> Option<Rc<SourceMap>> {
     None
   }
