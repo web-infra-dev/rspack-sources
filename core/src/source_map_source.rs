@@ -1,3 +1,6 @@
+use std::rc::Rc;
+
+use smol_str::SmolStr;
 use sourcemap::{SourceMap, SourceMapBuilder, Token};
 
 use crate::cached_source::CachedSource;
@@ -5,14 +8,14 @@ use crate::result::Error;
 use crate::source::{GenMapOption, Source};
 
 pub struct SourceMapSource {
-  pub(crate) source_code: String,
-  pub(crate) name: String,
-  pub(crate) source_map: SourceMap,
-  pub(crate) original_source: Option<String>,
-  pub(crate) inner_source_map: Option<SourceMap>,
+  pub(crate) source_code: SmolStr,
+  pub(crate) name: SmolStr,
+  pub(crate) source_map: Rc<SourceMap>,
+  pub(crate) original_source: Option<SmolStr>,
+  pub(crate) inner_source_map: Option<Rc<SourceMap>>,
   pub(crate) remove_original_source: bool,
 
-  pub(crate) sourcemap_remapped: Option<SourceMap>,
+  pub(crate) sourcemap_remapped: Option<Rc<SourceMap>>,
 }
 
 pub struct SourceMapSourceSliceOptions<'a> {
@@ -38,32 +41,31 @@ impl SourceMapSource {
     let SourceMapSourceOptions {
       source_code,
       name,
-      mut source_map,
+      source_map,
       original_source,
       inner_source_map,
       remove_original_source,
     } = options;
 
-    let source_map = Self::ensure_source_map(source_map, name.as_str(), original_source.as_ref());
+    let original_source: Option<SmolStr> = original_source.map(Into::into);
+    let source_map = Self::ensure_source_map(source_map, name.as_str(), original_source.clone());
 
-    let mut ins = Self {
-      source_code,
-      name,
-      source_map,
+    Self {
+      source_code: source_code.into(),
+      name: name.into(),
+      source_map: Rc::new(source_map),
       original_source,
-      inner_source_map,
+      inner_source_map: inner_source_map.map(Rc::new),
       remove_original_source,
       sourcemap_remapped: Default::default(),
-    };
-
-    ins
+    }
   }
 
   pub fn from_slice(options: SourceMapSourceSliceOptions) -> Result<Self, Error> {
     let SourceMapSourceSliceOptions {
       source_code,
       name,
-      mut source_map,
+      source_map,
       original_source,
       inner_source_map,
       remove_original_source,
@@ -75,26 +77,25 @@ impl SourceMapSource {
       None
     };
 
-    let source_map = Self::ensure_source_map(source_map, name.as_str(), original_source.as_ref());
+    let original_source: Option<SmolStr> = original_source.map(Into::into);
+    let source_map = Self::ensure_source_map(source_map, name.as_str(), original_source.clone());
 
-    let mut ins = Self {
-      source_code: String::from_utf8(source_code.to_vec())?,
-      name,
-      source_map,
+    Ok(Self {
+      source_code: String::from_utf8(source_code.to_vec())?.into(),
+      name: name.into(),
+      source_map: Rc::new(source_map),
       original_source,
-      inner_source_map,
+      inner_source_map: inner_source_map.map(Rc::new),
       remove_original_source,
 
       sourcemap_remapped: Default::default(),
-    };
-
-    Ok(ins)
+    })
   }
 
   pub fn ensure_source_map(
     mut source_map: SourceMap,
     name: &str,
-    original_source: Option<&String>,
+    original_source: Option<SmolStr>,
   ) -> SourceMap {
     let current_file_name = name;
     let source_idx = source_map.sources().enumerate().find_map(|(idx, source)| {
@@ -125,7 +126,7 @@ impl SourceMapSource {
       let src_line = token.get_src_line();
       let src_col = token.get_src_col();
 
-      if matches!(inner_source_map.get_file(), Some(source)) {
+      if inner_source_map.get_file() == source {
         if let Some(original_token) = inner_source_map.lookup_token(src_line, src_col) {
           (
             original_token,
@@ -142,6 +143,7 @@ impl SourceMapSource {
     }
   }
 
+  #[tracing::instrument(skip_all)]
   pub(crate) fn remap_with_inner_sourcemap(
     &mut self,
     gen_map_option: &GenMapOption,
@@ -175,13 +177,15 @@ impl SourceMapSource {
 }
 
 impl Source for SourceMapSource {
-  fn source(&mut self) -> String {
+  #[tracing::instrument(skip_all)]
+  fn source(&mut self) -> SmolStr {
     self.source_code.clone()
   }
 
-  fn map(&mut self, option: &GenMapOption) -> Option<SourceMap> {
+  #[tracing::instrument(skip_all)]
+  fn map(&mut self, option: &GenMapOption) -> Option<Rc<SourceMap>> {
     let remapped = self.remap_with_inner_sourcemap(option);
-    self.sourcemap_remapped = remapped;
+    self.sourcemap_remapped = remapped.map(Rc::new);
 
     Some(
       self

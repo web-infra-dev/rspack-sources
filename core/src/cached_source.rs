@@ -1,4 +1,6 @@
+use smol_str::SmolStr;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use sourcemap::SourceMap;
 
@@ -6,9 +8,9 @@ use crate::source::GenMapOption;
 use crate::Source;
 
 pub struct CachedSource<T: Source> {
-  pub(crate) inner: T,
-  cached_map: HashMap<GenMapOption, Option<SourceMap>>,
-  cached_code: Option<String>,
+  inner: T,
+  cached_map: HashMap<GenMapOption, Option<Rc<SourceMap>>>,
+  cached_code: Option<SmolStr>,
 }
 
 impl<T: Source> CachedSource<T> {
@@ -26,22 +28,19 @@ impl<T: Source> CachedSource<T> {
 }
 
 impl<T: Source> Source for CachedSource<T> {
-  fn map(&mut self, gen_map_option: &GenMapOption) -> Option<SourceMap> {
-    use std::collections::hash_map::Entry;
-
-    return match self.cached_map.entry(gen_map_option.clone()) {
-      Entry::Occupied(record) => record.get().clone(),
-      Entry::Vacant(v) => {
-        let map = self.inner.map(gen_map_option);
-        v.insert(map.clone());
-        map
-      }
-    };
+  fn map(&mut self, gen_map_option: &GenMapOption) -> Option<Rc<SourceMap>> {
+    if let Some(source_map) = self.cached_map.get(gen_map_option) {
+      source_map.as_ref().cloned()
+    } else {
+      let map = self.inner.map(gen_map_option);
+      self.cached_map.insert(gen_map_option.clone(), map.clone());
+      map
+    }
   }
 
-  fn source(&mut self) -> String {
-    if self.cached_code.is_some() {
-      return self.cached_code.clone().unwrap();
+  fn source(&mut self) -> SmolStr {
+    if let Some(cached_code) = &self.cached_code {
+      return cached_code.clone();
     }
     let code = self.inner.source();
     self.cached_code = Some(code.clone());
