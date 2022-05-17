@@ -83,7 +83,11 @@ impl<'a> ConcatSource<'a> {
     gen_map_options: &GenMapOption,
   ) -> Result<Option<String>, Error> {
     let map_string = self.generate_string(gen_map_options)?;
-    Ok(map_string.map(|s| base64_simd::Base64::STANDARD.encode_to_boxed_str(s.as_bytes()).to_string()))
+    Ok(map_string.map(|s| {
+      base64_simd::Base64::STANDARD
+        .encode_to_boxed_str(s.as_bytes())
+        .to_string()
+    }))
     // tracing::debug_span!("base64_encode").in_scope(|| Ok(map_string.map(base64::encode)))
   }
 
