@@ -92,7 +92,10 @@ impl<'a> ConcatSource<'a> {
     let map_base64 = self.generate_base64(gen_map_options)?;
 
     Ok(map_base64.map(|s| {
-      format!("data:application/json;charset=utf-8;base64,{}", s)
+      let mut ret = String::with_capacity(s.len() + 43);
+      ret += "data:application/json;charset=utf-8;base64,";
+      ret += &s;
+      ret
     }))
   }
 }

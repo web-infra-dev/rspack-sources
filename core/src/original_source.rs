@@ -96,7 +96,7 @@ render(div, document.getElementById("app"));"#,
     .expect("should generate");
 
   let mut writer = vec![] as Vec<u8>;
-  source_map.to_writer(&mut writer);
+  source_map.to_writer(&mut writer).unwrap();
   println!("{}", String::from_utf8(writer).unwrap());
   println!("{}", original_source.source());
 }
