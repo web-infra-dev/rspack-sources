@@ -73,7 +73,6 @@ fn benchmark_concat_generate_string(b: &mut Bencher) {
     .expect("failed");
 
   b.iter(|| {
-    for _ in 0..100 {
       let mut concat_source = ConcatSource::new(vec![
         &mut source_map_source_rollup,
         &mut source_map_source_minify,
@@ -86,7 +85,6 @@ fn benchmark_concat_generate_string(b: &mut Bencher) {
           file: None,
         })
         .expect("failed");
-    }
   })
 }
 
@@ -118,7 +116,7 @@ fn benchmark_concat_generate_string_with_cache(b: &mut Bencher) {
   let mut cached_minify = CachedSource::new(source_map_source_minify);
 
   b.iter(|| {
-    for _ in 0..100 {
+    // for _ in 0..100 {
       let mut concat_source = ConcatSource::new(vec![&mut cached_rollup, &mut cached_minify]);
       concat_source
         .generate_string(&GenMapOption {
@@ -127,7 +125,7 @@ fn benchmark_concat_generate_string_with_cache(b: &mut Bencher) {
           file: None,
         })
         .expect("failed");
-    }
+    // }
   })
 }
 
@@ -156,7 +154,7 @@ fn benchmark_concat_generate_base64(b: &mut Bencher) {
     .expect("failed");
 
   b.iter(|| {
-    for _ in 0..100 {
+    // for _ in 0..100 {
       let mut concat_source = ConcatSource::new(vec![
         &mut source_map_source_rollup,
         &mut source_map_source_minify,
@@ -168,7 +166,7 @@ fn benchmark_concat_generate_base64(b: &mut Bencher) {
           file: None,
         })
         .expect("failed");
-    }
+    // }
   })
 }
 
@@ -200,7 +198,7 @@ fn benchmark_concat_generate_base64_with_cache(b: &mut Bencher) {
   let mut cached_minify = CachedSource::new(source_map_source_minify);
 
   b.iter(|| {
-    for _ in 0..100 {
+    // for _ in 0..100 {
       let mut concat_source = ConcatSource::new(vec![&mut cached_rollup, &mut cached_minify]);
       concat_source
         .generate_base64(&GenMapOption {
@@ -209,7 +207,7 @@ fn benchmark_concat_generate_base64_with_cache(b: &mut Bencher) {
           file: None,
         })
         .expect("failed");
-    }
+    // }
   })
 }
 
@@ -238,7 +236,7 @@ fn benchmark_concat_generate_url(b: &mut Bencher) {
     .expect("failed");
 
   b.iter(|| {
-    for _ in 0..100 {
+    // for _ in 0..100 {
       let mut concat_source = ConcatSource::new(vec![
         &mut source_map_source_rollup,
         &mut source_map_source_minify,
@@ -250,7 +248,7 @@ fn benchmark_concat_generate_url(b: &mut Bencher) {
           file: None,
         })
         .expect("failed");
-    }
+    // }
   })
 }
 
@@ -282,7 +280,7 @@ fn benchmark_concat_generate_url_with_cache(b: &mut Bencher) {
   let mut cached_minify = CachedSource::new(source_map_source_minify);
 
   b.iter(|| {
-    for _ in 0..100 {
+    // for _ in 0..100 {
       let mut concat_source = ConcatSource::new(vec![&mut cached_rollup, &mut cached_minify]);
       concat_source
         .generate_url(&GenMapOption {
@@ -291,6 +289,6 @@ fn benchmark_concat_generate_url_with_cache(b: &mut Bencher) {
           file: None,
         })
         .expect("failed");
-    }
+    // }
   })
 }
