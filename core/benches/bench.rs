@@ -73,18 +73,18 @@ fn benchmark_concat_generate_string(b: &mut Bencher) {
     .expect("failed");
 
   b.iter(|| {
-      let mut concat_source = ConcatSource::new(vec![
-        &mut source_map_source_rollup,
-        &mut source_map_source_minify,
-      ]);
+    let mut concat_source = ConcatSource::new(vec![
+      &mut source_map_source_rollup,
+      &mut source_map_source_minify,
+    ]);
 
-      concat_source
-        .generate_string(&GenMapOption {
-          columns: true,
-          include_source_contents: true,
-          file: None,
-        })
-        .expect("failed");
+    concat_source
+      .generate_string(&GenMapOption {
+        columns: true,
+        include_source_contents: true,
+        file: None,
+      })
+      .expect("failed");
   })
 }
 
@@ -117,14 +117,14 @@ fn benchmark_concat_generate_string_with_cache(b: &mut Bencher) {
 
   b.iter(|| {
     // for _ in 0..100 {
-      let mut concat_source = ConcatSource::new(vec![&mut cached_rollup, &mut cached_minify]);
-      concat_source
-        .generate_string(&GenMapOption {
-          columns: true,
-          include_source_contents: true,
-          file: None,
-        })
-        .expect("failed");
+    let mut concat_source = ConcatSource::new(vec![&mut cached_rollup, &mut cached_minify]);
+    concat_source
+      .generate_string(&GenMapOption {
+        columns: true,
+        include_source_contents: true,
+        file: None,
+      })
+      .expect("failed");
     // }
   })
 }
@@ -155,17 +155,17 @@ fn benchmark_concat_generate_base64(b: &mut Bencher) {
 
   b.iter(|| {
     // for _ in 0..100 {
-      let mut concat_source = ConcatSource::new(vec![
-        &mut source_map_source_rollup,
-        &mut source_map_source_minify,
-      ]);
-      concat_source
-        .generate_base64(&GenMapOption {
-          columns: true,
-          include_source_contents: true,
-          file: None,
-        })
-        .expect("failed");
+    let mut concat_source = ConcatSource::new(vec![
+      &mut source_map_source_rollup,
+      &mut source_map_source_minify,
+    ]);
+    concat_source
+      .generate_base64(&GenMapOption {
+        columns: true,
+        include_source_contents: true,
+        file: None,
+      })
+      .expect("failed");
     // }
   })
 }
@@ -199,14 +199,14 @@ fn benchmark_concat_generate_base64_with_cache(b: &mut Bencher) {
 
   b.iter(|| {
     // for _ in 0..100 {
-      let mut concat_source = ConcatSource::new(vec![&mut cached_rollup, &mut cached_minify]);
-      concat_source
-        .generate_base64(&GenMapOption {
-          columns: true,
-          include_source_contents: true,
-          file: None,
-        })
-        .expect("failed");
+    let mut concat_source = ConcatSource::new(vec![&mut cached_rollup, &mut cached_minify]);
+    concat_source
+      .generate_base64(&GenMapOption {
+        columns: true,
+        include_source_contents: true,
+        file: None,
+      })
+      .expect("failed");
     // }
   })
 }
@@ -237,17 +237,17 @@ fn benchmark_concat_generate_url(b: &mut Bencher) {
 
   b.iter(|| {
     // for _ in 0..100 {
-      let mut concat_source = ConcatSource::new(vec![
-        &mut source_map_source_rollup,
-        &mut source_map_source_minify,
-      ]);
-      concat_source
-        .generate_url(&GenMapOption {
-          columns: true,
-          include_source_contents: true,
-          file: None,
-        })
-        .expect("failed");
+    let mut concat_source = ConcatSource::new(vec![
+      &mut source_map_source_rollup,
+      &mut source_map_source_minify,
+    ]);
+    concat_source
+      .generate_url(&GenMapOption {
+        columns: true,
+        include_source_contents: true,
+        file: None,
+      })
+      .expect("failed");
     // }
   })
 }
@@ -281,14 +281,14 @@ fn benchmark_concat_generate_url_with_cache(b: &mut Bencher) {
 
   b.iter(|| {
     // for _ in 0..100 {
-      let mut concat_source = ConcatSource::new(vec![&mut cached_rollup, &mut cached_minify]);
-      concat_source
-        .generate_url(&GenMapOption {
-          columns: true,
-          include_source_contents: true,
-          file: None,
-        })
-        .expect("failed");
+    let mut concat_source = ConcatSource::new(vec![&mut cached_rollup, &mut cached_minify]);
+    concat_source
+      .generate_url(&GenMapOption {
+        columns: true,
+        include_source_contents: true,
+        file: None,
+      })
+      .expect("failed");
     // }
   })
 }
