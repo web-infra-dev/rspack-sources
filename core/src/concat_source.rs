@@ -83,16 +83,23 @@ impl<'a> ConcatSource<'a> {
     gen_map_options: &GenMapOption,
   ) -> Result<Option<String>, Error> {
     let map_string = self.generate_string(gen_map_options)?;
-    tracing::debug_span!("base64_encode").in_scope(|| Ok(map_string.map(base64::encode)))
+    Ok(map_string.map(|s| {
+      base64_simd::Base64::STANDARD
+        .encode_to_boxed_str(s.as_bytes())
+        .to_string()
+    }))
   }
 
   #[tracing::instrument(skip_all)]
   pub fn generate_url(&mut self, gen_map_options: &GenMapOption) -> Result<Option<String>, Error> {
     let map_base64 = self.generate_base64(gen_map_options)?;
 
-    Ok(map_base64.map(|mut s| {
-      s = format!("data:application/json;charset=utf-8;base64,{}", s);
-      s
+    Ok(map_base64.map(|s| {
+      // 43 is length of common prefix of javascript base64 blob
+      let mut ret = String::with_capacity(s.len() + 43);
+      ret += "data:application/json;charset=utf-8;base64,";
+      ret += &s;
+      ret
     }))
   }
 }
