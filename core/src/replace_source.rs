@@ -21,7 +21,6 @@ struct Replacement {
 
 struct SourceCodeIndexer {
   code: SmolStr,
-  every_line_lens: Vec<u32>,
   lines_lens_pre_sum: Vec<u32>,
 }
 
@@ -90,7 +89,6 @@ impl SourceCodeIndexer {
       .collect();
     Self {
       code,
-      every_line_lens,
       lines_lens_pre_sum,
     }
   }
@@ -100,13 +98,6 @@ impl SourceCodeIndexer {
     I: SliceIndex<str>,
   {
     self.code.get(idx)
-  }
-
-  fn last_position(&self) -> (u32, u32) {
-    (
-      self.every_line_lens.len() as u32,
-      *self.every_line_lens.last().unwrap() as u32,
-    )
   }
 
   fn max_position(&self) -> u32 {
@@ -259,30 +250,32 @@ impl<T: Source> Source for ReplaceSource<T> {
         }
 
         if option.columns || generated_column == 0 {
-          if src_line.is_some() && src_col.is_some() {
-            // when there are two position corresponding one src position, should not emit twice
-            // for example: 1:0 -> 1:1, 1:5 -> 1:1 x
-            //              1:0 -> 1:1 ✓
-            // but if two position are not in one line is ok
-            // for example:
-            //              1:0 -> 1:1, 2:0 -> 1:1 ✓
-            if src_line != last_src_line
-              || src_col != last_src_column
-              || src_id != last_src_id
-              || Some(generated_line) != last_generated_line
-            {
-              sm_builder.add(
-                generated_line,
-                generated_column,
-                src_line.unwrap(),
-                src_col.unwrap(),
-                src_id.and_then(|idx| inner_source_map.get_source(idx)),
-                name,
-              );
-              last_generated_line = Some(generated_line);
-              last_src_line = src_line;
-              last_src_column = src_col;
-              last_src_id = src_id;
+          if let Some(src_line_v) = src_line {
+            if let Some(src_col_v) = src_col {
+              // when there are two position corresponding one src position, should not emit twice
+              // for example: 1:0 -> 1:1, 1:5 -> 1:1 x
+              //              1:0 -> 1:1 ✓
+              // but if two position are not in one line is ok
+              // for example:
+              //              1:0 -> 1:1, 2:0 -> 1:1 ✓
+              if src_line != last_src_line
+                || src_col != last_src_column
+                || src_id != last_src_id
+                || Some(generated_line) != last_generated_line
+              {
+                sm_builder.add(
+                  generated_line,
+                  generated_column,
+                  src_line_v,
+                  src_col_v,
+                  src_id.and_then(|idx| inner_source_map.get_source(idx)),
+                  name,
+                );
+                last_generated_line = Some(generated_line);
+                last_src_line = src_line;
+                last_src_column = src_col;
+                last_src_id = src_id;
+              }
             }
           }
         }
