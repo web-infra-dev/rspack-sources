@@ -1,7 +1,7 @@
 use smol_str::SmolStr;
 use sourcemap::{SourceMap, SourceMapBuilder, Token};
 
-use crate::{utils::Lrc, CachedSource, Error, GenMapOption, Source};
+use crate::{utils::Lrc, CachedSource, Error, MapOptions, Source};
 
 pub struct SourceMapSource {
   source_code: SmolStr,
@@ -141,7 +141,7 @@ impl SourceMapSource {
   #[tracing::instrument(skip_all)]
   fn remap_with_inner_sourcemap(
     &mut self,
-    gen_map_option: &GenMapOption,
+    gen_map_option: &MapOptions,
   ) -> Option<SourceMap> {
     let mut source_map_builder = SourceMapBuilder::new(Some(&self.name));
 
@@ -178,7 +178,7 @@ impl Source for SourceMapSource {
   }
 
   #[tracing::instrument(skip_all)]
-  fn map(&mut self, option: &GenMapOption) -> Option<Lrc<SourceMap>> {
+  fn map(&mut self, option: &MapOptions) -> Option<Lrc<SourceMap>> {
     let remapped = self.remap_with_inner_sourcemap(option);
     self.sourcemap_remapped = remapped.map(Lrc::new);
 

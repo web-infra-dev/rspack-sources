@@ -3,11 +3,11 @@ use std::collections::HashMap;
 use smol_str::SmolStr;
 use sourcemap::SourceMap;
 
-use crate::{utils::Lrc, GenMapOption, Source};
+use crate::{utils::Lrc, MapOptions, Source};
 
 pub struct CachedSource<T: Source> {
   inner: T,
-  cached_map: HashMap<GenMapOption, Option<Lrc<SourceMap>>>,
+  cached_map: HashMap<MapOptions, Option<Lrc<SourceMap>>>,
   cached_code: Option<SmolStr>,
 }
 
@@ -26,7 +26,7 @@ impl<T: Source> CachedSource<T> {
 }
 
 impl<T: Source> Source for CachedSource<T> {
-  fn map(&mut self, gen_map_option: &GenMapOption) -> Option<Lrc<SourceMap>> {
+  fn map(&mut self, gen_map_option: &MapOptions) -> Option<Lrc<SourceMap>> {
     if let Some(source_map) = self.cached_map.get(gen_map_option) {
       source_map.as_ref().cloned()
     } else {

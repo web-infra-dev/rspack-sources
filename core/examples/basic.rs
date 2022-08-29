@@ -1,4 +1,4 @@
-use rspack_sources::{ConcatSource, GenMapOption, SourceMapSource};
+use rspack_sources::{ConcatSource, MapOptions, SourceMapSource};
 use tracing::Level;
 
 static FIXTURE_MINIFY: once_cell::sync::Lazy<(Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>)> =
@@ -85,7 +85,7 @@ fn main() {
     &mut source_map_source_minify,
   ]);
   concat_source
-    .generate_base64(&GenMapOption {
+    .generate_base64(&MapOptions {
       columns: true,
       include_source_contents: true,
       file: None,

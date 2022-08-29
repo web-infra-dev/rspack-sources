@@ -2,7 +2,7 @@ use smol_str::SmolStr;
 use sourcemap::{SourceMap, SourceMapBuilder};
 
 use crate::{
-  source::{GenMapOption, Source},
+  source::{MapOptions, Source},
   utils::Lrc,
   Error,
 };
@@ -25,7 +25,7 @@ impl<'a> ConcatSource<'a> {
     sm_builder: &mut SourceMapBuilder,
     mut cur_gen_line: u32,
     concattable: &'a mut dyn Source,
-    gen_map_option: &GenMapOption,
+    gen_map_option: &MapOptions,
   ) {
     let source_map = concattable.map(gen_map_option);
 
@@ -61,7 +61,7 @@ impl<'a> ConcatSource<'a> {
   #[tracing::instrument(skip_all)]
   pub fn generate_string(
     &mut self,
-    gen_map_options: &GenMapOption,
+    gen_map_options: &MapOptions,
   ) -> Result<Option<String>, Error> {
     let source_map = self.map(gen_map_options);
     let is_source_map_exist = source_map.is_some();
@@ -79,7 +79,7 @@ impl<'a> ConcatSource<'a> {
   #[tracing::instrument(skip_all)]
   pub fn generate_base64(
     &mut self,
-    gen_map_options: &GenMapOption,
+    gen_map_options: &MapOptions,
   ) -> Result<Option<String>, Error> {
     let map_string = self.generate_string(gen_map_options)?;
     Ok(map_string.map(|s| {
@@ -90,7 +90,7 @@ impl<'a> ConcatSource<'a> {
   }
 
   #[tracing::instrument(skip_all)]
-  pub fn generate_url(&mut self, gen_map_options: &GenMapOption) -> Result<Option<String>, Error> {
+  pub fn generate_url(&mut self, gen_map_options: &MapOptions) -> Result<Option<String>, Error> {
     let map_base64 = self.generate_base64(gen_map_options)?;
 
     Ok(map_base64.map(|s| {
@@ -116,7 +116,7 @@ impl<'a> Source for ConcatSource<'a> {
   }
 
   #[tracing::instrument(skip_all)]
-  fn map(&mut self, option: &GenMapOption) -> Option<Lrc<SourceMap>> {
+  fn map(&mut self, option: &MapOptions) -> Option<Lrc<SourceMap>> {
     let mut source_map_builder = SourceMapBuilder::new(option.file.as_deref());
     let mut cur_gen_line = 0u32;
 
@@ -147,7 +147,7 @@ fn concat_source() {
   source.add(&mut origial_source2);
   dbg!(source.source());
   let map = source
-    .map(&GenMapOption {
+    .map(&MapOptions {
       columns: true,
       ..Default::default()
     })

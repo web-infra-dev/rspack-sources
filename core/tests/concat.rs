@@ -1,5 +1,5 @@
 use rspack_sources::{
-  CachedSource, ConcatSource, GenMapOption, RawSource, Source, SourceMapSource,
+  CachedSource, ConcatSource, MapOptions, RawSource, Source, SourceMapSource,
   SourceMapSourceOptions, SourceMapSourceSliceOptions,
 };
 use sourcemap::SourceMap;
@@ -76,7 +76,7 @@ fn should_work_with_multiple_source_map_sources() {
   ]);
 
   let source_map = concat_source
-    .map(&GenMapOption {
+    .map(&MapOptions {
       include_source_contents: true,
       file: None,
       columns: true,
@@ -135,7 +135,7 @@ fn should_work_with_concat_source_map_source_and_cached_source() {
   ]);
 
   let concat_source_string = concat_source
-    .generate_string(&GenMapOption::default())
+    .generate_string(&MapOptions::default())
     .expect("failed");
 
   let mut cached_sm_rollup = CachedSource::new(source_map_source_rollup);
@@ -145,7 +145,7 @@ fn should_work_with_concat_source_map_source_and_cached_source() {
     ConcatSource::new(vec![&mut cached_sm_minify, &mut cached_sm_rollup]);
 
   let concat_source_with_cache_string = concat_source_with_cache
-    .generate_string(&GenMapOption::default())
+    .generate_string(&MapOptions::default())
     .expect("failed");
 
   assert_eq!(concat_source_string, concat_source_with_cache_string)
@@ -175,7 +175,7 @@ fn should_concat_raw_source() {
       + &String::from_utf8(FIXTURE_MINIFY.2.to_vec()).unwrap()
   );
 
-  let source_map = concat_source.map(&GenMapOption::default()).expect("failed");
+  let source_map = concat_source.map(&MapOptions::default()).expect("failed");
   let token = source_map.lookup_token(16, 47).expect("failed");
 
   assert_eq!(token.get_name(), Some("alert"));
@@ -235,7 +235,7 @@ fn should_work_with_rspack_hmr() {
   let mut concat_source = ConcatSource::new(vec![&mut sms_1, &mut sms_2]);
 
   let source_map_string = concat_source
-    .generate_string(&GenMapOption {
+    .generate_string(&MapOptions {
       include_source_contents: true,
       columns: true,
       file: Some("index.js".to_owned()),

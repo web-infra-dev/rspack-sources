@@ -15,7 +15,7 @@ pub use concat_source::ConcatSource;
 pub use original_source::OriginalSource;
 pub use raw_source::RawSource;
 pub use result::{Error, RspackSourcesError};
-pub use source::{GenMapOption, Source};
+pub use source::{MapOptions, Source};
 pub use source_map_source::{SourceMapSource, SourceMapSourceOptions, SourceMapSourceSliceOptions};
 
 #[test]
@@ -32,7 +32,7 @@ fn t() {
     .par_iter_mut()
     .map(|s| {
       let s = s
-        .map(&GenMapOption {
+        .map(&MapOptions {
           columns: true,
           ..Default::default()
         })

@@ -4,7 +4,7 @@
 extern crate test;
 use test::Bencher;
 
-use rspack_sources::{CachedSource, ConcatSource, GenMapOption, SourceMapSource};
+use rspack_sources::{CachedSource, ConcatSource, MapOptions, SourceMapSource};
 
 static FIXTURE_MINIFY: once_cell::sync::Lazy<(Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>)> =
   once_cell::sync::Lazy::new(|| {
@@ -80,7 +80,7 @@ fn benchmark_concat_generate_string(b: &mut Bencher) {
     ]);
 
     concat_source
-      .generate_string(&GenMapOption {
+      .generate_string(&MapOptions {
         columns: true,
         include_source_contents: true,
         file: None,
@@ -121,7 +121,7 @@ fn benchmark_concat_generate_string_with_cache(b: &mut Bencher) {
     // for _ in 0..100 {
     let mut concat_source = ConcatSource::new(vec![&mut cached_rollup, &mut cached_minify]);
     concat_source
-      .generate_string(&GenMapOption {
+      .generate_string(&MapOptions {
         columns: true,
         include_source_contents: true,
         file: None,
@@ -162,7 +162,7 @@ fn benchmark_concat_generate_base64(b: &mut Bencher) {
       &mut source_map_source_minify,
     ]);
     concat_source
-      .generate_base64(&GenMapOption {
+      .generate_base64(&MapOptions {
         columns: true,
         include_source_contents: true,
         file: None,
@@ -203,7 +203,7 @@ fn benchmark_concat_generate_base64_with_cache(b: &mut Bencher) {
     // for _ in 0..100 {
     let mut concat_source = ConcatSource::new(vec![&mut cached_rollup, &mut cached_minify]);
     concat_source
-      .generate_base64(&GenMapOption {
+      .generate_base64(&MapOptions {
         columns: true,
         include_source_contents: true,
         file: None,
@@ -244,7 +244,7 @@ fn benchmark_concat_generate_url(b: &mut Bencher) {
       &mut source_map_source_minify,
     ]);
     concat_source
-      .generate_url(&GenMapOption {
+      .generate_url(&MapOptions {
         columns: true,
         include_source_contents: true,
         file: None,
@@ -285,7 +285,7 @@ fn benchmark_concat_generate_url_with_cache(b: &mut Bencher) {
     // for _ in 0..100 {
     let mut concat_source = ConcatSource::new(vec![&mut cached_rollup, &mut cached_minify]);
     concat_source
-      .generate_url(&GenMapOption {
+      .generate_url(&MapOptions {
         columns: true,
         include_source_contents: true,
         file: None,

@@ -1,7 +1,7 @@
 use smol_str::SmolStr;
 use sourcemap::SourceMap;
 
-use crate::{utils::Lrc, Error, GenMapOption, Source};
+use crate::{utils::Lrc, Error, MapOptions, Source};
 
 pub struct RawSource {
   source_code: SmolStr,
@@ -23,7 +23,7 @@ impl RawSource {
 
 impl Source for RawSource {
   #[tracing::instrument(skip_all)]
-  fn map(&mut self, _option: &GenMapOption) -> Option<Lrc<SourceMap>> {
+  fn map(&mut self, _option: &MapOptions) -> Option<Lrc<SourceMap>> {
     None
   }
 

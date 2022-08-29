@@ -4,14 +4,14 @@ use sourcemap::SourceMap;
 use crate::utils::Lrc;
 
 #[derive(Clone, PartialEq, Eq, Hash)]
-pub struct GenMapOption {
+pub struct MapOptions {
   /// If set to false the implementation may omit mappings for columns. (default: true)
   pub columns: bool,
   pub include_source_contents: bool,
   pub file: Option<String>,
 }
 
-impl Default for GenMapOption {
+impl Default for MapOptions {
   fn default() -> Self {
     Self {
       columns: true,
@@ -22,7 +22,7 @@ impl Default for GenMapOption {
 }
 
 pub trait Source {
-  fn map(&mut self, option: &GenMapOption) -> Option<Lrc<SourceMap>>;
+  fn map(&mut self, option: &MapOptions) -> Option<Lrc<SourceMap>>;
 
   fn source(&mut self) -> SmolStr;
 }

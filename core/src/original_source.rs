@@ -1,7 +1,7 @@
 use smol_str::SmolStr;
 use sourcemap::{SourceMap, SourceMapBuilder};
 
-use crate::{utils::Lrc, GenMapOption, Source};
+use crate::{utils::Lrc, MapOptions, Source};
 
 pub struct OriginalSource {
   source_code: SmolStr,
@@ -18,7 +18,7 @@ impl OriginalSource {
 }
 
 impl Source for OriginalSource {
-  fn map(&mut self, option: &GenMapOption) -> Option<Lrc<SourceMap>> {
+  fn map(&mut self, option: &MapOptions) -> Option<Lrc<SourceMap>> {
     let columns = option.columns;
 
     let mut sm_builder = SourceMapBuilder::new(None);
@@ -87,7 +87,7 @@ render(div, document.getElementById("app"));"#,
   );
 
   let source_map = original_source
-    .map(&GenMapOption {
+    .map(&MapOptions {
       columns: true,
       ..Default::default()
     })
@@ -107,7 +107,7 @@ fn original_source_2() {
   );
 
   let source_map = original_source
-    .map(&GenMapOption {
+    .map(&MapOptions {
       columns: true,
       ..Default::default()
     })
