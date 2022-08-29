@@ -8,6 +8,7 @@ mod original_source;
 mod raw_source;
 mod source;
 mod source_map_source;
+mod utils;
 
 pub use cached_source::CachedSource;
 pub use concat_source::ConcatSource;
@@ -16,3 +17,30 @@ pub use raw_source::RawSource;
 pub use result::{Error, RspackSourcesError};
 pub use source::{GenMapOption, Source};
 pub use source_map_source::{SourceMapSource, SourceMapSourceOptions, SourceMapSourceSliceOptions};
+
+#[test]
+fn t() {
+  use rayon::prelude::*;
+
+  let s1 = OriginalSource::new("console.log('hah')", "file.js");
+  let s2 = OriginalSource::new("console.log('hah')", "file.js");
+  let s3 = OriginalSource::new("console.log('hah')", "file.js");
+  let s4 = OriginalSource::new("console.log('hah')", "file.js");
+  let mut ss = vec![s1, s2, s3, s4];
+
+  let ss: Vec<_> = ss
+    .par_iter_mut()
+    .map(|s| {
+      let s = s
+        .map(&GenMapOption {
+          columns: true,
+          ..Default::default()
+        })
+        .unwrap();
+      let mut output: Vec<u8> = vec![];
+      s.to_writer(&mut output).unwrap();
+      String::from_utf8(output).unwrap()
+    })
+    .collect();
+  dbg!(ss);
+}

@@ -1,5 +1,5 @@
-use std::fmt::{self, Formatter};
-use std::string::{self, FromUtf8Error};
+use std::fmt;
+use std::string;
 
 #[derive(Debug, Clone)]
 pub enum RspackSourcesError {
@@ -30,7 +30,7 @@ impl Error {
 
 impl fmt::Display for Error {
   #[inline]
-  fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     if let Some(ref reason) = self.reason {
       write!(f, "{:?}, {}", self.error_type, reason)
     } else {
@@ -41,7 +41,7 @@ impl fmt::Display for Error {
 
 impl From<string::FromUtf8Error> for Error {
   #[inline]
-  fn from(_: FromUtf8Error) -> Self {
+  fn from(_: string::FromUtf8Error) -> Self {
     Error::new(RspackSourcesError::UTF8Error)
   }
 }

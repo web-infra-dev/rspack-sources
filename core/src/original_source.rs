@@ -1,9 +1,7 @@
-use std::rc::Rc;
-
 use smol_str::SmolStr;
 use sourcemap::{SourceMap, SourceMapBuilder};
 
-use crate::{GenMapOption, Source};
+use crate::{utils::Lrc, GenMapOption, Source};
 
 pub struct OriginalSource {
   source_code: SmolStr,
@@ -20,7 +18,7 @@ impl OriginalSource {
 }
 
 impl Source for OriginalSource {
-  fn map(&mut self, option: &GenMapOption) -> Option<Rc<SourceMap>> {
+  fn map(&mut self, option: &GenMapOption) -> Option<Lrc<SourceMap>> {
     let columns = option.columns;
 
     let mut sm_builder = SourceMapBuilder::new(None);
@@ -70,7 +68,7 @@ impl Source for OriginalSource {
       }
     }
 
-    Some(Rc::new(sm_builder.into_sourcemap()))
+    Some(Lrc::new(sm_builder.into_sourcemap()))
   }
 
   fn source(&mut self) -> SmolStr {
@@ -96,7 +94,27 @@ render(div, document.getElementById("app"));"#,
     .expect("should generate");
 
   let mut writer = vec![] as Vec<u8>;
-  source_map.to_writer(&mut writer);
+  source_map.to_writer(&mut writer).unwrap();
+  println!("{}", String::from_utf8(writer).unwrap());
+  println!("{}", original_source.source());
+}
+
+#[test]
+fn original_source_2() {
+  let mut original_source = OriginalSource::new(
+    "console.log('test');\nconsole.log('test2');\n",
+    "console.js",
+  );
+
+  let source_map = original_source
+    .map(&GenMapOption {
+      columns: true,
+      ..Default::default()
+    })
+    .expect("should generate");
+
+  let mut writer = vec![] as Vec<u8>;
+  source_map.to_writer(&mut writer).unwrap();
   println!("{}", String::from_utf8(writer).unwrap());
   println!("{}", original_source.source());
 }

@@ -1,10 +1,9 @@
-use std::rc::Rc;
-
 use smol_str::SmolStr;
 use sourcemap::{SourceMap, SourceMapBuilder};
 
 use crate::{
   source::{GenMapOption, Source},
+  utils::Lrc,
   Error,
 };
 
@@ -117,7 +116,7 @@ impl<'a> Source for ConcatSource<'a> {
   }
 
   #[tracing::instrument(skip_all)]
-  fn map(&mut self, option: &GenMapOption) -> Option<Rc<SourceMap>> {
+  fn map(&mut self, option: &GenMapOption) -> Option<Lrc<SourceMap>> {
     let mut source_map_builder = SourceMapBuilder::new(option.file.as_deref());
     let mut cur_gen_line = 0u32;
 
@@ -129,6 +128,31 @@ impl<'a> Source for ConcatSource<'a> {
       cur_gen_line += line_len as u32;
     });
 
-    Some(Rc::new(source_map_builder.into_sourcemap()))
+    Some(Lrc::new(source_map_builder.into_sourcemap()))
   }
+}
+
+#[test]
+fn concat_source() {
+  use crate::OriginalSource;
+  use crate::RawSource;
+
+  let mut raw_source = RawSource::new("Hello World\n");
+  let mut origial_source = OriginalSource::new(
+    "console.log('test');\nconsole.log('test2');\n",
+    "console.js",
+  );
+  let mut origial_source2 = OriginalSource::new("Hello2", "hello.md");
+  let mut source = ConcatSource::new(vec![&mut raw_source, &mut origial_source]);
+  source.add(&mut origial_source2);
+  dbg!(source.source());
+  let map = source
+    .map(&GenMapOption {
+      columns: true,
+      ..Default::default()
+    })
+    .unwrap();
+  let mut output: Vec<u8> = vec![];
+  map.to_writer(&mut output).unwrap();
+  println!("{}", String::from_utf8(output).unwrap());
 }
