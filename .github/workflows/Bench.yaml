@@ -1,89 +1,89 @@
-name: Benchmark
+# name: Benchmark
 
-env:
-  DEBUG: 'napi:*'
-  APP_NAME: 'rspack-sources'
-  MACOSX_DEPLOYMENT_TARGET: '10.13'
-  # https://github.com/SchrodingerZhu/snmalloc-rs
-  CACHE_FRIENDLY_OFFSET: 64
+# env:
+#   DEBUG: 'napi:*'
+#   APP_NAME: 'rspack-sources'
+#   MACOSX_DEPLOYMENT_TARGET: '10.13'
+#   # https://github.com/SchrodingerZhu/snmalloc-rs
+#   CACHE_FRIENDLY_OFFSET: 64
 
-'on':
-  push:
-    branches:
-      - main
-    tags-ignore:
-      - '**'
-    paths-ignore:
-      - '**/*.md'
-      - LICENSE
-      - '**/*.gitignore'
-      - .editorconfig
-      - docs/**
-  pull_request: null
-jobs:
-  benchmark:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
+# 'on':
+#   push:
+#     branches:
+#       - main
+#     tags-ignore:
+#       - '**'
+#     paths-ignore:
+#       - '**/*.md'
+#       - LICENSE
+#       - '**/*.gitignore'
+#       - .editorconfig
+#       - docs/**
+#   pull_request: null
+# jobs:
+#   benchmark:
+#     runs-on: ubuntu-latest
+#     steps:
+#       - uses: actions/checkout@v2
 
-      - name: Setup node
-        uses: actions/setup-node@v2
-        with:
-          node-version: 14
+#       - name: Setup node
+#         uses: actions/setup-node@v2
+#         with:
+#           node-version: 14
 
-      - name: Install
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          override: true
+#       - name: Install
+#         uses: actions-rs/toolchain@v1
+#         with:
+#           profile: minimal
+#           override: true
 
-      - name: Install pnpm
-        run: npm install -g pnpm@^6
+#       - name: Install pnpm
+#         run: npm install -g pnpm@^6
 
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v1
-        with:
-          key: ${{ matrix.settings.target }}-node@14-cargo-cache
+#       - name: Cache cargo
+#         uses: Swatinem/rust-cache@v1
+#         with:
+#           key: ${{ matrix.settings.target }}-node@14-cargo-cache
 
-      - name: Cache NPM dependencies
-        uses: actions/cache@v2
-        with:
-          path: node_modules
-          key: npm-cache-lint-node@14-${{ hashFiles('pnpm-lock.yaml') }}
+#       - name: Cache NPM dependencies
+#         uses: actions/cache@v2
+#         with:
+#           path: node_modules
+#           key: npm-cache-lint-node@14-${{ hashFiles('pnpm-lock.yaml') }}
 
-      - name: 'Install wasm-pack'
-        uses: jetli/wasm-pack-action@v0.3.0
-        with:
-          version: 'latest'
+#       - name: 'Install wasm-pack'
+#         uses: jetli/wasm-pack-action@v0.3.0
+#         with:
+#           version: 'latest'
 
-      - name: 'Install dependencies'
-        run: pnpm install --frozen-lockfile --registry https://registry.npm.taobao.org
+#       - name: 'Install dependencies'
+#         run: pnpm install --frozen-lockfile --registry https://registry.npm.taobao.org
 
-      - name: Build
-        run: |
-          pnpm build
+#       - name: Build
+#         run: |
+#           pnpm build
 
-      - name: Run benchmark(Node)
-        run: |
-          pnpm bench | tee output_node.txt
+#       - name: Run benchmark(Node)
+#         run: |
+#           pnpm bench | tee output_node.txt
 
-      - name: Store benchmark result(Node)
-        uses: benchmark-action/github-action-benchmark@v1
-        with:
-          tool: 'benchmarkjs'
-          output-file-path: output_node.txt
-          auto-push: true
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          comment-always: true
+#       - name: Store benchmark result(Node)
+#         uses: benchmark-action/github-action-benchmark@v1
+#         with:
+#           tool: 'benchmarkjs'
+#           output-file-path: output_node.txt
+#           auto-push: true
+#           github-token: ${{ secrets.GITHUB_TOKEN }}
+#           comment-always: true
 
-      - name: Run benchmark(Rust)
-        run: cargo bench | tee output_rust.txt
+#       - name: Run benchmark(Rust)
+#         run: cargo bench | tee output_rust.txt
 
-      - name: Store benchmark result(Rust)
-        uses: benchmark-action/github-action-benchmark@v1
-        with:
-          tool: 'cargo'
-          output-file-path: output_rust.txt
-          auto-push: true
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          comment-always: true
+#       - name: Store benchmark result(Rust)
+#         uses: benchmark-action/github-action-benchmark@v1
+#         with:
+#           tool: 'cargo'
+#           output-file-path: output_rust.txt
+#           auto-push: true
+#           github-token: ${{ secrets.GITHUB_TOKEN }}
+#           comment-always: true
