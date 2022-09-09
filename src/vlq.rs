@@ -262,20 +262,8 @@ const B64: [i8; 256] = [
   -1,
 ];
 
-/// Parses a VLQ segment into a vector.
-pub fn parse_vlq_segment(segment: &str) -> Result<Vec<i64>> {
-  let mut rv = vec![];
-
-  parse_vlq_segment_into(segment, &mut rv)?;
-
-  Ok(rv)
-}
-
 /// Parses a VLQ segment into a pre-allocated `Vec` instead of returning a new allocation.
-pub(crate) fn parse_vlq_segment_into(
-  segment: &str,
-  rv: &mut Vec<i64>,
-) -> Result<()> {
+pub fn decode(segment: &str, rv: &mut Vec<i64>) -> Result<()> {
   let mut cur = 0;
   let mut shift = 0;
 
@@ -307,16 +295,7 @@ pub(crate) fn parse_vlq_segment_into(
   }
 }
 
-/// Encodes a VLQ segment from a slice.
-pub fn generate_vlq_segment(nums: &[i64]) -> Result<String> {
-  let mut rv = String::new();
-  for &num in nums {
-    encode_vlq(&mut rv, num);
-  }
-  Ok(rv)
-}
-
-pub(crate) fn encode_vlq(out: &mut String, num: i64) {
+fn encode_vlq(out: &mut String, num: i64) {
   let mut num = if num < 0 { ((-num) << 1) + 1 } else { num << 1 };
 
   loop {
@@ -334,35 +313,4 @@ pub(crate) fn encode_vlq(out: &mut String, num: i64) {
 
 pub fn encode(out: &mut String, a: u32, b: u32) {
   encode_vlq(out, i64::from(a) - i64::from(b))
-}
-
-#[cfg(test)]
-mod tests {
-  use super::*;
-
-  #[test]
-  fn test_vlq_decode() {
-    let rv = parse_vlq_segment("AAAA").unwrap();
-    assert_eq!(rv, vec![0, 0, 0, 0]);
-    let rv = parse_vlq_segment("GAAIA").unwrap();
-    assert_eq!(rv, vec![3, 0, 0, 4, 0]);
-  }
-
-  #[test]
-  fn test_vlq_encode() {
-    let rv = generate_vlq_segment(&[0, 0, 0, 0]).unwrap();
-    assert_eq!(rv.as_str(), "AAAA");
-    let rv = generate_vlq_segment(&[3, 0, 0, 4, 0]).unwrap();
-    assert_eq!(rv.as_str(), "GAAIA");
-  }
-
-  #[test]
-  fn test_overflow() {
-    match parse_vlq_segment("00000000000000") {
-      Err(Error::VlqOverflow) => {}
-      e => {
-        panic!("Unexpeted result: {:?}", e);
-      }
-    }
-  }
 }

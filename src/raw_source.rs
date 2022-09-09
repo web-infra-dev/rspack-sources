@@ -81,6 +81,7 @@ use crate::{
 //   }
 // }
 
+#[derive(Debug, Clone)]
 pub enum RawSource {
   Buffer(Vec<u8>),
   Source(String),

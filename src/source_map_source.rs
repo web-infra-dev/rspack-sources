@@ -1,9 +1,7 @@
 use std::borrow::Cow;
 
 use crate::{
-  helpers::{
-    create_mapping_serializer, get_map, MappingSerializer, StreamChunks,
-  },
+  helpers::{get_map, stream_chunks_of_source_map, StreamChunks},
   MapOptions, Source, SourceMap,
 };
 
@@ -37,6 +35,7 @@ impl<V, N> From<WithoutOriginalOptions<V, N>> for SourceMapSourceOptions<V, N> {
   }
 }
 
+#[derive(Debug, Clone)]
 pub struct SourceMapSource {
   value: String,
   name: String,
@@ -79,7 +78,7 @@ impl Source for SourceMapSource {
   }
 
   fn map(&self, options: MapOptions) -> Option<SourceMap> {
-    get_map(self, options)
+    Some(get_map(self, options))
   }
 }
 
@@ -91,9 +90,138 @@ impl StreamChunks for SourceMapSource {
     on_source: crate::helpers::OnSource,
     on_name: crate::helpers::OnName,
   ) -> crate::helpers::GeneratedInfo {
-    if let Some(inner_source_map) = self.inner_source_map {
+    if let Some(inner_source_map) = &self.inner_source_map {
       todo!()
     } else {
+      stream_chunks_of_source_map(
+        &self.value,
+        &self.source_map,
+        on_chunk,
+        on_source,
+        on_name,
+        options,
+      )
     }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use crate::{
+    mappings, BoxSource, ConcatSource, Mappings, OriginalSource, RawSource,
+  };
+
+  use super::*;
+
+  #[test]
+  fn map_correctly() {
+    let inner_source_code = "Hello World\nis a test string\n";
+    let inner_source = ConcatSource::new([
+      Box::new(OriginalSource::new(inner_source_code, "hello-world.txt"))
+        as BoxSource,
+      Box::new(OriginalSource::new("Translate: ", "header.txt")),
+      Box::new(RawSource::from("Other text")),
+    ]);
+  }
+
+  // #[test]
+  // fn should_handle_es6_promise_correctly() {
+  //   let code = include_str!(concat!(
+  //     env!("CARGO_MANIFEST_DIR"),
+  //     "/tests/es6-promise.js"
+  //   ));
+  //   let map = SourceMap::from_json(
+  //     "/",
+  //     include_str!(concat!(
+  //       env!("CARGO_MANIFEST_DIR"),
+  //       "/tests/es6-promise.map"
+  //     )),
+  //   )
+  //   .unwrap();
+  // }
+
+  #[test]
+  fn should_not_emit_zero_sizes_mappings_when_ending_with_empty_mapping() {
+    let a = SourceMapSource::new(WithoutOriginalOptions {
+      value: "hello\n",
+      name: "a",
+      source_map: SourceMap::new(
+        None,
+        mappings![
+          MapOptions::default(),
+          [1, 0, 0, 1, 0, -1],
+          [2, 0, 0, 2, 0, -1],
+        ],
+        None,
+        vec![Some("hello1".to_string())],
+        vec![],
+        vec![],
+      ),
+    });
+    let b = SourceMapSource::new(WithoutOriginalOptions {
+      value: "hi",
+      name: "b",
+      source_map: SourceMap::new(
+        None,
+        mappings![
+          MapOptions::default(),
+          [1, 0, 0, 1, 0, -1],
+          [1, 2, 0, 1, 2, -1],
+        ],
+        None,
+        vec![Some("hello2".to_string())],
+        vec![],
+        vec![],
+      ),
+    });
+    let b2 = SourceMapSource::new(WithoutOriginalOptions {
+      value: "hi",
+      name: "b",
+      source_map: SourceMap::new(
+        None,
+        mappings![
+          MapOptions::default(),
+          [1, 0, 0, 1, 0, -1],
+          [1, 2, 0, 1, 2, -1],
+        ],
+        None,
+        vec![Some("hello3".to_string())],
+        vec![],
+        vec![],
+      ),
+    });
+    let c = SourceMapSource::new(WithoutOriginalOptions {
+      value: "",
+      name: "c",
+      source_map: SourceMap::new(
+        None,
+        mappings!(MapOptions::default(), [1, 0, 0, 1, 0, -1]),
+        None,
+        vec![Some("hello4".to_string())],
+        vec![],
+        vec![],
+      ),
+    });
+    let source = ConcatSource::new([
+      a.clone(),
+      a.clone(),
+      b.clone(),
+      b.clone(),
+      b2.clone(),
+      b.clone(),
+      c.clone(),
+      c.clone(),
+      b2.clone(),
+      a.clone(),
+      b2.clone(),
+      c.clone(),
+      a.clone(),
+      b.clone(),
+    ]);
+    let map = source.map(MapOptions::default()).unwrap();
+    assert_eq!(
+      map.mappings().serialize(),
+      "AAAA;AAAA;ACAA,ICAA,EDAA,ECAA,EFAA;AEAA,EFAA;ACAA",
+    );
   }
 }
