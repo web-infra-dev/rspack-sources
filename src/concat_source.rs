@@ -52,7 +52,7 @@ impl Source for ConcatSource {
   }
 
   fn map(&self, options: &MapOptions) -> Option<SourceMap> {
-    Some(get_map(self, options))
+    get_map(self, options)
   }
 }
 
@@ -153,32 +153,28 @@ impl StreamChunks for ConcatSource {
           }
         },
         &mut |i, source, source_content| {
-          if let Some(source) = source {
-            let mut global_index = source_mapping.get(source).copied();
-            if global_index.is_none() {
-              let len = source_mapping.len() as u32;
-              source_mapping.insert(source.to_owned(), len);
-              on_source(len, Some(source), source_content);
-              global_index = Some(len);
-            }
-            source_index_mapping
-              .borrow_mut()
-              .insert(i, global_index.unwrap());
+          let mut global_index = source_mapping.get(source).copied();
+          if global_index.is_none() {
+            let len = source_mapping.len() as u32;
+            source_mapping.insert(source.to_owned(), len);
+            on_source(len, source, source_content);
+            global_index = Some(len);
           }
+          source_index_mapping
+            .borrow_mut()
+            .insert(i, global_index.unwrap());
         },
         &mut |i, name| {
-          if let Some(name) = name {
-            let mut global_index = name_mapping.get(name).copied();
-            if global_index.is_none() {
-              let len = name_mapping.len() as u32;
-              name_mapping.insert(name.to_owned(), len);
-              on_name(len, Some(name));
-              global_index = Some(len);
-            }
-            name_index_mapping
-              .borrow_mut()
-              .insert(i, global_index.unwrap());
+          let mut global_index = name_mapping.get(name).copied();
+          if global_index.is_none() {
+            let len = name_mapping.len() as u32;
+            name_mapping.insert(name.to_owned(), len);
+            on_name(len, name);
+            global_index = Some(len);
           }
+          name_index_mapping
+            .borrow_mut()
+            .insert(i, global_index.unwrap());
         },
       );
       if need_to_cloas_mapping {
@@ -228,62 +224,38 @@ mod tests {
       "Hello World\nconsole.log('test');\nconsole.log('test2');\nHello2\n";
     assert_eq!(source.size(), 62);
     assert_eq!(source.source(), expected_source);
-
-    // let expected_map1 = SourceMap::new(
-    //   None,
-    //   ";AAAA;AACA;ACDA".to_string(),
-    //   vec![Some("console.js".to_string()), Some("hello.md".to_string())],
-    //   vec![
-    //     Some("console.log('test');\nconsole.log('test2');\n".to_string()),
-    //     Some("Hello2\n".to_string()),
-    //   ],
-    //   vec![],
-    // );
-    // assert_eq!(source.map(MapOptions::new(false)).unwrap(), expected_map1);
-    let options1 = MapOptions::new(false);
-    let map1 = source.map(&options1).unwrap();
-    assert_eq!(map1.mappings().serialize(&options1), ";AAAA;AACA;ACDA");
-    assert_eq!(map1.file(), None);
     assert_eq!(
-      map1.sources().unwrap(),
-      [Some("console.js".to_string()), Some("hello.md".to_string())],
+      source.map(&MapOptions::new(false)).unwrap(),
+      SourceMap::from_json(
+        r#"{
+          "version": 3,
+          "mappings": ";AAAA;AACA;ACDA",
+          "names": [],
+          "sources": ["console.js", "hello.md"],
+          "sourcesContent": [
+            "console.log('test');\nconsole.log('test2');\n",
+            "Hello2\n"
+          ]
+        }"#,
+      )
+      .unwrap()
     );
     assert_eq!(
-      map1.sources_content().unwrap(),
-      [
-        Some("console.log('test');\nconsole.log('test2');\n".to_string()),
-        Some("Hello2\n".to_string()),
-      ],
+      source.map(&MapOptions::default()).unwrap(),
+      SourceMap::from_json(
+        r#"{
+          "version": 3,
+          "mappings": ";AAAA;AACA;ACDA",
+          "names": [],
+          "sources": ["console.js", "hello.md"],
+          "sourcesContent": [
+            "console.log('test');\nconsole.log('test2');\n",
+            "Hello2\n"
+          ]
+        }"#
+      )
+      .unwrap()
     );
-    assert_eq!(map1.names().unwrap(), &[]);
-
-    // let expected_map2 = SourceMap::new(
-    //   None,
-    //   ";AAAA;AACA;ACDA".to_string(),
-    //   vec![Some("console.js".to_string()), Some("hello.md".to_string())],
-    //   vec![
-    //     Some("console.log('test');\nconsole.log('test2');\n".to_string()),
-    //     Some("Hello2\n".to_string()),
-    //   ],
-    //   vec![],
-    // );
-    // assert_eq!(source.map(MapOptions::default()).unwrap(), expected_map2);
-    let options2 = MapOptions::new(true);
-    let map2 = source.map(&options2).unwrap();
-    assert_eq!(map2.mappings().serialize(&options2), ";AAAA;AACA;ACDA");
-    assert_eq!(map2.file(), None);
-    assert_eq!(
-      map2.sources().unwrap(),
-      [Some("console.js".to_string()), Some("hello.md".to_string())],
-    );
-    assert_eq!(
-      map2.sources_content().unwrap(),
-      [
-        Some("console.log('test');\nconsole.log('test2');\n".to_string()),
-        Some("Hello2\n".to_string()),
-      ],
-    );
-    assert_eq!(map2.names().unwrap(), &[]);
   }
 
   #[test]
@@ -303,31 +275,22 @@ mod tests {
     source.add(inner_source);
     let expected_source =
       "Hello World\nconsole.log('test');\nconsole.log('test2');\nconsole.log('string')";
-    // let expected_map1 = SourceMap::new(
-    //   None,
-    //   ";AAAA;AACA".to_string(),
-    //   vec![Some("console.js".to_string())],
-    //   vec![Some(
-    //     "console.log('test');\nconsole.log('test2');\n".to_string(),
-    //   )],
-    //   vec![],
-    // );
+    let expected_map1 = SourceMap::from_json(
+      r#"{
+        "version": 3,
+        "mappings": ";AAAA;AACA",
+        "names": [],
+        "sources": ["console.js"],
+        "sourcesContent": ["console.log('test');\nconsole.log('test2');\n"]
+      }"#,
+    )
+    .unwrap();
     assert_eq!(source.size(), 76);
     assert_eq!(source.source(), expected_source);
     assert_eq!(source.buffer(), expected_source.as_bytes());
 
-    let options = MapOptions::new(false);
-    let map = source.map(&options).unwrap();
-    assert_eq!(map.mappings().serialize(&options), ";AAAA;AACA");
-    assert!(map.file().is_none());
-    assert_eq!(map.sources().unwrap(), [Some("console.js".to_string())]);
-    assert_eq!(
-      map.sources_content().unwrap(),
-      [Some(
-        "console.log('test');\nconsole.log('test2');\n".to_string()
-      )],
-    );
-    assert_eq!(map.names().unwrap(), []);
+    let map = source.map(&MapOptions::new(false)).unwrap();
+    assert_eq!(map, expected_map1);
 
     // TODO: test hash
   }
@@ -341,14 +304,12 @@ mod tests {
     ]);
 
     let result_text = source.source();
-    let options = MapOptions::default();
-    let result_map = source.map(&options);
-    let list_options = MapOptions::new(false);
-    let result_list_map = source.map(&list_options);
+    let result_map = source.map(&MapOptions::default());
+    let result_list_map = source.map(&MapOptions::new(false));
 
     assert_eq!(result_text, "Hello World\nHello World\n");
-    // assert!(result_map.is_none());
-    // assert!(result_list_map.is_none());
+    assert!(result_map.is_none());
+    assert!(result_list_map.is_none());
   }
 
   #[test]
@@ -364,32 +325,19 @@ mod tests {
       Box::new(RawSource::from("is here")),
     ]);
 
-    let options = MapOptions::default();
-    let map = source.map(&options).unwrap();
     assert_eq!(
-      map.mappings().serialize(&options),
-      "AAAA,K,CCAA,M;ADAA;;ACAA"
+      source.map(&MapOptions::default()).unwrap(),
+      SourceMap::from_json(
+        r#"{
+          "mappings": "AAAA,K,CCAA,M;ADAA;;ACAA",
+          "names": [],
+          "sources": ["hello.txt", "world.txt"],
+          "sourcesContent": ["Hello", "World "],
+          "version": 3
+        }"#
+      )
+      .unwrap(),
     );
-    assert!(map.file().is_none());
-    assert_eq!(
-      map.sources().unwrap(),
-      [Some("hello.txt".to_string()), Some("world.txt".to_string())],
-    );
-    assert_eq!(
-      map.sources_content().unwrap(),
-      [Some("Hello".to_string()), Some("World ".to_string())],
-    );
-    assert_eq!(map.names().unwrap(), []);
-    // assert_eq!(
-    //   source.map(MapOptions::default()).unwrap(),
-    //   SourceMap::new(
-    //     None,
-    //     "AAAA,K,CCAA,M;ADAA;;ACAA".to_string(),
-    //     vec![Some("hello.txt".to_string()), Some("world.txt".to_string())],
-    //     vec![Some("Hello".to_string()), Some("World ".to_string())],
-    //     vec![],
-    //   ),
-    // );
     assert_eq!(
       source.source(),
       "Hello World is here\nHello\n \nWorld\nis here",
@@ -404,7 +352,6 @@ mod tests {
       RawSource::from("c"),
     ]);
     assert_eq!(source.source(), "abc");
-    // TODO
-    // assert!(source.map(MapOptions::default()).is_none());
+    assert!(source.map(&MapOptions::default()).is_none());
   }
 }

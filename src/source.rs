@@ -1,12 +1,13 @@
-use std::{borrow::Cow, fmt, ops};
+use std::{
+  borrow::Cow,
+  convert::{TryFrom, TryInto},
+  fmt,
+};
 
 use serde::{Deserialize, Serialize};
 
 use crate::{
-  helpers::{
-    create_mappings_serializer, MappingsDeserializer, MappingsSerializer,
-    NormalMappingsDeserializer, StreamChunks,
-  },
+  helpers::{decode_mappings, StreamChunks},
   Result,
 };
 
@@ -51,32 +52,27 @@ impl MapOptions {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourceMap {
-  version: u8,
   file: Option<String>,
-  mappings: Mappings,
-  source_root: Option<String>,
-  sources: Option<Vec<Option<String>>>,
-  sources_content: Option<Vec<Option<String>>>,
-  names: Option<Vec<Option<String>>>,
+  mappings: String,
+  sources: Vec<String>,
+  sources_content: Vec<String>,
+  names: Vec<String>,
 }
 
 impl SourceMap {
-  pub fn new(
-    file: Option<String>,
-    mappings: Mappings,
-    source_root: Option<String>,
-    sources: Option<Vec<Option<String>>>,
-    sources_content: Option<Vec<Option<String>>>,
-    names: Option<Vec<Option<String>>>,
+  pub fn new<S: Into<String>>(
+    file: Option<S>,
+    mappings: S,
+    sources: impl IntoIterator<Item = S>,
+    sources_content: impl IntoIterator<Item = S>,
+    names: impl IntoIterator<Item = S>,
   ) -> Self {
     Self {
-      version: 3,
-      file,
-      mappings,
-      source_root,
-      sources,
-      sources_content,
-      names,
+      file: file.map(Into::into),
+      mappings: mappings.into(),
+      sources: sources.into_iter().map(|s| s.into()).collect(),
+      sources_content: sources_content.into_iter().map(|s| s.into()).collect(),
+      names: names.into_iter().map(|s| s.into()).collect(),
     }
   }
 
@@ -88,85 +84,179 @@ impl SourceMap {
     self.file = file;
   }
 
-  pub fn mappings(&self) -> &Mappings {
+  pub fn decoded_mappings(&self) -> Vec<Mapping> {
+    decode_mappings(&self.mappings)
+  }
+
+  pub fn mappings(&self) -> &str {
     &self.mappings
   }
 
-  pub fn sources(&self) -> Option<&[Option<String>]> {
-    self.sources.as_deref()
+  pub fn sources(&self) -> &[String] {
+    &self.sources
   }
 
-  pub fn get_source(&self, index: usize) -> Option<String> {
-    self
-      .sources
-      .as_ref()
-      .and_then(|sources| sources.get(index))
-      .and_then(|source| source.as_deref())
-      .map(|source| {
-        self
-          .source_root
-          .as_ref()
-          .map(|source_root| {
-            if source_root.ends_with('/') {
-              format!("{source_root}{source}")
-            } else {
-              format!("{source_root}/{source}")
-            }
-          })
-          .unwrap_or(source.to_owned())
-      })
+  pub fn get_source(&self, index: usize) -> Option<&str> {
+    self.sources.get(index).map(|s| s.as_str())
   }
 
-  pub fn sources_content(&self) -> Option<&[Option<String>]> {
-    self.sources_content.as_deref()
+  pub fn sources_content(&self) -> &[String] {
+    &self.sources_content
   }
 
   pub fn get_source_content(&self, index: usize) -> Option<&str> {
-    self
+    self.sources_content.get(index).map(|s| s.as_str())
+  }
+
+  pub fn names(&self) -> &[String] {
+    &self.names
+  }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct RawSourceMap {
+  pub version: Option<u8>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub file: Option<String>,
+  pub sources: Option<Vec<Option<String>>>,
+  #[serde(rename = "sourceRoot", skip_serializing_if = "Option::is_none")]
+  pub source_root: Option<String>,
+  #[serde(rename = "sourcesContent", skip_serializing_if = "Option::is_none")]
+  pub sources_content: Option<Vec<Option<String>>>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub names: Option<Vec<Option<String>>>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub mappings: Option<String>,
+}
+
+impl RawSourceMap {
+  pub fn from_reader<R: std::io::Read>(r: R) -> Result<Self> {
+    let raw: RawSourceMap = serde_json::from_reader(r)?;
+    Ok(raw)
+  }
+
+  pub fn from_slice(v: &[u8]) -> Result<Self> {
+    let raw: RawSourceMap = serde_json::from_slice(v)?;
+    Ok(raw)
+  }
+
+  pub fn from_json(s: &str) -> Result<Self> {
+    let raw: RawSourceMap = serde_json::from_str(s)?;
+    Ok(raw)
+  }
+
+  pub fn to_json(&self) -> Result<String> {
+    let json = serde_json::to_string(self)?;
+    Ok(json)
+  }
+
+  pub fn to_writer<W: std::io::Write>(&self, w: W) -> Result<()> {
+    serde_json::to_writer(w, self)?;
+    Ok(())
+  }
+}
+
+impl SourceMap {
+  pub fn from_json(s: &str) -> Result<Self> {
+    RawSourceMap::from_json(s)?.try_into()
+  }
+
+  pub fn from_slice(s: &[u8]) -> Result<Self> {
+    RawSourceMap::from_slice(s)?.try_into()
+  }
+
+  pub fn from_reader<R: std::io::Read>(s: R) -> Result<Self> {
+    RawSourceMap::from_reader(s)?.try_into()
+  }
+
+  pub fn to_json(&self) -> Result<String> {
+    let raw = RawSourceMap::from(self.clone());
+    raw.to_json()
+  }
+
+  pub fn to_writer<W: std::io::Write>(&self, w: W) -> Result<()> {
+    let raw = RawSourceMap::from(self.clone());
+    raw.to_writer(w)
+  }
+}
+
+impl TryFrom<RawSourceMap> for SourceMap {
+  type Error = crate::Error;
+
+  fn try_from(raw: RawSourceMap) -> Result<Self> {
+    let sources = raw.sources.unwrap_or_default();
+    let sources = match raw.source_root {
+      Some(ref source_root) if !source_root.is_empty() => {
+        let source_root = source_root.trim_end_matches('/');
+        sources
+          .into_iter()
+          .map(|x| {
+            let x = x.unwrap_or_default();
+            let is_valid = !x.is_empty()
+              && (x.starts_with('/')
+                || x.starts_with("http:")
+                || x.starts_with("https:"));
+            if is_valid {
+              x
+            } else {
+              format!("{}/{}", source_root, x)
+            }
+          })
+          .collect()
+      }
+      _ => sources.into_iter().map(Option::unwrap_or_default).collect(),
+    };
+    let sources_content = raw
       .sources_content
-      .as_ref()
-      .and_then(|sources_content| sources_content.get(index))
-      .and_then(|source_content| source_content.as_deref())
-  }
-
-  pub fn names(&self) -> Option<&[Option<String>]> {
-    self.names.as_deref()
-  }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Mappings(Vec<Mapping>);
-
-impl ops::Deref for Mappings {
-  type Target = Vec<Mapping>;
-
-  fn deref(&self) -> &Self::Target {
-    &self.0
-  }
-}
-
-impl ops::DerefMut for Mappings {
-  fn deref_mut(&mut self) -> &mut Self::Target {
-    &mut self.0
+      .unwrap_or_default()
+      .into_iter()
+      .map(|v| v.unwrap_or_default())
+      .collect();
+    let names = raw
+      .names
+      .unwrap_or_default()
+      .into_iter()
+      .map(|v| v.unwrap_or_default())
+      .collect();
+    Ok(Self {
+      file: raw.file,
+      mappings: raw.mappings.unwrap_or_default(),
+      sources,
+      sources_content,
+      names,
+    })
   }
 }
 
-impl Mappings {
-  pub fn new<M, T>(inner: T) -> Self
-  where
-    M: Into<Mapping>,
-    T: IntoIterator<Item = M>,
-  {
-    Self(inner.into_iter().map(|m| m.into()).collect())
-  }
-
-  pub fn serialize(&self, options: &MapOptions) -> String {
-    create_mappings_serializer(options).serialize(&self.0)
-  }
-
-  pub fn deserialize(mappings: &str) -> Result<Self> {
-    let inner = NormalMappingsDeserializer::default().deserialize(mappings)?;
-    Ok(Self(inner))
+impl From<SourceMap> for RawSourceMap {
+  fn from(map: SourceMap) -> Self {
+    Self {
+      version: Some(3),
+      file: map.file,
+      sources: Some(
+        map
+          .sources
+          .into_iter()
+          .map(|s| (!s.is_empty()).then(|| s))
+          .collect(),
+      ),
+      source_root: None,
+      sources_content: Some(
+        map
+          .sources_content
+          .into_iter()
+          .map(|s| (!s.is_empty()).then(|| s))
+          .collect(),
+      ),
+      names: Some(
+        map
+          .names
+          .into_iter()
+          .map(|s| (!s.is_empty()).then(|| s))
+          .collect(),
+      ),
+      mappings: (!map.mappings.is_empty()).then(|| map.mappings),
+    }
   }
 }
 
@@ -209,14 +299,10 @@ macro_rules! m {
 
 #[macro_export]
 macro_rules! mappings {
-  ($mappings:expr $(,)?) => {
-    $crate::Mappings::deserialize($mappings).unwrap()
-  };
-
   ($($mapping:expr),* $(,)?) => {
-    $crate::Mappings::new(::std::vec![$({
+    ::std::vec![$({
       let mapping = $mapping;
       $crate::m![mapping[0], mapping[1], mapping[2], mapping[3], mapping[4], mapping[5]]
-    }),*])
+    }),*]
   };
 }

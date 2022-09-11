@@ -16,11 +16,13 @@ pub enum Error {
   BadSourceReference(u32),
   /// a reference to a non existing name was encountered
   BadNameReference(u32),
+  /// a JSON parsing related failure
+  BadJson(serde_json::Error),
 }
 
 impl fmt::Display for Error {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    match *self {
+    match self {
       Error::VlqLeftover => write!(f, "leftover cur/shift in vlq decode"),
       Error::VlqNoValues => write!(f, "vlq decode did not produce any values"),
       Error::VlqOverflow => write!(f, "vlq decode caused an overflow"),
@@ -31,8 +33,15 @@ impl fmt::Display for Error {
         write!(f, "bad reference to source #{}", id)
       }
       Error::BadNameReference(id) => write!(f, "bad reference to name #{}", id),
+      Error::BadJson(err) => write!(f, "bad json: {}", err),
     }
   }
 }
 
 impl error::Error for Error {}
+
+impl From<serde_json::Error> for Error {
+  fn from(err: serde_json::Error) -> Error {
+    Error::BadJson(err)
+  }
+}

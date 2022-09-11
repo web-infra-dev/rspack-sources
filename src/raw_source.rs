@@ -2,8 +2,8 @@ use std::borrow::Cow;
 
 use crate::{
   helpers::{
-    get_generated_source_info, split_into_lines, GeneratedInfo,
-    OnChunk, OnName, OnSource, StreamChunks,
+    get_generated_source_info, split_into_lines, GeneratedInfo, OnChunk,
+    OnName, OnSource, StreamChunks,
   },
   source::Mapping,
   MapOptions, Source, SourceMap,

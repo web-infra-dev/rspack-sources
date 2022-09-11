@@ -78,7 +78,7 @@ impl Source for SourceMapSource {
   }
 
   fn map(&self, options: &MapOptions) -> Option<SourceMap> {
-    Some(get_map(self, options))
+    get_map(self, options)
   }
 }
 
@@ -107,9 +107,7 @@ impl StreamChunks for SourceMapSource {
 
 #[cfg(test)]
 mod tests {
-  use crate::{
-    mappings, BoxSource, ConcatSource, Mappings, OriginalSource, RawSource,
-  };
+  use crate::{BoxSource, ConcatSource, OriginalSource, RawSource};
 
   use super::*;
 
@@ -129,106 +127,67 @@ mod tests {
     let a = SourceMapSource::new(WithoutOriginalOptions {
       value: "hello world\n",
       name: "hello.txt",
-      source_map: SourceMap::new(
-        None,
-        mappings!("AAAA"),
-        None,
-        Some(vec![None]),
-        Some(vec![None]),
-        Some(vec![]),
-      ),
+      source_map: SourceMap::new(None, "AAAA", [""], [""], []),
     });
     let b = SourceMapSource::new(WithoutOriginalOptions {
       value: "hello world\n",
       name: "hello.txt",
-      source_map: SourceMap::new(
-        None,
-        mappings!("AAAA"),
-        None,
-        Some(vec![]),
-        Some(vec![]),
-        Some(vec![]),
-      ),
+      source_map: SourceMap::new(None, "AAAA", [], [], []),
     });
     let a = SourceMapSource::new(WithoutOriginalOptions {
       value: "hello world\n",
       name: "hello.txt",
       source_map: SourceMap::new(
         None,
-        mappings!("AAAA"),
-        None,
-        Some(vec![Some("hello-source.txt".to_string())]),
-        Some(vec![Some("hello world\n".to_string())]),
-        Some(vec![]),
+        "AAAA",
+        ["hello-source.txt"],
+        ["hello world\n"],
+        [],
       ),
     });
   }
 
-  // #[test]
-  // fn should_handle_es6_promise_correctly() {
-  //   let code = include_str!(concat!(
-  //     env!("CARGO_MANIFEST_DIR"),
-  //     "/tests/es6-promise.js"
-  //   ));
-  //   let map = SourceMap::from_json(
-  //     "/",
-  //     include_str!(concat!(
-  //       env!("CARGO_MANIFEST_DIR"),
-  //       "/tests/es6-promise.map"
-  //     )),
-  //   )
-  //   .unwrap();
-  // }
+  #[test]
+  fn should_handle_es6_promise_correctly() {
+    let code = include_str!(concat!(
+      env!("CARGO_MANIFEST_DIR"),
+      "/tests/es6-promise.js"
+    ));
+    let map = SourceMap::from_json(include_str!(concat!(
+      env!("CARGO_MANIFEST_DIR"),
+      "/tests/es6-promise.map"
+    )))
+    .unwrap();
+    let inner = SourceMapSource::new(WithoutOriginalOptions {
+      value: code,
+      name: "es6-promise.js",
+      source_map: map,
+    });
+    let source = ConcatSource::new([inner.clone(), inner]);
+    assert_eq!(source.source(), format!("{code}{code}"));
+  }
 
   #[test]
   fn should_not_emit_zero_sizes_mappings_when_ending_with_empty_mapping() {
     let a = SourceMapSource::new(WithoutOriginalOptions {
       value: "hello\n",
       name: "a",
-      source_map: SourceMap::new(
-        None,
-        mappings!["AAAA;AACA"],
-        None,
-        Some(vec![Some("hello1".to_string())]),
-        Some(vec![]),
-        Some(vec![]),
-      ),
+      source_map: SourceMap::new(None, "AAAA;AACA", ["hello1"], [], []),
     });
     let b = SourceMapSource::new(WithoutOriginalOptions {
       value: "hi",
       name: "b",
-      source_map: SourceMap::new(
-        None,
-        mappings!("AAAA,EAAE"),
-        None,
-        Some(vec![Some("hello2".to_string())]),
-        Some(vec![]),
-        Some(vec![]),
-      ),
+      source_map: SourceMap::new(None, "AAAA,EAAE", ["hello2"], [], []),
     });
     let b2 = SourceMapSource::new(WithoutOriginalOptions {
       value: "hi",
       name: "b",
-      source_map: SourceMap::new(
-        None,
-        mappings!("AAAA,EAAE"),
-        None,
-        Some(vec![Some("hello3".to_string())]),
-        Some(vec![]),
-        Some(vec![]),
-      ),
+      source_map: SourceMap::new(None, "AAAA,EAAE", ["hello3"], [], []),
     });
     let c = SourceMapSource::new(WithoutOriginalOptions {
       value: "",
       name: "c",
-      source_map: SourceMap::new(
-        None,
-        mappings!("AAAA"),
-        None,
-        Some(vec![Some("hello4".to_string())]),
-        Some(vec![]),
-        Some(vec![]),
-      ),
+      source_map: SourceMap::new(None, "AAAA", ["hello4"], [], []),
     });
     let source = ConcatSource::new([
       a.clone(),
@@ -246,10 +205,9 @@ mod tests {
       a.clone(),
       b.clone(),
     ]);
-    let options = MapOptions::default();
-    let map = source.map(&options).unwrap();
+    let map = source.map(&MapOptions::default()).unwrap();
     assert_eq!(
-      map.mappings().serialize(&options),
+      map.mappings(),
       "AAAA;AAAA;ACAA,ICAA,EDAA,ECAA,EFAA;AEAA,EFAA;ACAA",
     );
   }

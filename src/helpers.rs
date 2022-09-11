@@ -1,10 +1,13 @@
 use crate::{
-  source::{Mapping, Mappings, OriginalLocation},
+  source::{Mapping, OriginalLocation},
   vlq::{decode, encode},
-  Error, MapOptions, Result, SourceMap,
+  MapOptions, SourceMap,
 };
 
-pub fn get_map<S: StreamChunks>(stream: &S, options: &MapOptions) -> SourceMap {
+pub fn get_map<S: StreamChunks>(
+  stream: &S,
+  options: &MapOptions,
+) -> Option<SourceMap> {
   let mut mappings = Vec::new();
   let mut sources = Vec::new();
   let mut sources_content = Vec::new();
@@ -17,35 +20,30 @@ pub fn get_map<S: StreamChunks>(stream: &S, options: &MapOptions) -> SourceMap {
     &mut |mapping| {
       mappings.push(mapping);
     },
-    &mut |source_index, source: Option<&str>, source_content: Option<&str>| {
+    &mut |source_index, source: &str, source_content: Option<&str>| {
       let source_index = source_index as usize;
       while sources.len() <= source_index {
-        sources.push(None);
+        sources.push("".to_string());
       }
-      sources[source_index] = source.map(ToOwned::to_owned);
+      sources[source_index] = source.to_owned();
       if let Some(source_content) = source_content {
         while sources_content.len() <= source_index {
-          sources_content.push(None);
+          sources_content.push("".to_string());
         }
-        sources_content[source_index] = Some(source_content.to_string());
+        sources_content[source_index] = source_content.to_owned();
       }
     },
-    &mut |name_index, name: Option<&str>| {
+    &mut |name_index, name: &str| {
       let name_index = name_index as usize;
       while names.len() <= name_index {
-        names.push(None);
+        names.push("".to_string());
       }
-      names[name_index] = name.map(ToOwned::to_owned);
+      names[name_index] = name.to_owned();
     },
   );
-  SourceMap::new(
-    None,
-    Mappings::new(mappings),
-    None,
-    Some(sources),
-    Some(sources_content),
-    Some(names),
-  )
+  let mappings = encode_mappings(&mappings, options);
+  (!mappings.is_empty())
+    .then(|| SourceMap::new(None, mappings, sources, sources_content, names))
 }
 
 pub trait StreamChunks {
@@ -59,330 +57,222 @@ pub trait StreamChunks {
 }
 
 pub type OnChunk<'a> = &'a mut dyn FnMut(Mapping);
-pub type OnSource<'a> = &'a mut dyn FnMut(u32, Option<&str>, Option<&str>);
-pub type OnName<'a> = &'a mut dyn FnMut(u32, Option<&str>);
+pub type OnSource<'a> = &'a mut dyn FnMut(u32, &str, Option<&str>);
+pub type OnName<'a> = &'a mut dyn FnMut(u32, &str);
 
 pub struct GeneratedInfo {
   pub generated_line: u32,
   pub generated_column: u32,
 }
 
-pub trait MappingsDeserializer {
-  fn deserialize(&mut self, serialized: &str) -> Result<Vec<Mapping>>;
-}
+pub fn decode_mappings(raw: &str) -> Vec<Mapping> {
+  let mut generated_column = 0;
+  let mut source_index = 0;
+  let mut original_line = 1;
+  let mut original_column = 0;
+  let mut name_index = 0;
+  let mut nums = Vec::with_capacity(6);
 
-pub struct NormalMappingsDeserializer {
-  generated_column: u32,
-  source_index: u32,
-  original_line: u32,
-  original_column: u32,
-  name_index: u32,
-  nums: Vec<i64>,
-}
-
-impl Default for NormalMappingsDeserializer {
-  fn default() -> Self {
-    Self {
-      generated_column: 0,
-      source_index: 0,
-      original_line: 1,
-      original_column: 0,
-      name_index: 0,
-      nums: Vec::with_capacity(6),
+  let mut mappings = Vec::new();
+  for (generated_line, line) in raw.split(';').enumerate() {
+    if line.is_empty() {
+      continue;
     }
-  }
-}
 
-impl MappingsDeserializer for NormalMappingsDeserializer {
-  fn deserialize(&mut self, serialized: &str) -> Result<Vec<Mapping>> {
-    let mut mappings = Vec::new();
-    for (generated_line, line) in serialized.split(';').enumerate() {
-      if line.is_empty() {
+    generated_column = 0;
+
+    for segment in line.split(',') {
+      if segment.is_empty() {
         continue;
       }
 
-      self.generated_column = 0;
+      nums.clear();
+      decode(segment, &mut nums).unwrap();
+      generated_column = (i64::from(generated_column) + nums[0]) as u32;
 
-      for segment in line.split(',') {
-        if segment.is_empty() {
-          continue;
+      let mut src = None;
+      let mut name = None;
+
+      if nums.len() > 1 {
+        if nums.len() != 4 && nums.len() != 5 {
+          panic!();
         }
+        source_index = (i64::from(source_index) + nums[1]) as u32;
 
-        self.nums.clear();
-        decode(segment, &mut self.nums)?;
-        self.generated_column =
-          (i64::from(self.generated_column) + self.nums[0]) as u32;
+        src = Some(source_index);
+        original_line = (i64::from(original_line) + nums[2]) as u32;
+        original_column = (i64::from(original_column) + nums[3]) as u32;
 
-        let mut src = None;
-        let mut name = None;
-
-        if self.nums.len() > 1 {
-          if self.nums.len() != 4 && self.nums.len() != 5 {
-            return Err(Error::BadSegmentSize(self.nums.len() as u32));
-          }
-          self.source_index =
-            (i64::from(self.source_index) + self.nums[1]) as u32;
-
-          src = Some(self.source_index);
-          self.original_line =
-            (i64::from(self.original_line) + self.nums[2]) as u32;
-          self.original_column =
-            (i64::from(self.original_column) + self.nums[3]) as u32;
-
-          if self.nums.len() > 4 {
-            self.name_index =
-              (i64::from(self.name_index) + self.nums[4]) as u32;
-            name = Some(self.name_index as u32);
-          }
+        if nums.len() > 4 {
+          name_index = (i64::from(name_index) + nums[4]) as u32;
+          name = Some(name_index as u32);
         }
-
-        mappings.push(Mapping {
-          generated_line: 1 + generated_line as u32,
-          generated_column: self.generated_column,
-          original: src.map(|src_id| OriginalLocation {
-            source_index: src_id,
-            original_line: self.original_line,
-            original_column: self.original_column,
-            name_index: name,
-          }),
-        })
       }
+
+      mappings.push(Mapping {
+        generated_line: 1 + generated_line as u32,
+        generated_column,
+        original: src.map(|src_id| OriginalLocation {
+          source_index: src_id,
+          original_line,
+          original_column,
+          name_index: name,
+        }),
+      })
     }
-    Ok(mappings)
   }
+  mappings
 }
 
-pub fn create_mappings_serializer(
-  options: &MapOptions,
-) -> impl MappingsSerializer {
+pub fn encode_mappings(mappings: &[Mapping], options: &MapOptions) -> String {
   if options.columns {
-    Either::Left(FullMappingsSerializer::default())
+    encode_full_mappings(mappings)
   } else {
-    Either::Right(LinesOnlyMappingsSerializer::default())
+    encode_lines_only_mappings(mappings)
   }
 }
 
-pub enum Either<A, B> {
-  Left(A),
-  Right(B),
-}
+fn encode_full_mappings(mappings: &[Mapping]) -> String {
+  let mut current_line = 1;
+  let mut current_column = 0;
+  let mut current_original_line = 1;
+  let mut current_original_column = 0;
+  let mut current_source_index = 0;
+  let mut current_name_index = 0;
+  let mut active_mapping = false;
+  let mut active_name = false;
+  let mut initial = true;
 
-impl<A, B> MappingsSerializer for Either<A, B>
-where
-  A: MappingsSerializer,
-  B: MappingsSerializer,
-{
-  fn serialize(&mut self, mappings: &[Mapping]) -> String {
-    match self {
-      Self::Left(left) => left.serialize(mappings),
-      Self::Right(right) => right.serialize(mappings),
+  mappings.iter().fold(String::new(), |acc, mapping| {
+    if active_mapping && current_line == mapping.generated_line {
+      // A mapping is still active
+      if let Some(original) = &mapping.original
+      && original.source_index == current_source_index
+      && original.original_line == current_original_line
+      && original.original_column == current_original_column
+      && !active_name
+      && original.name_index.is_none()
+    {
+      // avoid repeating the same original mapping
+      return acc;
     }
-  }
-}
-
-pub trait MappingsSerializer {
-  fn serialize(&mut self, mappings: &[Mapping]) -> String;
-}
-
-pub struct FullMappingsSerializer {
-  current_line: u32,
-  current_column: u32,
-  current_original_line: u32,
-  current_original_column: u32,
-  current_source_index: u32,
-  current_name_index: u32,
-  active_mapping: bool,
-  active_name: bool,
-  initial: bool,
-}
-
-impl Default for FullMappingsSerializer {
-  fn default() -> Self {
-    Self {
-      current_line: 1,
-      current_column: 0,
-      current_original_line: 1,
-      current_original_column: 0,
-      current_source_index: 0,
-      current_name_index: 0,
-      active_mapping: false,
-      active_name: false,
-      initial: true,
-    }
-  }
-}
-
-impl MappingsSerializer for FullMappingsSerializer {
-  fn serialize(&mut self, mappings: &[Mapping]) -> String {
-    mappings.iter().fold(String::new(), |acc, mapping| {
-      if self.active_mapping && self.current_line == mapping.generated_line {
-        // A mapping is still active
-        if let Some(original) = &mapping.original
-        && original.source_index == self.current_source_index
-        && original.original_line == self.current_original_line
-        && original.original_column == self.current_original_column
-        && !self.active_name
-        && original.name_index.is_none()
-      {
-        // avoid repeating the same original mapping
+    } else {
+      // No mapping is active
+      if mapping.original.is_none() {
+        // avoid writing unneccessary generated mappings
         return acc;
       }
-      } else {
-        // No mapping is active
-        if mapping.original.is_none() {
-          // avoid writing unneccessary generated mappings
-          return acc;
-        }
-      }
-
-      let mut out = String::new();
-      if self.current_line < mapping.generated_line {
-        (0..mapping.generated_line - self.current_line)
-          .for_each(|_| out.push(';'));
-        self.current_line = mapping.generated_line;
-        self.current_column = 0;
-        self.initial = false;
-      } else if self.initial {
-        self.initial = false;
-      } else {
-        out.push(',');
-      }
-
-      encode(&mut out, mapping.generated_column, self.current_column);
-      self.current_column = mapping.generated_column;
-      if let Some(original) = &mapping.original {
-        self.active_mapping = true;
-        if original.source_index == self.current_source_index {
-          out.push('A');
-        } else {
-          encode(&mut out, original.source_index, self.current_source_index);
-          self.current_source_index = original.source_index;
-        }
-        encode(&mut out, original.original_line, self.current_original_line);
-        self.current_original_line = original.original_line;
-        if original.original_column == self.current_original_column {
-          out.push('A');
-        } else {
-          encode(
-            &mut out,
-            original.original_column,
-            self.current_original_column,
-          );
-          self.current_original_column = original.original_column;
-        }
-        if let Some(name_index) = original.name_index {
-          encode(&mut out, name_index, self.current_name_index);
-          self.current_name_index = name_index;
-          self.active_name = true;
-        } else {
-          self.active_name = false;
-        }
-      } else {
-        self.active_mapping = false;
-      }
-      acc + &out
-    })
-  }
-}
-
-pub struct LinesOnlyMappingsSerializer {
-  last_written_line: u32,
-  current_line: u32,
-  current_source_index: u32,
-  current_original_line: u32,
-}
-
-impl Default for LinesOnlyMappingsSerializer {
-  fn default() -> Self {
-    Self {
-      last_written_line: 0,
-      current_line: 1,
-      current_source_index: 0,
-      current_original_line: 1,
     }
-  }
+
+    let mut out = String::new();
+    if current_line < mapping.generated_line {
+      (0..mapping.generated_line - current_line).for_each(|_| out.push(';'));
+      current_line = mapping.generated_line;
+      current_column = 0;
+      initial = false;
+    } else if initial {
+      initial = false;
+    } else {
+      out.push(',');
+    }
+
+    encode(&mut out, mapping.generated_column, current_column);
+    current_column = mapping.generated_column;
+    if let Some(original) = &mapping.original {
+      active_mapping = true;
+      if original.source_index == current_source_index {
+        out.push('A');
+      } else {
+        encode(&mut out, original.source_index, current_source_index);
+        current_source_index = original.source_index;
+      }
+      encode(&mut out, original.original_line, current_original_line);
+      current_original_line = original.original_line;
+      if original.original_column == current_original_column {
+        out.push('A');
+      } else {
+        encode(&mut out, original.original_column, current_original_column);
+        current_original_column = original.original_column;
+      }
+      if let Some(name_index) = original.name_index {
+        encode(&mut out, name_index, current_name_index);
+        current_name_index = name_index;
+        active_name = true;
+      } else {
+        active_name = false;
+      }
+    } else {
+      active_mapping = false;
+    }
+    acc + &out
+  })
 }
 
-impl MappingsSerializer for LinesOnlyMappingsSerializer {
-  fn serialize(&mut self, mappings: &[Mapping]) -> String {
-    mappings.iter().fold(String::new(), |acc, mapping| {
-      if let Some(original) = &mapping.original {
-        if self.last_written_line == mapping.generated_line {
-          // avoid writing multiple original mappings per line
-          return acc;
-        }
-        let mut out = String::new();
-        self.last_written_line = mapping.generated_line;
-        if mapping.generated_line == self.current_line + 1 {
-          self.current_line = mapping.generated_line;
-          if original.source_index == self.current_source_index {
-            if original.original_line == self.current_original_line + 1 {
-              self.current_original_line = original.original_line;
-              out.push_str(";AACA");
-              return acc + &out;
-            } else {
-              out.push_str(";AA");
-              encode(
-                &mut out,
-                original.original_line,
-                self.current_original_line,
-              );
-              self.current_original_line = original.original_line;
-              out.push('A');
-              return acc + &out;
-            }
+fn encode_lines_only_mappings(mappings: &[Mapping]) -> String {
+  let mut last_written_line = 0;
+  let mut current_line = 1;
+  let mut current_source_index = 0;
+  let mut current_original_line = 1;
+  mappings.iter().fold(String::new(), |acc, mapping| {
+    if let Some(original) = &mapping.original {
+      if last_written_line == mapping.generated_line {
+        // avoid writing multiple original mappings per line
+        return acc;
+      }
+      let mut out = String::new();
+      last_written_line = mapping.generated_line;
+      if mapping.generated_line == current_line + 1 {
+        current_line = mapping.generated_line;
+        if original.source_index == current_source_index {
+          if original.original_line == current_original_line + 1 {
+            current_original_line = original.original_line;
+            out.push_str(";AACA");
+            return acc + &out;
           } else {
-            out.push_str(";A");
-            encode(&mut out, original.source_index, self.current_source_index);
-            self.current_source_index = original.source_index;
-            encode(
-              &mut out,
-              original.original_line,
-              self.current_original_line,
-            );
-            self.current_original_line = original.original_line;
+            out.push_str(";AA");
+            encode(&mut out, original.original_line, current_original_line);
+            current_original_line = original.original_line;
             out.push('A');
             return acc + &out;
           }
         } else {
-          (0..mapping.generated_line - self.current_line)
-            .for_each(|_| out.push(';'));
-          self.current_line = mapping.generated_line;
-          if original.source_index == self.current_source_index {
-            if original.original_line == self.current_original_line + 1 {
-              self.current_original_line = original.original_line;
-              out.push_str("AACA");
-              return acc + &out;
-            } else {
-              out.push_str("AA");
-              encode(
-                &mut out,
-                original.original_line,
-                self.current_original_line,
-              );
-              self.current_original_line = original.original_line;
-              out.push('A');
-              return acc + &out;
-            }
+          out.push_str(";A");
+          encode(&mut out, original.source_index, current_source_index);
+          current_source_index = original.source_index;
+          encode(&mut out, original.original_line, current_original_line);
+          current_original_line = original.original_line;
+          out.push('A');
+          return acc + &out;
+        }
+      } else {
+        (0..mapping.generated_line - current_line).for_each(|_| out.push(';'));
+        current_line = mapping.generated_line;
+        if original.source_index == current_source_index {
+          if original.original_line == current_original_line + 1 {
+            current_original_line = original.original_line;
+            out.push_str("AACA");
+            return acc + &out;
           } else {
-            out.push('A');
-            encode(&mut out, original.source_index, self.current_source_index);
-            self.current_source_index = original.source_index;
-            encode(
-              &mut out,
-              original.original_line,
-              self.current_original_line,
-            );
-            self.current_original_line = original.original_line;
+            out.push_str("AA");
+            encode(&mut out, original.original_line, current_original_line);
+            current_original_line = original.original_line;
             out.push('A');
             return acc + &out;
           }
+        } else {
+          out.push('A');
+          encode(&mut out, original.source_index, current_source_index);
+          current_source_index = original.source_index;
+          encode(&mut out, original.original_line, current_original_line);
+          current_original_line = original.original_line;
+          out.push('A');
+          return acc + &out;
         }
       }
-      // avoid writing generated mappings at all
-      acc
-    })
-  }
+    }
+    // avoid writing generated mappings at all
+    acc
+  })
 }
 
 pub struct PotentialTokens<'a> {
@@ -538,19 +428,11 @@ fn stream_chunks_of_source_map_final(
   if result.generated_line == 1 && result.generated_column == 0 {
     return result;
   }
-  if let Some(sources) = source_map.sources() {
-    for i in 0..sources.len() {
-      on_source(
-        i as u32,
-        source_map.get_source(i).as_deref(),
-        source_map.get_source_content(i),
-      )
-    }
+  for (i, source) in source_map.sources().iter().enumerate() {
+    on_source(i as u32, source, source_map.get_source_content(i))
   }
-  if let Some(names) = source_map.names() {
-    for (i, name) in names.iter().enumerate() {
-      on_name(i as u32, name.as_deref());
-    }
+  for (i, name) in source_map.names().iter().enumerate() {
+    on_name(i as u32, name);
   }
   let mut mapping_active_line = 0;
   let mut on_mapping = |mapping: &Mapping| {
@@ -575,7 +457,7 @@ fn stream_chunks_of_source_map_final(
       });
     }
   };
-  for mapping in source_map.mappings().iter() {
+  for mapping in &source_map.decoded_mappings() {
     on_mapping(mapping);
   }
   result
@@ -595,19 +477,11 @@ fn stream_chunks_of_source_map_full(
       generated_column: 0,
     };
   }
-  if let Some(sources) = source_map.sources() {
-    for i in 0..sources.len() {
-      on_source(
-        i as u32,
-        source_map.get_source(i).as_deref(),
-        source_map.get_source_content(i),
-      )
-    }
+  for (i, source) in source_map.sources().iter().enumerate() {
+    on_source(i as u32, source, source_map.get_source_content(i))
   }
-  if let Some(names) = source_map.names() {
-    for (i, name) in names.iter().enumerate() {
-      on_name(i as u32, name.as_deref());
-    }
+  for (i, name) in source_map.names().iter().enumerate() {
+    on_name(i as u32, name);
   }
   let last_line = lines[lines.len() - 1];
   let last_new_line = last_line.ends_with('\n');
@@ -689,7 +563,7 @@ fn stream_chunks_of_source_map_full(
     }
   };
 
-  for mapping in source_map.mappings().iter() {
+  for mapping in &source_map.decoded_mappings() {
     on_mapping(mapping);
   }
   on_mapping(&Mapping {
@@ -717,14 +591,8 @@ fn stream_chunks_of_source_map_lines_final(
       generated_column: 0,
     };
   }
-  if let Some(sources) = source_map.sources() {
-    for i in 0..sources.len() {
-      on_source(
-        i as u32,
-        source_map.get_source(i).as_deref(),
-        source_map.get_source_content(i),
-      )
-    }
+  for (i, source) in source_map.sources().iter().enumerate() {
+    on_source(i as u32, source, source_map.get_source_content(i))
   }
   let final_line = if result.generated_column == 0 {
     result.generated_line - 1
@@ -750,7 +618,7 @@ fn stream_chunks_of_source_map_lines_final(
       current_generated_line = result.generated_line + 1;
     }
   };
-  for mapping in source_map.mappings().iter() {
+  for mapping in &source_map.decoded_mappings() {
     on_mapping(mapping);
   }
   result
@@ -770,17 +638,10 @@ fn stream_chunks_of_source_map_lines_full(
       generated_column: 0,
     };
   }
-  if let Some(sources) = source_map.sources() {
-    for i in 0..sources.len() {
-      on_source(
-        i as u32,
-        source_map.get_source(i).as_deref(),
-        source_map.get_source_content(i),
-      )
-    }
+  for (i, source) in source_map.sources().iter().enumerate() {
+    on_source(i as u32, source, source_map.get_source_content(i))
   }
   let mut current_generated_line = 1;
-
   let mut on_mapping = |mapping: &Mapping| {
     if mapping.original.is_none()
       && mapping.generated_line < current_generated_line
@@ -812,7 +673,7 @@ fn stream_chunks_of_source_map_lines_full(
       current_generated_line += 1;
     }
   };
-  for mapping in source_map.mappings().iter() {
+  for mapping in &source_map.decoded_mappings() {
     on_mapping(mapping);
   }
   while current_generated_line as usize <= lines.len() {
