@@ -4,7 +4,7 @@ use crate::{
   Error, MapOptions, Result, SourceMap,
 };
 
-pub fn get_map<S: StreamChunks>(stream: &S, options: MapOptions) -> SourceMap {
+pub fn get_map<S: StreamChunks>(stream: &S, options: &MapOptions) -> SourceMap {
   let mut mappings = Vec::new();
   let mut sources = Vec::new();
   let mut sources_content = Vec::new();
@@ -40,7 +40,7 @@ pub fn get_map<S: StreamChunks>(stream: &S, options: MapOptions) -> SourceMap {
   );
   SourceMap::new(
     None,
-    Mappings::new(mappings, options),
+    Mappings::new(mappings),
     None,
     sources,
     sources_content,
@@ -85,7 +85,7 @@ impl Default for NormalMappingsDeserializer {
     Self {
       generated_column: 0,
       source_index: 0,
-      original_line: 0,
+      original_line: 1,
       original_column: 0,
       name_index: 0,
       nums: Vec::with_capacity(6),
@@ -137,7 +137,7 @@ impl MappingsDeserializer for NormalMappingsDeserializer {
         }
 
         mappings.push(Mapping {
-          generated_line: generated_line as u32,
+          generated_line: 1 + generated_line as u32,
           generated_column: self.generated_column,
           original: src.map(|src_id| OriginalLocation {
             source_index: src_id,

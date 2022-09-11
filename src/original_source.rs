@@ -10,7 +10,7 @@ use crate::{
   MapOptions, Source, SourceMap,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OriginalSource {
   value: String,
   name: String,
@@ -38,7 +38,7 @@ impl Source for OriginalSource {
     self.value.len()
   }
 
-  fn map(&self, options: MapOptions) -> Option<SourceMap> {
+  fn map(&self, options: &MapOptions) -> Option<SourceMap> {
     Some(get_map(self, options))
   }
 }
@@ -163,8 +163,10 @@ mod tests {
   fn should_handle_multiline_string() {
     let source = OriginalSource::new("Line1\n\nLine3\n", "file.js");
     let result_text = source.source();
-    let result_map = source.map(MapOptions::default()).unwrap();
-    let result_list_map = source.map(MapOptions::new(false)).unwrap();
+    let options = MapOptions::default();
+    let result_map = source.map(&options).unwrap();
+    let list_options = MapOptions::new(false);
+    let result_list_map = source.map(&list_options).unwrap();
 
     assert_eq!(result_text, "Line1\n\nLine3\n");
     assert_eq!(result_map.sources().collect::<Vec<_>>(), &[Some("file.js")]);
@@ -180,16 +182,19 @@ mod tests {
       result_list_map.sources_content().collect::<Vec<_>>(),
       [Some("Line1\n\nLine3\n")],
     );
-    assert_eq!(result_map.mappings().serialize(), "AAAA;;AAEA");
-    assert_eq!(result_list_map.mappings().serialize(), "AAAA;AACA;AACA");
+    assert_eq!(result_map.mappings().serialize(&options), "AAAA;;AAEA");
+    assert_eq!(
+      result_list_map.mappings().serialize(&list_options),
+      "AAAA;AACA;AACA"
+    );
   }
 
   #[test]
   fn should_handle_empty_string() {
     let source = OriginalSource::new("", "file.js");
     let result_text = source.source();
-    let result_map = source.map(MapOptions::default());
-    let result_list_map = source.map(MapOptions::new(false));
+    let result_map = source.map(&MapOptions::default());
+    let result_list_map = source.map(&MapOptions::new(false));
 
     assert_eq!(result_text, "");
     // TODO
@@ -200,8 +205,9 @@ mod tests {
   #[test]
   fn should_omit_mappings_for_columns_with_node() {
     let source = OriginalSource::new("Line1\n\nLine3\n", "file.js");
-    let result_map = source.map(MapOptions::new(false)).unwrap();
-    assert_eq!(result_map.mappings().serialize(), "AAAA;AACA;AACA");
+    let options = MapOptions::new(false);
+    let result_map = source.map(&options).unwrap();
+    assert_eq!(result_map.mappings().serialize(&options), "AAAA;AACA;AACA");
   }
 
   #[test]
@@ -224,20 +230,14 @@ mod tests {
     let input = "if (hello()) { world(); hi(); there(); } done();\nif (hello()) { world(); hi(); there(); } done();";
     let source = OriginalSource::new(input, "file.js");
     assert_eq!(source.source(), input);
+    let options = MapOptions::default();
     assert_eq!(
-      source
-        .map(MapOptions::default())
-        .unwrap()
-        .mappings()
-        .serialize(),
+      source.map(&options).unwrap().mappings().serialize(&options),
       "AAAA,eAAe,SAAS,MAAM,WAAW;AACzC,eAAe,SAAS,MAAM,WAAW",
     );
+    let options = MapOptions::new(false);
     assert_eq!(
-      source
-        .map(MapOptions::new(false))
-        .unwrap()
-        .mappings()
-        .serialize(),
+      source.map(&options).unwrap().mappings().serialize(&options),
       "AAAA;AACA",
     );
   }

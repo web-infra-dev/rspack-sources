@@ -51,7 +51,7 @@ impl Source for ConcatSource {
     })
   }
 
-  fn map(&self, options: MapOptions) -> Option<SourceMap> {
+  fn map(&self, options: &MapOptions) -> Option<SourceMap> {
     Some(get_map(self, options))
   }
 }
@@ -240,8 +240,9 @@ mod tests {
     //   vec![],
     // );
     // assert_eq!(source.map(MapOptions::new(false)).unwrap(), expected_map1);
-    let map1 = source.map(MapOptions::new(false)).unwrap();
-    assert_eq!(map1.mappings().serialize(), ";AAAA;AACA;ACDA");
+    let options1 = MapOptions::new(false);
+    let map1 = source.map(&options1).unwrap();
+    assert_eq!(map1.mappings().serialize(&options1), ";AAAA;AACA;ACDA");
     assert_eq!(map1.file(), None);
     assert_eq!(
       map1.sources().collect::<Vec<_>>(),
@@ -267,8 +268,9 @@ mod tests {
     //   vec![],
     // );
     // assert_eq!(source.map(MapOptions::default()).unwrap(), expected_map2);
-    let map2 = source.map(MapOptions::new(false)).unwrap();
-    assert_eq!(map2.mappings().serialize(), ";AAAA;AACA;ACDA");
+    let options2 = MapOptions::new(true);
+    let map2 = source.map(&options2).unwrap();
+    assert_eq!(map2.mappings().serialize(&options2), ";AAAA;AACA;ACDA");
     assert_eq!(map2.file(), None);
     assert_eq!(
       map2.sources().collect::<Vec<_>>(),
@@ -314,8 +316,9 @@ mod tests {
     assert_eq!(source.source(), expected_source);
     assert_eq!(source.buffer(), expected_source.as_bytes());
 
-    let map = source.map(MapOptions::new(false)).unwrap();
-    assert_eq!(map.mappings().serialize(), ";AAAA;AACA");
+    let options = MapOptions::new(false);
+    let map = source.map(&options).unwrap();
+    assert_eq!(map.mappings().serialize(&options), ";AAAA;AACA");
     assert!(map.file().is_none());
     assert_eq!(map.sources().collect::<Vec<_>>(), [Some("console.js")]);
     assert_eq!(
@@ -336,8 +339,10 @@ mod tests {
     ]);
 
     let result_text = source.source();
-    let result_map = source.map(MapOptions::default());
-    let result_list_map = source.map(MapOptions::new(false));
+    let options = MapOptions::default();
+    let result_map = source.map(&options);
+    let list_options = MapOptions::new(false);
+    let result_list_map = source.map(&list_options);
 
     assert_eq!(result_text, "Hello World\nHello World\n");
     // assert!(result_map.is_none());
@@ -357,8 +362,12 @@ mod tests {
       Box::new(RawSource::from("is here")),
     ]);
 
-    let map = source.map(MapOptions::default()).unwrap();
-    assert_eq!(map.mappings().serialize(), "AAAA,K,CCAA,M;ADAA;;ACAA");
+    let options = MapOptions::default();
+    let map = source.map(&options).unwrap();
+    assert_eq!(
+      map.mappings().serialize(&options),
+      "AAAA,K,CCAA,M;ADAA;;ACAA"
+    );
     assert!(map.file().is_none());
     assert_eq!(
       map.sources().collect::<Vec<_>>(),

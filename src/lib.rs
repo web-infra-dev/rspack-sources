@@ -1,3 +1,5 @@
+#![feature(generic_associated_types)]
+
 mod concat_source;
 mod error;
 mod helpers;

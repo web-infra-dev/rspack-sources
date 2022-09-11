@@ -35,7 +35,7 @@ impl<V, N> From<WithoutOriginalOptions<V, N>> for SourceMapSourceOptions<V, N> {
   }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourceMapSource {
   value: String,
   name: String,
@@ -77,7 +77,7 @@ impl Source for SourceMapSource {
     self.value.len()
   }
 
-  fn map(&self, options: MapOptions) -> Option<SourceMap> {
+  fn map(&self, options: &MapOptions) -> Option<SourceMap> {
     Some(get_map(self, options))
   }
 }
@@ -147,11 +147,7 @@ mod tests {
       name: "a",
       source_map: SourceMap::new(
         None,
-        mappings![
-          MapOptions::default(),
-          [1, 0, 0, 1, 0, -1],
-          [2, 0, 0, 2, 0, -1],
-        ],
+        mappings!["AAAA;AACA"],
         None,
         vec![Some("hello1".to_string())],
         vec![],
@@ -163,11 +159,7 @@ mod tests {
       name: "b",
       source_map: SourceMap::new(
         None,
-        mappings![
-          MapOptions::default(),
-          [1, 0, 0, 1, 0, -1],
-          [1, 2, 0, 1, 2, -1],
-        ],
+        mappings!("AAAA,EAAE"),
         None,
         vec![Some("hello2".to_string())],
         vec![],
@@ -179,11 +171,7 @@ mod tests {
       name: "b",
       source_map: SourceMap::new(
         None,
-        mappings![
-          MapOptions::default(),
-          [1, 0, 0, 1, 0, -1],
-          [1, 2, 0, 1, 2, -1],
-        ],
+        mappings!("AAAA,EAAE"),
         None,
         vec![Some("hello3".to_string())],
         vec![],
@@ -195,7 +183,7 @@ mod tests {
       name: "c",
       source_map: SourceMap::new(
         None,
-        mappings!(MapOptions::default(), [1, 0, 0, 1, 0, -1]),
+        mappings!("AAAA"),
         None,
         vec![Some("hello4".to_string())],
         vec![],
@@ -218,9 +206,10 @@ mod tests {
       a.clone(),
       b.clone(),
     ]);
-    let map = source.map(MapOptions::default()).unwrap();
+    let options = MapOptions::default();
+    let map = source.map(&options).unwrap();
     assert_eq!(
-      map.mappings().serialize(),
+      map.mappings().serialize(&options),
       "AAAA;AAAA;ACAA,ICAA,EDAA,ECAA,EFAA;AEAA,EFAA;ACAA",
     );
   }

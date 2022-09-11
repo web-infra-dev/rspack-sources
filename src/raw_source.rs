@@ -81,7 +81,7 @@ use crate::{
 //   }
 // }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RawSource {
   Buffer(Vec<u8>),
   Source(String),
@@ -139,7 +139,7 @@ impl Source for RawSource {
     }
   }
 
-  fn map(&self, _: MapOptions) -> Option<SourceMap> {
+  fn map(&self, _: &MapOptions) -> Option<SourceMap> {
     None
   }
 }
