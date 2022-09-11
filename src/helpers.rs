@@ -42,9 +42,9 @@ pub fn get_map<S: StreamChunks>(stream: &S, options: &MapOptions) -> SourceMap {
     None,
     Mappings::new(mappings),
     None,
-    sources,
-    sources_content,
-    names,
+    Some(sources),
+    Some(sources_content),
+    Some(names),
   )
 }
 
@@ -461,7 +461,7 @@ where
 }
 
 // /[^\n]+\n?|\n/g
-pub fn split_into_potential_lines(
+pub fn split_into_lines(
   source: &str,
 ) -> PotentialLines<impl Iterator<Item = (usize, char)> + '_> {
   PotentialLines {
@@ -538,17 +538,20 @@ fn stream_chunks_of_source_map_final(
   if result.generated_line == 1 && result.generated_column == 0 {
     return result;
   }
-  for i in 0..source_map.sources().count() {
-    on_source(
-      i as u32,
-      source_map.get_source(i).as_deref(),
-      source_map.sources_content().nth(i).and_then(|c| c),
-    );
+  if let Some(sources) = source_map.sources() {
+    for i in 0..sources.len() {
+      on_source(
+        i as u32,
+        source_map.get_source(i).as_deref(),
+        source_map.get_source_content(i),
+      )
+    }
   }
-  for (i, name) in source_map.names().enumerate() {
-    on_name(i as u32, name);
+  if let Some(names) = source_map.names() {
+    for (i, name) in names.iter().enumerate() {
+      on_name(i as u32, name.as_deref());
+    }
   }
-
   let mut mapping_active_line = 0;
   let mut on_mapping = |mapping: &Mapping| {
     if mapping.generated_line >= result.generated_line
@@ -585,22 +588,26 @@ fn stream_chunks_of_source_map_full(
   on_source: OnSource,
   on_name: OnName,
 ) -> GeneratedInfo {
-  let lines: Vec<_> = split_into_potential_lines(source).collect();
+  let lines: Vec<_> = split_into_lines(source).collect();
   if lines.is_empty() {
     return GeneratedInfo {
       generated_line: 1,
       generated_column: 0,
     };
   }
-  for i in 0..source_map.sources().count() {
-    on_source(
-      i as u32,
-      source_map.get_source(i).as_deref(),
-      source_map.sources_content().nth(i).and_then(|c| c),
-    )
+  if let Some(sources) = source_map.sources() {
+    for i in 0..sources.len() {
+      on_source(
+        i as u32,
+        source_map.get_source(i).as_deref(),
+        source_map.get_source_content(i),
+      )
+    }
   }
-  for (i, name) in source_map.names().enumerate() {
-    on_name(i as u32, name);
+  if let Some(names) = source_map.names() {
+    for (i, name) in names.iter().enumerate() {
+      on_name(i as u32, name.as_deref());
+    }
   }
   let last_line = lines[lines.len() - 1];
   let last_new_line = last_line.ends_with('\n');
@@ -701,9 +708,52 @@ fn stream_chunks_of_source_map_lines_final(
   source_map: &SourceMap,
   on_chunk: OnChunk,
   on_source: OnSource,
-  on_name: OnName,
+  _on_name: OnName,
 ) -> GeneratedInfo {
-  todo!()
+  let result = get_generated_source_info(source);
+  if result.generated_line == 1 && result.generated_column == 0 {
+    return GeneratedInfo {
+      generated_line: 1,
+      generated_column: 0,
+    };
+  }
+  if let Some(sources) = source_map.sources() {
+    for i in 0..sources.len() {
+      on_source(
+        i as u32,
+        source_map.get_source(i).as_deref(),
+        source_map.get_source_content(i),
+      )
+    }
+  }
+  let final_line = if result.generated_column == 0 {
+    result.generated_line - 1
+  } else {
+    result.generated_line
+  };
+  let mut current_generated_line = 1;
+
+  let mut on_mapping = |mapping: &Mapping| {
+    if let Some(original) = &mapping.original
+      && current_generated_line <= result.generated_line
+      && result.generated_line <= final_line {
+      on_chunk(Mapping {
+        generated_line: result.generated_line,
+        generated_column: 0,
+        original: Some(OriginalLocation {
+          source_index: original.source_index,
+          original_line: original.original_line,
+          original_column: original.original_column,
+          name_index: None,
+        }),
+      });
+      current_generated_line = result.generated_line + 1;
+    }
+  };
+  for mapping in source_map.mappings().iter() {
+    on_mapping(mapping);
+  }
+  result
 }
 
 fn stream_chunks_of_source_map_lines_full(
@@ -711,7 +761,77 @@ fn stream_chunks_of_source_map_lines_full(
   source_map: &SourceMap,
   on_chunk: OnChunk,
   on_source: OnSource,
-  on_name: OnName,
+  _on_name: OnName,
 ) -> GeneratedInfo {
-  todo!()
+  let lines: Vec<&str> = split_into_lines(source).collect();
+  if lines.is_empty() {
+    return GeneratedInfo {
+      generated_line: 1,
+      generated_column: 0,
+    };
+  }
+  if let Some(sources) = source_map.sources() {
+    for i in 0..sources.len() {
+      on_source(
+        i as u32,
+        source_map.get_source(i).as_deref(),
+        source_map.get_source_content(i),
+      )
+    }
+  }
+  let mut current_generated_line = 1;
+
+  let mut on_mapping = |mapping: &Mapping| {
+    if mapping.original.is_none()
+      && mapping.generated_line < current_generated_line
+      && mapping.generated_line as usize > lines.len()
+    {
+      return;
+    }
+    while mapping.generated_line > current_generated_line {
+      if current_generated_line as usize <= lines.len() {
+        on_chunk(Mapping {
+          generated_line: current_generated_line,
+          generated_column: 0,
+          original: None,
+        });
+      }
+      current_generated_line += 1;
+    }
+    if let Some(original) = &mapping.original && mapping.generated_line as usize <= lines.len() {
+      on_chunk(Mapping {
+        generated_line: mapping.generated_line,
+        generated_column: 0,
+        original: Some(OriginalLocation {
+          source_index: original.source_index,
+          original_line: original.original_line,
+          original_column: original.original_column,
+          name_index: None,
+        }),
+      });
+      current_generated_line += 1;
+    }
+  };
+  for mapping in source_map.mappings().iter() {
+    on_mapping(mapping);
+  }
+  while current_generated_line as usize <= lines.len() {
+    on_chunk(Mapping {
+      generated_line: current_generated_line,
+      generated_column: 0,
+      original: None,
+    });
+  }
+  let last_line = lines[lines.len() - 1];
+  let last_new_line = last_line.ends_with("\n");
+  let final_line = if last_new_line {
+    lines.len() + 1
+  } else {
+    lines.len()
+  } as u32;
+  let final_column = if last_new_line { 0 } else { last_line.len() } as u32;
+  GeneratedInfo {
+    generated_line: final_line,
+    generated_column: final_column,
+  }
 }

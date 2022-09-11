@@ -2,7 +2,7 @@ use std::borrow::Cow;
 
 use crate::{
   helpers::{
-    get_generated_source_info, get_map, split_into_potential_lines,
+    get_generated_source_info, get_map, split_into_lines,
     split_into_potential_tokens, GeneratedInfo, OnChunk, OnName, OnSource,
     StreamChunks,
   },
@@ -126,7 +126,7 @@ impl StreamChunks for OriginalSource {
       // we need to split source by lines
       let mut line = 1;
       let mut last_line = None;
-      for l in split_into_potential_lines(&self.value) {
+      for l in split_into_lines(&self.value) {
         on_chunk(Mapping {
           generated_line: line,
           generated_column: 0,
@@ -169,18 +169,15 @@ mod tests {
     let result_list_map = source.map(&list_options).unwrap();
 
     assert_eq!(result_text, "Line1\n\nLine3\n");
-    assert_eq!(result_map.sources().collect::<Vec<_>>(), &[Some("file.js")]);
+    assert_eq!(result_map.sources().unwrap(), &[Some("file.js".to_string())]);
+    assert_eq!(result_list_map.sources().unwrap(), [Some("file.js".to_string())],);
     assert_eq!(
-      result_list_map.sources().collect::<Vec<_>>(),
-      [Some("file.js")],
+      result_map.sources_content().unwrap(),
+      [Some("Line1\n\nLine3\n".to_string())],
     );
     assert_eq!(
-      result_map.sources_content().collect::<Vec<_>>(),
-      [Some("Line1\n\nLine3\n")],
-    );
-    assert_eq!(
-      result_list_map.sources_content().collect::<Vec<_>>(),
-      [Some("Line1\n\nLine3\n")],
+      result_list_map.sources_content().unwrap(),
+      [Some("Line1\n\nLine3\n".to_string())],
     );
     assert_eq!(result_map.mappings().serialize(&options), "AAAA;;AAEA");
     assert_eq!(

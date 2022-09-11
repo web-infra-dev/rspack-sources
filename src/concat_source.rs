@@ -245,17 +245,17 @@ mod tests {
     assert_eq!(map1.mappings().serialize(&options1), ";AAAA;AACA;ACDA");
     assert_eq!(map1.file(), None);
     assert_eq!(
-      map1.sources().collect::<Vec<_>>(),
-      [Some("console.js"), Some("hello.md")],
+      map1.sources().unwrap(),
+      [Some("console.js".to_string()), Some("hello.md".to_string())],
     );
     assert_eq!(
-      map1.sources_content().collect::<Vec<_>>(),
+      map1.sources_content().unwrap(),
       [
-        Some("console.log('test');\nconsole.log('test2');\n"),
-        Some("Hello2\n"),
+        Some("console.log('test');\nconsole.log('test2');\n".to_string()),
+        Some("Hello2\n".to_string()),
       ],
     );
-    assert_eq!(map1.names().collect::<Vec<_>>(), &[]);
+    assert_eq!(map1.names().unwrap(), &[]);
 
     // let expected_map2 = SourceMap::new(
     //   None,
@@ -273,17 +273,17 @@ mod tests {
     assert_eq!(map2.mappings().serialize(&options2), ";AAAA;AACA;ACDA");
     assert_eq!(map2.file(), None);
     assert_eq!(
-      map2.sources().collect::<Vec<_>>(),
-      [Some("console.js"), Some("hello.md")],
+      map2.sources().unwrap(),
+      [Some("console.js".to_string()), Some("hello.md".to_string())],
     );
     assert_eq!(
-      map2.sources_content().collect::<Vec<_>>(),
+      map2.sources_content().unwrap(),
       [
-        Some("console.log('test');\nconsole.log('test2');\n"),
-        Some("Hello2\n"),
+        Some("console.log('test');\nconsole.log('test2');\n".to_string()),
+        Some("Hello2\n".to_string()),
       ],
     );
-    assert_eq!(map2.names().collect::<Vec<_>>(), &[]);
+    assert_eq!(map2.names().unwrap(), &[]);
   }
 
   #[test]
@@ -320,12 +320,14 @@ mod tests {
     let map = source.map(&options).unwrap();
     assert_eq!(map.mappings().serialize(&options), ";AAAA;AACA");
     assert!(map.file().is_none());
-    assert_eq!(map.sources().collect::<Vec<_>>(), [Some("console.js")]);
+    assert_eq!(map.sources().unwrap(), [Some("console.js".to_string())]);
     assert_eq!(
-      map.sources_content().collect::<Vec<_>>(),
-      [Some("console.log('test');\nconsole.log('test2');\n")],
+      map.sources_content().unwrap(),
+      [Some(
+        "console.log('test');\nconsole.log('test2');\n".to_string()
+      )],
     );
-    assert_eq!(map.names().collect::<Vec<_>>(), []);
+    assert_eq!(map.names().unwrap(), []);
 
     // TODO: test hash
   }
@@ -370,14 +372,14 @@ mod tests {
     );
     assert!(map.file().is_none());
     assert_eq!(
-      map.sources().collect::<Vec<_>>(),
-      [Some("hello.txt"), Some("world.txt")],
+      map.sources().unwrap(),
+      [Some("hello.txt".to_string()), Some("world.txt".to_string())],
     );
     assert_eq!(
-      map.sources_content().collect::<Vec<_>>(),
-      [Some("Hello"), Some("World ")],
+      map.sources_content().unwrap(),
+      [Some("Hello".to_string()), Some("World ".to_string())],
     );
-    assert_eq!(map.names().collect::<Vec<_>>(), []);
+    assert_eq!(map.names().unwrap(), []);
     // assert_eq!(
     //   source.map(MapOptions::default()).unwrap(),
     //   SourceMap::new(

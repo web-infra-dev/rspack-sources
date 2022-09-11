@@ -124,6 +124,46 @@ mod tests {
     ]);
   }
 
+  #[test]
+  fn should_handle_null_sources_and_sources_content() {
+    let a = SourceMapSource::new(WithoutOriginalOptions {
+      value: "hello world\n",
+      name: "hello.txt",
+      source_map: SourceMap::new(
+        None,
+        mappings!("AAAA"),
+        None,
+        Some(vec![None]),
+        Some(vec![None]),
+        Some(vec![]),
+      ),
+    });
+    let b = SourceMapSource::new(WithoutOriginalOptions {
+      value: "hello world\n",
+      name: "hello.txt",
+      source_map: SourceMap::new(
+        None,
+        mappings!("AAAA"),
+        None,
+        Some(vec![]),
+        Some(vec![]),
+        Some(vec![]),
+      ),
+    });
+    let a = SourceMapSource::new(WithoutOriginalOptions {
+      value: "hello world\n",
+      name: "hello.txt",
+      source_map: SourceMap::new(
+        None,
+        mappings!("AAAA"),
+        None,
+        Some(vec![Some("hello-source.txt".to_string())]),
+        Some(vec![Some("hello world\n".to_string())]),
+        Some(vec![]),
+      ),
+    });
+  }
+
   // #[test]
   // fn should_handle_es6_promise_correctly() {
   //   let code = include_str!(concat!(
@@ -149,9 +189,9 @@ mod tests {
         None,
         mappings!["AAAA;AACA"],
         None,
-        vec![Some("hello1".to_string())],
-        vec![],
-        vec![],
+        Some(vec![Some("hello1".to_string())]),
+        Some(vec![]),
+        Some(vec![]),
       ),
     });
     let b = SourceMapSource::new(WithoutOriginalOptions {
@@ -161,9 +201,9 @@ mod tests {
         None,
         mappings!("AAAA,EAAE"),
         None,
-        vec![Some("hello2".to_string())],
-        vec![],
-        vec![],
+        Some(vec![Some("hello2".to_string())]),
+        Some(vec![]),
+        Some(vec![]),
       ),
     });
     let b2 = SourceMapSource::new(WithoutOriginalOptions {
@@ -173,9 +213,9 @@ mod tests {
         None,
         mappings!("AAAA,EAAE"),
         None,
-        vec![Some("hello3".to_string())],
-        vec![],
-        vec![],
+        Some(vec![Some("hello3".to_string())]),
+        Some(vec![]),
+        Some(vec![]),
       ),
     });
     let c = SourceMapSource::new(WithoutOriginalOptions {
@@ -185,9 +225,9 @@ mod tests {
         None,
         mappings!("AAAA"),
         None,
-        vec![Some("hello4".to_string())],
-        vec![],
-        vec![],
+        Some(vec![Some("hello4".to_string())]),
+        Some(vec![]),
+        Some(vec![]),
       ),
     });
     let source = ConcatSource::new([
