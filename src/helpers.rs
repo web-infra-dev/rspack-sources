@@ -17,7 +17,7 @@ pub fn get_map<S: StreamChunks>(
       columns: options.columns,
       final_source: true,
     },
-    &mut |mapping| {
+    &mut |chunk, mapping| {
       mappings.push(mapping);
     },
     &mut |source_index, source: &str, source_content: Option<&str>| {
@@ -56,7 +56,7 @@ pub trait StreamChunks {
   ) -> GeneratedInfo;
 }
 
-pub type OnChunk<'a> = &'a mut dyn FnMut(Mapping);
+pub type OnChunk<'a> = &'a mut dyn FnMut(Option<&str>, Mapping);
 pub type OnSource<'a> = &'a mut dyn FnMut(u32, &str, Option<&str>);
 pub type OnName<'a> = &'a mut dyn FnMut(u32, &str);
 
@@ -443,18 +443,24 @@ fn stream_chunks_of_source_map_final(
       return;
     }
     if let Some(original) = &mapping.original {
-      on_chunk(Mapping {
-        generated_line: mapping.generated_line,
-        generated_column: mapping.generated_column,
-        original: Some(original.clone()),
-      });
+      on_chunk(
+        None,
+        Mapping {
+          generated_line: mapping.generated_line,
+          generated_column: mapping.generated_column,
+          original: Some(original.clone()),
+        },
+      );
       mapping_active_line = mapping.generated_line;
     } else if mapping_active_line == mapping.generated_line {
-      on_chunk(Mapping {
-        generated_line: mapping.generated_line,
-        generated_column: mapping.generated_column,
-        original: None,
-      });
+      on_chunk(
+        None,
+        Mapping {
+          generated_line: mapping.generated_line,
+          generated_column: mapping.generated_column,
+          original: None,
+        },
+      );
     }
   };
   for mapping in &source_map.decoded_mappings() {
@@ -513,11 +519,14 @@ fn stream_chunks_of_source_map_full(
         current_generated_column = mapping.generated_column;
       }
       if !chunk.is_empty() {
-        on_chunk(Mapping {
-          generated_line: mapping_line,
-          generated_column: mapping_column,
-          original: active_mapping_original.clone(),
-        })
+        on_chunk(
+          Some(chunk),
+          Mapping {
+            generated_line: mapping_line,
+            generated_column: mapping_column,
+            original: active_mapping_original.clone(),
+          },
+        )
       }
       mapping_active = false;
     }
@@ -525,32 +534,46 @@ fn stream_chunks_of_source_map_full(
       && current_generated_column > 0
     {
       if current_generated_line as usize <= lines.len() {
-        on_chunk(Mapping {
-          generated_line: current_generated_line,
-          generated_column: current_generated_column,
-          original: None,
-        });
+        let chunk = &lines[(current_generated_line - 1) as usize]
+          [current_generated_column as usize..];
+        on_chunk(
+          Some(chunk),
+          Mapping {
+            generated_line: current_generated_line,
+            generated_column: current_generated_column,
+            original: None,
+          },
+        );
       }
       current_generated_line += 1;
       current_generated_column = 0;
     }
     while mapping.generated_line > current_generated_line {
       if current_generated_line as usize <= lines.len() {
-        on_chunk(Mapping {
-          generated_line: current_generated_line,
-          generated_column: 0,
-          original: None,
-        });
+        on_chunk(
+          Some(lines[(current_generated_line as usize) - 1]),
+          Mapping {
+            generated_line: current_generated_line,
+            generated_column: 0,
+            original: None,
+          },
+        );
       }
       current_generated_line += 1;
     }
     if mapping.generated_column > current_generated_column {
       if current_generated_line as usize <= lines.len() {
-        on_chunk(Mapping {
-          generated_line: current_generated_line,
-          generated_column: current_generated_column,
-          original: None,
-        })
+        let chunk = &lines[(current_generated_line as usize) - 1]
+          [current_generated_column as usize
+            ..mapping.generated_column as usize];
+        on_chunk(
+          Some(chunk),
+          Mapping {
+            generated_line: current_generated_line,
+            generated_column: current_generated_column,
+            original: None,
+          },
+        )
       }
       current_generated_column = mapping.generated_column;
     }
@@ -605,7 +628,7 @@ fn stream_chunks_of_source_map_lines_final(
     if let Some(original) = &mapping.original
       && current_generated_line <= result.generated_line
       && result.generated_line <= final_line {
-      on_chunk(Mapping {
+      on_chunk(None, Mapping {
         generated_line: result.generated_line,
         generated_column: 0,
         original: Some(OriginalLocation {
@@ -651,16 +674,19 @@ fn stream_chunks_of_source_map_lines_full(
     }
     while mapping.generated_line > current_generated_line {
       if current_generated_line as usize <= lines.len() {
-        on_chunk(Mapping {
-          generated_line: current_generated_line,
-          generated_column: 0,
-          original: None,
-        });
+        on_chunk(
+          Some(lines[current_generated_line as usize - 1]),
+          Mapping {
+            generated_line: current_generated_line,
+            generated_column: 0,
+            original: None,
+          },
+        );
       }
       current_generated_line += 1;
     }
     if let Some(original) = &mapping.original && mapping.generated_line as usize <= lines.len() {
-      on_chunk(Mapping {
+      on_chunk(Some(lines[mapping.generated_line as usize - 1]), Mapping {
         generated_line: mapping.generated_line,
         generated_column: 0,
         original: Some(OriginalLocation {
@@ -677,11 +703,14 @@ fn stream_chunks_of_source_map_lines_full(
     on_mapping(mapping);
   }
   while current_generated_line as usize <= lines.len() {
-    on_chunk(Mapping {
-      generated_line: current_generated_line,
-      generated_column: 0,
-      original: None,
-    });
+    on_chunk(
+      Some(lines[current_generated_line as usize - 1]),
+      Mapping {
+        generated_line: current_generated_line,
+        generated_column: 0,
+        original: None,
+      },
+    );
   }
   let last_line = lines[lines.len() - 1];
   let last_new_line = last_line.ends_with("\n");

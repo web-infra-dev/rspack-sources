@@ -84,7 +84,7 @@ impl StreamChunks for ConcatSource {
         generated_column,
       } = item.stream_chunks(
         options,
-        &mut |mapping| {
+        &mut |chunk, mapping| {
           let line = mapping.generated_line + current_line_offset;
           let column = if mapping.generated_line == 1 {
             mapping.generated_column + current_column_offset
@@ -93,7 +93,7 @@ impl StreamChunks for ConcatSource {
           };
           if need_to_cloas_mapping {
             if mapping.generated_line != 1 || mapping.generated_column != 0 {
-              on_chunk(Mapping {
+              on_chunk(None, Mapping {
                 generated_line: current_line_offset + 1,
                 generated_column: current_column_offset,
                 original: None,
@@ -120,7 +120,7 @@ impl StreamChunks for ConcatSource {
           };
           if options.final_source {
             if let Some(result_source_index) = result_source_index && let Some(original) = &mapping.original {
-              on_chunk(Mapping {
+              on_chunk(None, Mapping {
                 generated_line: line,
                 generated_column: column,
                 original: Some(OriginalLocation {
@@ -133,7 +133,7 @@ impl StreamChunks for ConcatSource {
             }
           } else {
             if let Some(result_source_index) = result_source_index && let Some(original) = &mapping.original {
-              on_chunk(Mapping {
+              on_chunk(chunk, Mapping {
                 generated_line: line,
                 generated_column: column,
                 original: Some(OriginalLocation {
@@ -144,7 +144,7 @@ impl StreamChunks for ConcatSource {
                 }),
               });
             } else {
-              on_chunk(Mapping {
+              on_chunk(chunk, Mapping {
                 generated_line: line,
                 generated_column: column,
                 original: None,
@@ -179,11 +179,14 @@ impl StreamChunks for ConcatSource {
       );
       if need_to_cloas_mapping {
         if generated_line != 1 || generated_column != 0 {
-          on_chunk(Mapping {
-            generated_line: current_line_offset + 1,
-            generated_column: current_column_offset,
-            original: None,
-          });
+          on_chunk(
+            None,
+            Mapping {
+              generated_line: current_line_offset + 1,
+              generated_column: current_column_offset,
+              original: None,
+            },
+          );
           need_to_cloas_mapping = false;
         }
       }

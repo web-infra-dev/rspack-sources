@@ -111,6 +111,10 @@ impl SourceMap {
   pub fn names(&self) -> &[String] {
     &self.names
   }
+
+  pub fn get_name(&self, index: usize) -> Option<&str> {
+    self.names.get(index).map(|s| s.as_str())
+  }
 }
 
 #[derive(Serialize, Deserialize)]

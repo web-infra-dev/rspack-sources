@@ -60,23 +60,29 @@ impl StreamChunks for OriginalSource {
         let is_end_of_line = token.ends_with('\n');
         if is_end_of_line && token.len() == 1 {
           if !options.final_source {
-            on_chunk(Mapping {
-              generated_line: line,
-              generated_column: column,
-              original: None,
-            });
+            on_chunk(
+              Some(token),
+              Mapping {
+                generated_line: line,
+                generated_column: column,
+                original: None,
+              },
+            );
           }
         } else {
-          on_chunk(Mapping {
-            generated_line: line,
-            generated_column: column,
-            original: Some(OriginalLocation {
-              source_index: 0,
-              original_line: line,
-              original_column: column,
-              name_index: None,
-            }),
-          });
+          on_chunk(
+            (!options.final_source).then(|| token),
+            Mapping {
+              generated_line: line,
+              generated_column: column,
+              original: Some(OriginalLocation {
+                source_index: 0,
+                original_line: line,
+                original_column: column,
+                name_index: None,
+              }),
+            },
+          );
         }
         if is_end_of_line {
           line += 1;
@@ -95,29 +101,35 @@ impl StreamChunks for OriginalSource {
       let result = get_generated_source_info(&self.value);
       if result.generated_column == 0 {
         for line in 1..result.generated_line {
-          on_chunk(Mapping {
-            generated_line: line,
-            generated_column: 0,
-            original: Some(OriginalLocation {
-              source_index: 0,
-              original_line: line,
-              original_column: 0,
-              name_index: None,
-            }),
-          });
+          on_chunk(
+            None,
+            Mapping {
+              generated_line: line,
+              generated_column: 0,
+              original: Some(OriginalLocation {
+                source_index: 0,
+                original_line: line,
+                original_column: 0,
+                name_index: None,
+              }),
+            },
+          );
         }
       } else {
         for line in 1..=result.generated_line {
-          on_chunk(Mapping {
-            generated_line: line,
-            generated_column: 0,
-            original: Some(OriginalLocation {
-              source_index: 0,
-              original_line: line,
-              original_column: 0,
-              name_index: None,
-            }),
-          });
+          on_chunk(
+            None,
+            Mapping {
+              generated_line: line,
+              generated_column: 0,
+              original: Some(OriginalLocation {
+                source_index: 0,
+                original_line: line,
+                original_column: 0,
+                name_index: None,
+              }),
+            },
+          );
         }
       }
       result
@@ -127,16 +139,19 @@ impl StreamChunks for OriginalSource {
       let mut line = 1;
       let mut last_line = None;
       for l in split_into_lines(&self.value) {
-        on_chunk(Mapping {
-          generated_line: line,
-          generated_column: 0,
-          original: Some(OriginalLocation {
-            source_index: 0,
-            original_line: line,
-            original_column: 0,
-            name_index: None,
-          }),
-        });
+        on_chunk(
+          (!options.final_source).then(|| l),
+          Mapping {
+            generated_line: line,
+            generated_column: 0,
+            original: Some(OriginalLocation {
+              source_index: 0,
+              original_line: line,
+              original_column: 0,
+              name_index: None,
+            }),
+          },
+        );
         line += 1;
         last_line = Some(l);
       }

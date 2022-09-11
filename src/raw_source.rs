@@ -159,11 +159,14 @@ impl StreamChunks for RawSource {
       let mut last_line = None;
       let source = self.source();
       for l in split_into_lines(&source) {
-        on_chunk(Mapping {
-          generated_line: line,
-          generated_column: 0,
-          original: None,
-        });
+        on_chunk(
+          Some(l),
+          Mapping {
+            generated_line: line,
+            generated_column: 0,
+            original: None,
+          },
+        );
         line += 1;
         last_line = Some(l);
       }
