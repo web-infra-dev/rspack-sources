@@ -17,8 +17,7 @@ pub fn get_map<S: StreamChunks>(
       columns: options.columns,
       final_source: true,
     },
-    &mut |chunk, mapping| {
-      dbg!(chunk, &mapping);
+    &mut |_, mapping| {
       mappings.push(mapping);
     },
     &mut |source_index, source: &str, source_content: Option<&str>| {
@@ -67,7 +66,6 @@ pub struct GeneratedInfo {
 }
 
 pub fn decode_mappings(raw: &str) -> Vec<Mapping> {
-  let mut generated_column = 0;
   let mut source_index = 0;
   let mut original_line = 1;
   let mut original_column = 0;
@@ -80,7 +78,7 @@ pub fn decode_mappings(raw: &str) -> Vec<Mapping> {
       continue;
     }
 
-    generated_column = 0;
+    let mut generated_column = 0;
 
     for segment in line.split(',') {
       if segment.is_empty() {
@@ -503,7 +501,7 @@ fn stream_chunks_of_source_map_full(
   let mut active_mapping_original: Option<OriginalLocation> = None;
 
   let mut on_mapping = |mapping: &Mapping| {
-    if mapping_active && current_generated_column as usize <= lines.len() {
+    if mapping_active && current_generated_line as usize <= lines.len() {
       let chunk;
       let mapping_line = current_generated_line;
       let mapping_column = current_generated_column;
@@ -586,6 +584,7 @@ fn stream_chunks_of_source_map_full(
   };
 
   for mapping in &source_map.decoded_mappings() {
+    dbg!(mapping);
     on_mapping(mapping);
   }
   on_mapping(&Mapping {
@@ -712,7 +711,7 @@ fn stream_chunks_of_source_map_lines_full(
     );
   }
   let last_line = lines[lines.len() - 1];
-  let last_new_line = last_line.ends_with("\n");
+  let last_new_line = last_line.ends_with('\n');
   let final_line = if last_new_line {
     lines.len() + 1
   } else {

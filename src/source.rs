@@ -241,7 +241,7 @@ impl From<SourceMap> for RawSourceMap {
         map
           .sources
           .into_iter()
-          .map(|s| (!s.is_empty()).then(|| s))
+          .map(|s| (!s.is_empty()).then_some(s))
           .collect(),
       ),
       source_root: None,
@@ -249,17 +249,17 @@ impl From<SourceMap> for RawSourceMap {
         map
           .sources_content
           .into_iter()
-          .map(|s| (!s.is_empty()).then(|| s))
+          .map(|s| (!s.is_empty()).then_some(s))
           .collect(),
       ),
       names: Some(
         map
           .names
           .into_iter()
-          .map(|s| (!s.is_empty()).then(|| s))
+          .map(|s| (!s.is_empty()).then_some(s))
           .collect(),
       ),
-      mappings: (!map.mappings.is_empty()).then(|| map.mappings),
+      mappings: (!map.mappings.is_empty()).then_some(map.mappings),
     }
   }
 }

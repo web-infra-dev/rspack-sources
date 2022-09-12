@@ -71,7 +71,7 @@ impl StreamChunks for OriginalSource {
           }
         } else {
           on_chunk(
-            (!options.final_source).then(|| token),
+            (!options.final_source).then_some(token),
             Mapping {
               generated_line: line,
               generated_column: column,
@@ -140,7 +140,7 @@ impl StreamChunks for OriginalSource {
       let mut last_line = None;
       for l in split_into_lines(&self.value) {
         on_chunk(
-          (!options.final_source).then(|| l),
+          (!options.final_source).then_some(l),
           Mapping {
             generated_line: line,
             generated_column: 0,

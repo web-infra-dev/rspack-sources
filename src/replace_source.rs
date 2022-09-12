@@ -432,8 +432,6 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
 
 #[cfg(test)]
 mod tests {
-  use std::result;
-
   use crate::{
     source_map_source::WithoutOriginalOptions, OriginalSource, SourceMapSource,
   };
@@ -749,7 +747,6 @@ function StaticPage(_ref) {
   });
 }"#
     );
-    dbg!(&source_map);
     assert_eq!(source_map.get_name(0).unwrap(), "StaticPage");
     assert_eq!(source_map.get_name(1).unwrap(), "data");
     assert_eq!(source_map.get_name(2).unwrap(), "foo");

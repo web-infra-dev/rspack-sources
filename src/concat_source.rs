@@ -131,25 +131,23 @@ impl StreamChunks for ConcatSource {
                 }),
               });
             }
+          } else if let Some(result_source_index) = result_source_index && let Some(original) = &mapping.original {
+            on_chunk(chunk, Mapping {
+              generated_line: line,
+              generated_column: column,
+              original: Some(OriginalLocation {
+                  source_index: result_source_index,
+                  original_line: original.original_line,
+                  original_column: original.original_column,
+                  name_index: result_name_index,
+              }),
+            });
           } else {
-            if let Some(result_source_index) = result_source_index && let Some(original) = &mapping.original {
-              on_chunk(chunk, Mapping {
-                generated_line: line,
-                generated_column: column,
-                original: Some(OriginalLocation {
-                    source_index: result_source_index,
-                    original_line: original.original_line,
-                    original_column: original.original_column,
-                    name_index: result_name_index,
-                }),
-              });
-            } else {
-              on_chunk(chunk, Mapping {
-                generated_line: line,
-                generated_column: column,
-                original: None,
-              });
-            }
+            on_chunk(chunk, Mapping {
+              generated_line: line,
+              generated_column: column,
+              original: None,
+            });
           }
         },
         &mut |i, source, source_content| {
@@ -177,18 +175,17 @@ impl StreamChunks for ConcatSource {
             .insert(i, global_index.unwrap());
         },
       );
-      if need_to_cloas_mapping {
-        if generated_line != 1 || generated_column != 0 {
-          on_chunk(
-            None,
-            Mapping {
-              generated_line: current_line_offset + 1,
-              generated_column: current_column_offset,
-              original: None,
-            },
-          );
-          need_to_cloas_mapping = false;
-        }
+      if need_to_cloas_mapping && (generated_line != 1 || generated_column != 0)
+      {
+        on_chunk(
+          None,
+          Mapping {
+            generated_line: current_line_offset + 1,
+            generated_column: current_column_offset,
+            original: None,
+          },
+        );
+        need_to_cloas_mapping = false;
       }
       if generated_line > 1 {
         current_column_offset = generated_column;
