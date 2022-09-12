@@ -103,9 +103,9 @@ impl<T: Source> Source for ReplaceSource<T> {
   fn map(&self, options: &crate::MapOptions) -> Option<SourceMap> {
     let replacements = self.replacements.lock();
     if replacements.is_empty() {
-      drop(replacements);
       return self.inner.map(options);
     }
+    drop(replacements);
     get_map(self, options)
   }
 }
@@ -119,12 +119,13 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
     on_name: crate::helpers::OnName,
   ) -> crate::helpers::GeneratedInfo {
     self.sort_replacement();
+    let on_name = RefCell::new(on_name);
     let repls = self.replacements.lock();
     let mut pos: u32 = 0;
     let mut i: usize = 0;
     let mut replacement_end: Option<u32> = None;
     let mut next_replacement = (i < repls.len()).then(|| repls[i].start);
-    let mut generated_line_offset = 0;
+    let mut generated_line_offset: i64 = 0;
     let mut generated_column_offset: i64 = 0;
     let mut generated_column_offset_line = 0;
     let source_content_lines: RefCell<Vec<Option<Vec<String>>>> =
@@ -189,10 +190,10 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
         // Skip over when it has been replaced
         if let Some(replacment_end) = replacement_end && replacment_end > pos {
 					// Skip over the whole chunk
-          if replacment_end > pos {
-            let line = mapping.generated_line + generated_line_offset;
+          if replacment_end >= end_pos {
+            let line = mapping.generated_line as i64 + generated_line_offset;
             if chunk.ends_with('\n') {
-              generated_column_offset -= 1;
+              generated_line_offset -= 1;
               if generated_column_offset_line == line {
 								// undo exiting corrections form the current line
 								generated_column_offset += mapping.generated_column as i64;
@@ -218,7 +219,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
             original.original_column += chunk_pos as u32;
           }
           pos += chunk_pos;
-          let line = mapping.generated_line + generated_line_offset;
+          let line = mapping.generated_line as i64 + generated_line_offset;
           if generated_column_offset_line == line {
             generated_column_offset -= chunk_pos as i64;
           } else {
@@ -230,13 +231,13 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
 
 				// Is a replacement in the chunk?
         while let Some(next_replacement_pos) = next_replacement && next_replacement_pos < end_pos {
-          let mut line = mapping.generated_line + generated_line_offset;
+          let mut line = mapping.generated_line as i64 + generated_line_offset;
           if next_replacement_pos > pos {
             // Emit chunk until replacement
             let offset = next_replacement_pos - pos;
             let chunk_slice = &chunk[chunk_pos as usize..(chunk_pos + offset) as usize];
             on_chunk(Some(chunk_slice), Mapping {
-              generated_line: line,
+              generated_line: line as u32,
               generated_column: mapping.generated_column + if line == generated_column_offset_line {generated_column_offset} else {0} as u32,
               original: mapping.original.as_ref().map(|original| OriginalLocation {
                 source_index: original.source_index,
@@ -255,7 +256,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
           }
           // Insert replacement content splitted into chunks by lines
           let repl = &repls[i];
-          let lines: Vec<&str> = split_into_lines(&repl.content).collect();
+          let lines: Vec<&str> = split_into_lines(&repl.content);
           let mut replacement_name_index = mapping.original.as_ref().and_then(|original| original.name_index);
           if mapping.original.is_some() && let Some(name) = &repl.name {
             let mut name_mapping = name_mapping.borrow_mut();
@@ -263,15 +264,15 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
             if global_index.is_none() {
               let len = name_mapping.len() as u32;
               name_mapping.insert(name.to_owned(), len);
-              on_name(len, name);
+              on_name.borrow_mut()(len, name);
               global_index = Some(len);
             }
             replacement_name_index = global_index;
           }
           for (m, content_line) in lines.iter().enumerate() {
             on_chunk(Some(content_line), Mapping {
-              generated_line: line,
-              generated_column: mapping.generated_column + if line == generated_column_offset_line { generated_column_offset } else { 0} as u32,
+              generated_line: line as u32,
+              generated_column: ((mapping.generated_column as i64) + if line == generated_column_offset_line { generated_column_offset } else { 0 }) as u32,
               original: mapping.original.as_ref().map(|original| OriginalLocation { source_index: original.source_index, original_line: original.original_line, original_column: original.original_column, name_index: replacement_name_index }),
             });
             // Only the first chunk has name assigned
@@ -308,7 +309,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
           if offset > 0 {
             // Skip over whole chunk
             if let Some(replacement_end) = replacement_end && replacement_end >= end_pos {
-              let line = mapping.generated_line + generated_line_offset;
+              let line = mapping.generated_line as i64 + generated_line_offset;
               if chunk.ends_with('\n') {
                 generated_line_offset -= 1;
                 if generated_column_offset_line == line {
@@ -326,7 +327,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
             }
 
             // Partially skip over chunk
-            let line = mapping.generated_line + generated_line_offset;
+            let line = mapping.generated_line as i64 + generated_line_offset;
             if let Some(original) = &mut mapping.original && check_original_content(original.source_index, original.original_line, original.original_column, &chunk[chunk_pos as usize..(chunk_pos + offset as u32) as usize ]) {
               original.original_column += offset as u32;
             }
@@ -345,10 +346,10 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
 				// Emit remaining chunk
         if (chunk_pos as usize) < chunk.len() {
           let chunk_slice = if chunk_pos == 0 {chunk} else {&chunk[chunk_pos as usize..]};
-          let line = mapping.generated_line + generated_line_offset;
+          let line = mapping.generated_line as i64 + generated_line_offset;
           on_chunk(Some(chunk_slice), Mapping {
-            generated_line: line,
-            generated_column: mapping.generated_column + if line == generated_column_offset_line { generated_column_offset } else {0} as u32,
+            generated_line: line as u32,
+            generated_column: ((mapping.generated_column as i64) + if line == generated_column_offset_line { generated_column_offset } else { 0 }) as u32,
             original: mapping.original.as_ref().map(|original| OriginalLocation { source_index: original.source_index, original_line: original.original_line, original_column: original.original_column, name_index: original.name_index.and_then(|name_index| name_index_mapping.borrow().get(&name_index).copied()) }),
           });
         }
@@ -356,19 +357,22 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
       },
       &mut |source_index, source, source_content| {
         let mut source_content_lines = source_content_lines.borrow_mut();
-        while source_content_lines.len() < source_index as usize {
+        while source_content_lines.len() <= source_index as usize {
           source_content_lines.push(None);
         }
-        source_content_lines[source_index as usize] = source_content.map(|source_content| split_into_lines(source_content).map(Into::into).collect::<Vec<_>>());
+        source_content_lines[source_index as usize] = source_content.map(|source_content| {
+          split_into_lines(source_content).into_iter().map(Into::into).collect()
+        });
         on_source(source_index, source, source_content);
       },
       &mut |name_index, name| {
         let mut name_mapping = name_mapping.borrow_mut();
         let mut global_index = name_mapping.get(name).copied();
         if global_index.is_none() {
-          let len = name_mapping.len();
-          name_mapping.insert(name.to_owned(), len as u32);
-          global_index = Some(len as u32);
+          let len = name_mapping.len() as u32;
+          name_mapping.insert(name.to_owned(), len);
+          on_name.borrow_mut()(len, name);
+          global_index = Some(len);
         }
         name_index_mapping.borrow_mut().insert(name_index, global_index.unwrap());
       },
@@ -376,24 +380,25 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
 
     // Handle remaining replacements
     let mut remainer = String::new();
-    for repl in repls.iter() {
-      remainer += &repl.content;
+    while i < repls.len() {
+      remainer += &repls[i].content;
+      i += 1;
     }
 
     // Insert remaining replacements content splitted into chunks by lines
-    let mut line = result.generated_line + generated_line_offset;
-    let matches: Vec<_> = split_into_lines(&remainer).collect();
+    let mut line = result.generated_line as i64 + generated_line_offset;
+    let matches = split_into_lines(&remainer);
     for (m, content_line) in matches.iter().enumerate() {
       on_chunk(
         Some(content_line),
         Mapping {
-          generated_line: line,
-          generated_column: result.generated_column
+          generated_line: line as u32,
+          generated_column: ((result.generated_column as i64)
             + if line == generated_column_offset_line {
               generated_column_offset
             } else {
               0
-            } as u32,
+            }) as u32,
           original: None,
         },
       );
@@ -414,26 +419,31 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
     }
 
     GeneratedInfo {
-      generated_line: line,
-      generated_column: result.generated_column
+      generated_line: line as u32,
+      generated_column: ((result.generated_column as i64)
         + if line == generated_column_offset_line {
           generated_column_offset
         } else {
           0
-        } as u32,
+        }) as u32,
     }
   }
 }
 
 #[cfg(test)]
 mod tests {
-  use crate::OriginalSource;
+  use std::result;
+
+  use crate::{
+    source_map_source::WithoutOriginalOptions, OriginalSource, SourceMapSource,
+  };
 
   use super::*;
 
-  fn with_readable_mappings(sourcemap: SourceMap) -> String {
+  fn with_readable_mappings(sourcemap: &SourceMap) -> String {
     let mut first = true;
     let mut last_line = 0;
+    dbg!(&sourcemap.decoded_mappings());
     sourcemap
       .decoded_mappings()
       .iter()
@@ -450,14 +460,24 @@ mod tests {
           token.generated_column,
           token
             .original
+            .as_ref()
             .and_then(
               |original| sourcemap.get_source(original.source_index as usize)
             )
             .map_or("".to_owned(), |source| format!(" [{}]", source)),
-          token.get_src_line(),
-          token.get_src_col(),
           token
             .original
+            .as_ref()
+            .map(|original| original.original_line)
+            .unwrap_or(!0),
+          token
+            .original
+            .as_ref()
+            .map(|original| original.original_column)
+            .unwrap_or(!0),
+          token
+            .original
+            .as_ref()
             .and_then(|original| original.name_index)
             .and_then(|name_index| sourcemap.get_name(name_index as usize))
             .map_or("".to_owned(), |source| format!(" ({})", source)),
@@ -518,23 +538,18 @@ Last Line"#
 1:0 -> [file.txt] 1:0, :1 -> [file.txt] 1:1, :3 -> [file.txt] 1:5, :8 -> [file.txt] 1:7, :12 -> [file.txt] 1:8
 2:0 -> [file.txt] 2:0, :1 -> [file.txt] 2:1
 3:0 -> [file.txt] 2:1
-4:0 -> [file.txt] 2:1, :1 -> [file.txt] 2:2
+4:0 -> [file.txt] 2:1
 5:0 -> [file.txt] 6:0, :4 -> [file.txt] 6:4, :5 -> [file.txt] 7:0"#
     );
 
-    let result_list_map = source
-      .map(&GenMapOption {
-        columns: false,
-        ..Default::default()
-      })
-      .expect("replace sources map failed");
+    let result_list_map = source.map(&MapOptions::new(false)).unwrap();
     assert_eq!(
       with_readable_mappings(&result_list_map),
       r#"
 1:0 -> [file.txt] 1:0
 2:0 -> [file.txt] 2:0
-3:0 -> [file.txt] 2:1
-4:0 -> [file.txt] 2:1
+3:0 -> [file.txt] 2:0
+4:0 -> [file.txt] 2:0
 5:0 -> [file.txt] 6:0"#
     );
   }
@@ -546,22 +561,12 @@ Last Line"#
       ["Hello", "World!"].join("\n").as_str(),
       "file.txt",
     ));
-    let original_code = source.source();
+    let original_code = source.source().to_string();
     source.insert(0, "Message: ", None);
-    source.replace(2, (line1.len() + 5) as i32, "y A", None);
+    source.replace(2, (line1.len() + 5) as u32, "y A", None);
     let result_text = source.source();
-    let result_map = source
-      .map(&GenMapOption {
-        columns: true,
-        ..Default::default()
-      })
-      .expect("failed");
-    let result_list_map = source
-      .map(&GenMapOption {
-        columns: false,
-        ..Default::default()
-      })
-      .expect("failed");
+    let result_map = source.map(&MapOptions::default()).unwrap();
+    let result_list_map = source.map(&MapOptions::new(false)).unwrap();
 
     assert_eq!(
       original_code,
@@ -574,34 +579,25 @@ World!"#
       r#"
 1:0 -> [file.txt] 1:0, :11 -> [file.txt] 1:2, :14 -> [file.txt] 2:4"#
     );
-
     assert_eq!(
       with_readable_mappings(&result_list_map),
       r#"
 1:0 -> [file.txt] 1:0"#
     );
+    assert_eq!(result_map.mappings(), "AAAA,WAAE,GACE");
+    assert_eq!(result_list_map.mappings(), "AAAA");
   }
 
   #[test]
   fn should_prepend_items_correctly() {
     let mut source =
       ReplaceSource::new(OriginalSource::new("Line 1", "file.txt"));
-    source.insert(-1, "Line -1\n", None);
-    source.insert(-1, "Line 0\n", None);
+    source.insert(0, "Line -1\n", None);
+    source.insert(0, "Line 0\n", None);
 
     let result_text = source.source();
-    let result_map = source
-      .map(&GenMapOption {
-        columns: true,
-        ..Default::default()
-      })
-      .expect("failed");
-    let result_list_map = source
-      .map(&GenMapOption {
-        columns: false,
-        ..Default::default()
-      })
-      .expect("failed");
+    let result_map = source.map(&MapOptions::default()).unwrap();
+    let result_list_map = source.map(&MapOptions::new(false)).unwrap();
 
     assert_eq!(result_text, "Line -1\nLine 0\nLine 1");
     assert_eq!(
@@ -626,21 +622,11 @@ World!"#
       ["Line 1", "Line 2"].join("\n").as_str(),
       "file.txt",
     ));
-    source.insert(-1, "Line 0\n", None);
+    source.insert(0, "Line 0\n", None);
     source.replace(0, 6, "Hello", None);
     let result_text = source.source();
-    let result_map = source
-      .map(&GenMapOption {
-        columns: true,
-        ..Default::default()
-      })
-      .expect("failed");
-    let result_list_map = source
-      .map(&GenMapOption {
-        columns: false,
-        ..Default::default()
-      })
-      .expect("failed");
+    let result_map = source.map(&MapOptions::default()).unwrap();
+    let result_list_map = source.map(&MapOptions::new(false)).unwrap();
 
     assert_eq!(
       result_text,
@@ -648,20 +634,12 @@ World!"#
 Hello
 Line 2"#
     );
-
-    let mut writer = vec![];
-    result_map.to_writer(&mut writer).expect("failed");
-
     assert_eq!(
-      String::from_utf8(writer).unwrap(),
+      result_map.to_json().unwrap(),
       r#"{"version":3,"sources":["file.txt"],"sourcesContent":["Line 1\nLine 2"],"names":[],"mappings":"AAAA;AAAA,KAAM;AACN"}"#
     );
-
-    let mut writer = vec![];
-    result_list_map.to_writer(&mut writer).expect("failed");
-
     assert_eq!(
-      String::from_utf8(writer).unwrap(),
+      result_list_map.to_json().unwrap(),
       r#"{"version":3,"sources":["file.txt"],"sourcesContent":["Line 1\nLine 2"],"names":[],"mappings":"AAAA;AAAA;AACA"}"#
     );
   }
@@ -670,35 +648,18 @@ Line 2"#
   fn should_append_items_correctly() {
     let line1 = "Line 1\n";
     let mut source = ReplaceSource::new(OriginalSource::new(line1, "file.txt"));
-    source.insert((line1.len() + 1) as i32, "Line 2\n", None);
+    source.insert((line1.len() + 1) as u32, "Line 2\n", None);
     let result_text = source.source();
-    let result_map = source
-      .map(&GenMapOption {
-        columns: true,
-        ..Default::default()
-      })
-      .expect("failed");
-    let result_list_map = source
-      .map(&GenMapOption {
-        columns: false,
-        ..Default::default()
-      })
-      .expect("failed");
+    let result_map = source.map(&MapOptions::default()).unwrap();
+    let result_list_map = source.map(&MapOptions::new(false)).unwrap();
 
     assert_eq!(result_text, "Line 1\nLine 2\n");
-
-    let mut writer = vec![];
-    result_map.to_writer(&mut writer).expect("failed");
     assert_eq!(
-      String::from_utf8(writer).unwrap(),
+      result_map.to_json().unwrap(),
       r#"{"version":3,"sources":["file.txt"],"sourcesContent":["Line 1\n"],"names":[],"mappings":"AAAA"}"#
     );
-
-    let mut writer = vec![];
-    result_list_map.to_writer(&mut writer).expect("failed");
-
     assert_eq!(
-      String::from_utf8(writer).unwrap(),
+      result_list_map.to_json().unwrap(),
       r#"{"version":3,"sources":["file.txt"],"sourcesContent":["Line 1\n"],"names":[],"mappings":"AAAA"}"#
     );
   }
@@ -710,11 +671,7 @@ Line 2"#
       ReplaceSource::new(OriginalSource::new(bootstrap_code, "file.js"));
     source.replace(7, 12, "h", Some("hello"));
     source.replace(20, 25, "w", Some("world"));
-    let result_map = source
-      .map(&GenMapOption {
-        ..Default::default()
-      })
-      .expect("failed");
+    let result_map = source.map(&MapOptions::default()).expect("failed");
 
     let target_code = source.source();
     assert_eq!(target_code, "   var h\n   var w\n");
@@ -725,11 +682,8 @@ Line 2"#
 1:0 -> [file.js] 1:0, :7 -> [file.js] 1:7 (hello), :8 -> [file.js] 1:12
 2:0 -> [file.js] 2:0, :7 -> [file.js] 2:7 (world), :8 -> [file.js] 2:12"#
     );
-
-    let mut writer = vec![];
-    result_map.to_writer(&mut writer).expect("failed");
     assert_eq!(
-      String::from_utf8(writer).unwrap(),
+      result_map.to_json().unwrap(),
       r#"{"version":3,"sources":["file.js"],"sourcesContent":["   var hello\n   var world\n"],"names":["hello","world"],"mappings":"AAAA,OAAOA,CAAK;AACZ,OAAOC,CAAK"}"#
     );
   }
@@ -737,15 +691,15 @@ Line 2"#
   #[test]
   fn should_allow_replacements_at_the_start() {
     let map = SourceMap::from_slice(
-    r#"{
-      "version":3,
-      "sources":["abc"],
-      "names":["StaticPage","data","foo"],
-      "mappings":";;AAAA,eAAe,SAASA,UAAT,OAA8B;AAAA,MAARC,IAAQ,QAARA,IAAQ;AAC3C,sBAAO;AAAA,cAAMA,IAAI,CAACC;AAAX,IAAP;AACD",
-      "sourcesContent":["export default function StaticPage({ data }) {\nreturn <div>{data.foo}</div>\n}\n"],
-      "file":"x"
-    }"#.as_bytes(),
-  ).expect("failed");
+      r#"{
+        "version":3,
+        "sources":["abc"],
+        "names":["StaticPage","data","foo"],
+        "mappings":";;AAAA,eAAe,SAASA,UAAT,OAA8B;AAAA,MAARC,IAAQ,QAARA,IAAQ;AAC3C,sBAAO;AAAA,cAAMA,IAAI,CAACC;AAAX,IAAP;AACD",
+        "sourcesContent":["export default function StaticPage({ data }) {\nreturn <div>{data.foo}</div>\n}\n"],
+        "file":"x"
+      }"#.as_bytes(),
+    ).unwrap();
 
     let code = r#"import { jsx as _jsx } from "react/jsx-runtime";
 export var __N_SSG = true;
@@ -766,13 +720,10 @@ export default function StaticPage(_ref) {
     */
 
     let mut source =
-      ReplaceSource::new(SourceMapSource::new(SourceMapSourceOptions {
-        source_code: code.to_string(),
-        name: "source.js".to_string(),
+      ReplaceSource::new(SourceMapSource::new(WithoutOriginalOptions {
+        value: code,
+        name: "source.js",
         source_map: map,
-        original_source: None,
-        inner_source_map: None,
-        remove_original_source: false,
       }));
     source.replace(0, 48, "", None);
     source.replace(49, 56, "", None);
@@ -785,11 +736,7 @@ export default function StaticPage(_ref) {
     );
 
     let target_code = source.source();
-    let source_map = source
-      .map(&GenMapOption {
-        ..Default::default()
-      })
-      .expect("failed");
+    let source_map = source.map(&MapOptions::default()).unwrap();
 
     assert_eq!(
       target_code,
@@ -802,17 +749,18 @@ function StaticPage(_ref) {
   });
 }"#
     );
+    dbg!(&source_map);
     assert_eq!(source_map.get_name(0).unwrap(), "StaticPage");
     assert_eq!(source_map.get_name(1).unwrap(), "data");
     assert_eq!(source_map.get_name(2).unwrap(), "foo");
     assert_eq!(
-      source_map.get_source_contents(0).unwrap(),
+      source_map.get_source_content(0).unwrap(),
       r#"export default function StaticPage({ data }) {
 return <div>{data.foo}</div>
 }
 "#
     );
-    assert_eq!(source_map.get_file().unwrap(), "x");
+    assert!(source_map.file().is_none());
     assert_eq!(source_map.get_source(0).unwrap(), "abc");
 
     assert_eq!(
@@ -840,24 +788,17 @@ return <div>{data.foo}</div>
     source.replace(12, 24, "", None);
 
     let target_code = source.source();
-    let source_map = source
-      .map(&GenMapOption {
-        ..Default::default()
-      })
-      .expect("failed");
+    let source_map = source.map(&MapOptions::default()).unwrap();
 
     assert_eq!(target_code, "if (false) {}");
     assert_eq!(
       with_readable_mappings(&source_map),
       r#"
-1:0 -> [document.js] 1:0, :4 -> [document.js] 1:4, :9 -> [document.js] 1:9, :11 -> [document.js] 1:11, :12 -> [document.js] 3:0"#
+1:0 -> [document.js] 1:0, :4 -> [document.js] 1:4, :9 -> [document.js] 1:9, :12 -> [document.js] 3:0"#
     );
-
-    let mut writer = vec![];
-    source_map.to_writer(&mut writer).expect("failed");
     assert_eq!(
-      String::from_utf8(writer).unwrap(),
-      r#"{"version":3,"sources":["document.js"],"sourcesContent":["if (a;b;c) {\n  a; b; c;\n}"],"names":[],"mappings":"AAAA,IAAI,KAAK,EAAE,CAEX"}"#
+      source_map.to_json().unwrap(),
+      r#"{"version":3,"sources":["document.js"],"sourcesContent":["if (a;b;c) {\n  a; b; c;\n}"],"names":[],"mappings":"AAAA,IAAI,KAAK,GAET"}"#
     );
   }
 
@@ -866,22 +807,16 @@ return <div>{data.foo}</div>
     let line1 = "hello world\n";
     let mut source = ReplaceSource::new(OriginalSource::new(line1, "file.txt"));
 
-    source.replace(-1, -999, "start2\n", None);
-    source.insert(-2, "start1\n", None);
+    source.insert(0, "start1\n", None);
+    source.replace(0, 0, "start2\n", None);
     source.replace(999, 10000, "end2", None);
     source.insert(888, "end1\n", None);
-    source.replace(-1, 999, "replaced!\n", Some("whole"));
+    source.replace(0, 999, "replaced!\n", Some("whole"));
 
     let result_text = source.source();
-    let result_map = source
-      .map(&GenMapOption {
-        columns: true,
-        ..Default::default()
-      })
-      .expect("failed");
+    let result_map = source.map(&MapOptions::default()).unwrap();
 
     assert_eq!(result_text, "start1\nstart2\nreplaced!\nend1\nend2");
-
     assert_eq!(
       with_readable_mappings(&result_map),
       r#"

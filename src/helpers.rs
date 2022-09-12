@@ -18,6 +18,7 @@ pub fn get_map<S: StreamChunks>(
       final_source: true,
     },
     &mut |chunk, mapping| {
+      dbg!(chunk, &mapping);
       mappings.push(mapping);
     },
     &mut |source_index, source: &str, source_content: Option<&str>| {
@@ -329,35 +330,33 @@ pub fn split_into_potential_tokens(source: &str) -> PotentialTokens {
   }
 }
 
-pub struct PotentialLines<'a, I> {
-  lines: I,
-  index: usize,
-  source: &'a str,
-}
-
-impl<'a, I> Iterator for PotentialLines<'a, I>
-where
-  I: Iterator<Item = (usize, char)>,
-{
-  type Item = &'a str;
-
-  fn next(&mut self) -> Option<Self::Item> {
-    self.lines.next().map(|(j, _)| {
-      let i = self.index;
-      self.index = j;
-      &self.source[i..j + 1]
-    })
-  }
-}
-
 // /[^\n]+\n?|\n/g
-pub fn split_into_lines(
-  source: &str,
-) -> PotentialLines<impl Iterator<Item = (usize, char)> + '_> {
-  PotentialLines {
-    lines: source.char_indices().take_while(|(_, ch)| ch == &'\n'),
-    index: 0,
-    source,
+pub fn split_into_lines(source: &str) -> Vec<&str> {
+  let mut results = Vec::new();
+  let mut i = 0;
+  let bytes = source.as_bytes();
+  while i < bytes.len() {
+    let cc = bytes[i];
+    if cc == 10 {
+      results.push("\n");
+      i += 1;
+    } else {
+      let mut j = i + 1;
+      while j < bytes.len() && bytes[j] != 10 {
+        j += 1;
+      }
+      results.push(&source[i..(j + 1).min(bytes.len())]);
+      i = j + 1;
+    }
+  }
+  results
+}
+
+#[test]
+fn t() {
+  let s = "Hello World!\n{}\nLine 3\nLine 4\nLine 5\nLast\nLine";
+  for i in split_into_lines(s) {
+    dbg!(i);
   }
 }
 
@@ -397,14 +396,14 @@ pub fn stream_chunks_of_source_map(
       source, source_map, on_chunk, on_source, on_name,
     ),
     MapOptions {
-      columns: false,
-      final_source: true,
+      columns: true,
+      final_source: false,
     } => stream_chunks_of_source_map_full(
       source, source_map, on_chunk, on_source, on_name,
     ),
     MapOptions {
-      columns: true,
-      final_source: false,
+      columns: false,
+      final_source: true,
     } => stream_chunks_of_source_map_lines_final(
       source, source_map, on_chunk, on_source, on_name,
     ),
@@ -476,7 +475,7 @@ fn stream_chunks_of_source_map_full(
   on_source: OnSource,
   on_name: OnName,
 ) -> GeneratedInfo {
-  let lines: Vec<_> = split_into_lines(source).collect();
+  let lines = split_into_lines(source);
   if lines.is_empty() {
     return GeneratedInfo {
       generated_line: 1,
@@ -654,7 +653,7 @@ fn stream_chunks_of_source_map_lines_full(
   on_source: OnSource,
   _on_name: OnName,
 ) -> GeneratedInfo {
-  let lines: Vec<&str> = split_into_lines(source).collect();
+  let lines = split_into_lines(source);
   if lines.is_empty() {
     return GeneratedInfo {
       generated_line: 1,
