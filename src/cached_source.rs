@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::HashMap};
+use std::{borrow::Cow, collections::HashMap, hash::Hash};
 
 use parking_lot::Mutex;
 use smol_str::SmolStr;
@@ -33,7 +33,7 @@ impl<T> CachedSource<T> {
   }
 }
 
-impl<T: Source> Source for CachedSource<T> {
+impl<T: Source + Hash> Source for CachedSource<T> {
   fn source(&self) -> Cow<str> {
     let mut cached_source = self.cached_source.lock();
     if let Some(cached_source) = &*cached_source {
@@ -72,7 +72,13 @@ impl<T: Source> Source for CachedSource<T> {
   }
 }
 
-impl<T: Source> StreamChunks for CachedSource<T> {
+impl<T: Hash> Hash for CachedSource<T> {
+  fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+    self.inner.hash(state);
+  }
+}
+
+impl<T: Source + Hash> StreamChunks for CachedSource<T> {
   fn stream_chunks(
     &self,
     options: &MapOptions,

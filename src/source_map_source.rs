@@ -1,4 +1,7 @@
-use std::borrow::Cow;
+use std::{
+  borrow::Cow,
+  hash::{Hash, Hasher},
+};
 
 use crate::{
   helpers::{get_map, stream_chunks_of_source_map, StreamChunks},
@@ -79,6 +82,17 @@ impl Source for SourceMapSource {
 
   fn map(&self, options: &MapOptions) -> Option<SourceMap> {
     get_map(self, options)
+  }
+}
+
+impl Hash for SourceMapSource {
+  fn hash<H: Hasher>(&self, state: &mut H) {
+    "SourceMapSource".hash(state);
+    self.buffer().hash(state);
+    self.source_map.hash(state);
+    self.original_source.hash(state);
+    self.inner_source_map.hash(state);
+    self.remove_original_source.hash(state);
   }
 }
 

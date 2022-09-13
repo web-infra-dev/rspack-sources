@@ -1,4 +1,7 @@
-use std::borrow::Cow;
+use std::{
+  borrow::Cow,
+  hash::{Hash, Hasher},
+};
 
 use crate::{
   helpers::{
@@ -40,6 +43,14 @@ impl Source for OriginalSource {
 
   fn map(&self, options: &MapOptions) -> Option<SourceMap> {
     get_map(self, options)
+  }
+}
+
+impl Hash for OriginalSource {
+  fn hash<H: Hasher>(&self, state: &mut H) {
+    "OriginalSource".hash(state);
+    self.buffer().hash(state);
+    self.name.hash(state);
   }
 }
 

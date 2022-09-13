@@ -1,4 +1,9 @@
-use std::{borrow::Cow, cell::RefCell, collections::HashMap};
+use std::{
+  borrow::Cow,
+  cell::RefCell,
+  collections::HashMap,
+  hash::{Hash, Hasher},
+};
 
 use crate::{
   helpers::{get_map, GeneratedInfo, OnChunk, OnName, OnSource, StreamChunks},
@@ -53,6 +58,15 @@ impl Source for ConcatSource {
 
   fn map(&self, options: &MapOptions) -> Option<SourceMap> {
     get_map(self, options)
+  }
+}
+
+impl Hash for ConcatSource {
+  fn hash<H: Hasher>(&self, state: &mut H) {
+    "ConcatSource".hash(state);
+    for child in self.children.iter() {
+      child.hash(state);
+    }
   }
 }
 

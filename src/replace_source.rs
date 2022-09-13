@@ -1,4 +1,9 @@
-use std::{borrow::Cow, cell::RefCell, collections::HashMap};
+use std::{
+  borrow::Cow,
+  cell::RefCell,
+  collections::HashMap,
+  hash::{Hash, Hasher},
+};
 
 use parking_lot::Mutex;
 
@@ -13,7 +18,7 @@ pub struct ReplaceSource<T> {
   replacements: Mutex<Vec<Replacement>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Hash)]
 struct Replacement {
   start: u32,
   end: u32,
@@ -65,7 +70,7 @@ impl<T> ReplaceSource<T> {
   }
 }
 
-impl<T: Source> Source for ReplaceSource<T> {
+impl<T: Source + Hash> Source for ReplaceSource<T> {
   fn source(&self) -> Cow<str> {
     self.sort_replacement();
 
@@ -107,6 +112,16 @@ impl<T: Source> Source for ReplaceSource<T> {
     }
     drop(replacements);
     get_map(self, options)
+  }
+}
+
+impl<T: Hash> Hash for ReplaceSource<T> {
+  fn hash<H: Hasher>(&self, state: &mut H) {
+    self.sort_replacement();
+    "ReplaceSource".hash(state);
+    for repl in self.replacements.lock().iter() {
+      repl.hash(state)
+    }
   }
 }
 

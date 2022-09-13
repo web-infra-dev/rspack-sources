@@ -2,6 +2,7 @@ use std::{
   borrow::Cow,
   convert::{TryFrom, TryInto},
   fmt,
+  hash::{Hash, Hasher},
 };
 
 use serde::{Deserialize, Serialize};
@@ -13,16 +14,50 @@ use crate::{
 
 pub type BoxSource = Box<dyn Source>;
 
-pub trait Source: StreamChunks + fmt::Debug + Sync + Send {
+pub trait Source: StreamChunks + DynHash + fmt::Debug + Sync + Send {
   fn source(&self) -> Cow<str>;
+
   fn buffer(&self) -> Cow<[u8]>;
+
   fn size(&self) -> usize;
+
   fn map(&self, options: &MapOptions) -> Option<SourceMap>;
+
+  fn update_hash(&self, state: &mut dyn Hasher) {
+    self.dyn_hash(state);
+  }
 }
 
 impl<T: Source + 'static> From<T> for BoxSource {
   fn from(s: T) -> Self {
     Box::new(s)
+  }
+}
+
+// for `updateHash`
+pub trait DynHash {
+  fn dyn_hash(&self, state: &mut dyn Hasher);
+}
+
+impl<H: Hash> DynHash for H {
+  fn dyn_hash(&self, mut state: &mut dyn Hasher) {
+    self.hash(&mut state);
+  }
+}
+
+impl Hash for dyn Source {
+  fn hash<H: Hasher>(&self, state: &mut H) {
+    self.dyn_hash(state);
+  }
+}
+
+pub trait SourceExt {
+  fn boxed(self) -> BoxSource;
+}
+
+impl<T: Source + 'static> SourceExt for T {
+  fn boxed(self) -> BoxSource {
+    self.into()
   }
 }
 

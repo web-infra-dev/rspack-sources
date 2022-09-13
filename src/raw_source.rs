@@ -1,85 +1,15 @@
-use std::borrow::Cow;
+use std::{
+  borrow::Cow,
+  hash::{Hash, Hasher},
+};
 
 use crate::{
   helpers::{
-    get_generated_source_info, split_into_lines, stream_chunks_of_raw_source,
-    GeneratedInfo, OnChunk, OnName, OnSource, StreamChunks,
+    get_generated_source_info, stream_chunks_of_raw_source, OnChunk, OnName,
+    OnSource, StreamChunks,
   },
-  source::Mapping,
   MapOptions, Source, SourceMap,
 };
-
-// impl Source for String {
-//   fn source(&self) -> Cow<str> {
-//     Cow::Borrowed(self)
-//   }
-
-//   fn buffer(&self) -> Cow<[u8]> {
-//     Cow::Borrowed(self.as_bytes())
-//   }
-
-//   fn size(&self) -> usize {
-//     self.len()
-//   }
-
-//   fn map(&self, _: &MapOptions) -> Option<SourceMap> {
-//     None
-//   }
-// }
-
-// impl Source for str {
-//   fn source(&self) -> Cow<str> {
-//     Cow::Borrowed(self)
-//   }
-
-//   fn buffer(&self) -> Cow<[u8]> {
-//     Cow::Borrowed(self.as_bytes())
-//   }
-
-//   fn size(&self) -> usize {
-//     self.len()
-//   }
-
-//   fn map(&self, _: &MapOptions) -> Option<SourceMap> {
-//     None
-//   }
-// }
-
-// impl Source for Vec<u8> {
-//   fn source(&self) -> Cow<str> {
-//     String::from_utf8_lossy(self)
-//   }
-
-//   fn buffer(&self) -> Cow<[u8]> {
-//     Cow::Borrowed(self)
-//   }
-
-//   fn size(&self) -> usize {
-//     self.len()
-//   }
-
-//   fn map(&self, _: &MapOptions) -> Option<SourceMap> {
-//     None
-//   }
-// }
-
-// impl Source for [u8] {
-//   fn source(&self) -> Cow<str> {
-//     String::from_utf8_lossy(self)
-//   }
-
-//   fn buffer(&self) -> Cow<[u8]> {
-//     Cow::Borrowed(self)
-//   }
-
-//   fn size(&self) -> usize {
-//     self.len()
-//   }
-
-//   fn map(&self, _: &MapOptions) -> Option<SourceMap> {
-//     None
-//   }
-// }
 
 #[derive(Debug, Clone)]
 pub enum RawSource {
@@ -141,6 +71,13 @@ impl Source for RawSource {
 
   fn map(&self, _: &MapOptions) -> Option<SourceMap> {
     None
+  }
+}
+
+impl Hash for RawSource {
+  fn hash<H: Hasher>(&self, state: &mut H) {
+    "RawSource".hash(state);
+    self.buffer().hash(state);
   }
 }
 
