@@ -50,7 +50,7 @@ impl MapOptions {
   }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SourceMap {
   file: Option<String>,
   mappings: String,
@@ -264,14 +264,14 @@ impl From<SourceMap> for RawSourceMap {
   }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Mapping {
   pub generated_line: u32,
   pub generated_column: u32,
   pub original: Option<OriginalLocation>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct OriginalLocation {
   pub source_index: u32,
   pub original_line: u32,

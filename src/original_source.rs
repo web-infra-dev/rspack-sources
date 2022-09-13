@@ -10,7 +10,7 @@ use crate::{
   MapOptions, Source, SourceMap,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct OriginalSource {
   value: String,
   name: String,
