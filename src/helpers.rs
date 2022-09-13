@@ -1,3 +1,7 @@
+use std::{borrow::BorrowMut, cell::RefCell, collections::HashMap};
+
+use smol_str::SmolStr;
+
 use crate::{
   source::{Mapping, OriginalLocation},
   vlq::{decode, encode},
@@ -616,7 +620,6 @@ fn stream_chunks_of_source_map_full(
   };
 
   for mapping in &source_map.decoded_mappings() {
-    dbg!(mapping);
     on_mapping(mapping);
   }
   on_mapping(&Mapping {
@@ -754,4 +757,471 @@ fn stream_chunks_of_source_map_lines_full(
     generated_line: final_line,
     generated_column: final_column,
   }
+}
+
+#[derive(Debug, Default)]
+struct SourceMapLineData {
+  pub mappings_data: Vec<i64>,
+  pub chunks: Vec<String>,
+}
+
+pub fn stream_chunks_of_combined_source_map(
+  source: &str,
+  source_map: &SourceMap,
+  inner_source_name: &str,
+  inner_source: Option<&str>,
+  inner_source_map: &SourceMap,
+  remove_inner_source: bool,
+  on_chunk: OnChunk,
+  on_source: OnSource,
+  on_name: OnName,
+  options: &MapOptions,
+) -> GeneratedInfo {
+  let on_source = RefCell::new(on_source);
+  let inner_source: RefCell<Option<SmolStr>> =
+    RefCell::new(inner_source.map(Into::into));
+  let source_mapping: RefCell<HashMap<SmolStr, u32>> =
+    RefCell::new(HashMap::new());
+  let mut name_mapping: HashMap<SmolStr, u32> = HashMap::new();
+  let source_index_mapping: RefCell<HashMap<i64, i64>> =
+    RefCell::new(HashMap::new());
+  let name_index_mapping: RefCell<HashMap<i64, i64>> =
+    RefCell::new(HashMap::new());
+  let name_index_value_mapping: RefCell<HashMap<i64, SmolStr>> =
+    RefCell::new(HashMap::new());
+  let inner_source_index: RefCell<i64> = RefCell::new(-2);
+  let inner_source_index_mapping: RefCell<HashMap<i64, i64>> =
+    RefCell::new(HashMap::new());
+  let inner_source_index_value_mapping: RefCell<
+    HashMap<i64, (SmolStr, Option<SmolStr>)>,
+  > = RefCell::new(HashMap::new());
+  let inner_source_contents: RefCell<HashMap<i64, Option<SmolStr>>> =
+    RefCell::new(HashMap::new());
+  let inner_source_content_lines: RefCell<HashMap<i64, Option<Vec<SmolStr>>>> =
+    RefCell::new(HashMap::new());
+  let inner_name_index_mapping: RefCell<HashMap<i64, i64>> =
+    RefCell::new(HashMap::new());
+  let inner_name_index_value_mapping: RefCell<HashMap<i64, SmolStr>> =
+    RefCell::new(HashMap::new());
+  let inner_source_map_line_data: RefCell<Vec<SourceMapLineData>> =
+    RefCell::new(Vec::new());
+  let find_inner_mapping = |line: i64, column: i64| -> Option<u32> {
+    let inner_source_map_line_data = inner_source_map_line_data.borrow();
+    if line as usize > inner_source_map_line_data.len() {
+      return None;
+    }
+    let mappings_data =
+      &inner_source_map_line_data[line as usize - 1].mappings_data;
+    let mut l = 0;
+    let mut r = mappings_data.len() / 5;
+    while l < r {
+      let m = (l + r) >> 1;
+      if mappings_data[m * 5] <= column as i64 {
+        l = m + 1;
+      } else {
+        r = m;
+      }
+    }
+    if l == 0 {
+      return None;
+    }
+    Some(l as u32 - 1)
+  };
+  stream_chunks_of_source_map(
+    source,
+    source_map,
+    &mut |chunk, mapping| {
+      let source_index = mapping
+        .original
+        .as_ref()
+        .map_or(-1, |o| o.source_index as i64);
+      let original_line = mapping
+        .original
+        .as_ref()
+        .map_or(-1, |o| o.original_line as i64);
+      let original_column = mapping
+        .original
+        .as_ref()
+        .map_or(-1, |o| o.original_column as i64);
+      let name_index = mapping
+        .original
+        .as_ref()
+        .and_then(|o| o.name_index)
+        .map(|i| i as i64)
+        .unwrap_or(-1);
+
+      // Check if this is a mapping to the inner source
+      if source_index == *inner_source_index.borrow() {
+        // Check if there is a mapping in the inner source
+        if let Some(idx) = find_inner_mapping(original_line, original_column) {
+          let idx = idx as usize;
+          let SourceMapLineData {
+            mappings_data,
+            chunks,
+          } = &inner_source_map_line_data.borrow()[original_line as usize - 1];
+          let mi = idx * 5;
+          let inner_source_index = mappings_data[mi + 1];
+          let inner_original_line = mappings_data[mi + 2];
+          let mut inner_original_column = mappings_data[mi + 3];
+          let mut inner_name_index = mappings_data[mi + 4];
+          if inner_source_index >= 0 {
+            // Check for an identity mapping
+            // where we are allowed to adjust the original column
+            let inner_chunk = &chunks[idx];
+            let inner_generated_column = mappings_data[mi];
+            let location_in_chunk = original_column - inner_generated_column;
+            if location_in_chunk > 0 {
+              let mut inner_source_content_lines =
+                inner_source_content_lines.borrow_mut();
+              let mut original_source_lines = inner_source_content_lines
+                .get(&inner_source_index)
+                .cloned()
+                .and_then(|id| id);
+              if original_source_lines.is_none() {
+                let inner_source_contents = inner_source_contents.borrow();
+                original_source_lines = if let Some(Some(original_source)) =
+                  inner_source_contents.get(&inner_source_index)
+                {
+                  Some(
+                    split_into_lines(original_source)
+                      .into_iter()
+                      .map(Into::into)
+                      .collect(),
+                  )
+                } else {
+                  None
+                };
+                inner_source_content_lines
+                  .insert(inner_source_index, original_source_lines.clone());
+              }
+              if let Some(original_source_lines) = original_source_lines {
+                let original_chunk = original_source_lines
+                  .get(inner_original_line as usize - 1)
+                  .map_or("", |lines| {
+                    &lines[inner_original_column as usize
+                      ..(inner_original_column + location_in_chunk) as usize]
+                  });
+                if &inner_chunk[..location_in_chunk as usize] == original_chunk
+                {
+                  inner_original_column += location_in_chunk;
+                  inner_name_index = -1;
+                }
+              }
+            }
+
+            // We have a inner mapping to original source
+
+            // emit source when needed and compute global source index
+            let mut inner_source_index_mapping =
+              inner_source_index_mapping.borrow_mut();
+            let mut source_index = inner_source_index_mapping
+              .get(&inner_source_index)
+              .copied()
+              .unwrap_or(-2);
+            if source_index == -2 {
+              let (source, source_content) = inner_source_index_value_mapping
+                .borrow()
+                .get(&inner_source_index)
+                .cloned()
+                .unwrap_or(("".into(), None));
+              let mut source_mapping = source_mapping.borrow_mut();
+              let mut global_index = source_mapping.get(&source).copied();
+              if global_index.is_none() {
+                let len = source_mapping.len() as u32;
+                source_mapping.insert(source.clone(), len);
+                on_source.borrow_mut()(len, &source, source_content.as_deref());
+                global_index = Some(len);
+              }
+              source_index = global_index.unwrap() as i64;
+              inner_source_index_mapping
+                .insert(inner_source_index, source_index);
+            }
+
+            // emit name when needed and compute global name index
+            let mut final_name_index = -1;
+            if inner_name_index >= 0 {
+              // when we have a inner name
+              let mut inner_name_index_mapping =
+                inner_name_index_mapping.borrow_mut();
+              final_name_index = inner_name_index_mapping
+                .get(&inner_name_index)
+                .copied()
+                .unwrap_or(-2);
+              if final_name_index == -2 {
+                if let Some(name) = inner_name_index_value_mapping
+                  .borrow()
+                  .get(&inner_name_index)
+                {
+                  let mut global_index = name_mapping.get(name).copied();
+                  if global_index.is_none() {
+                    let len = name_mapping.len() as u32;
+                    name_mapping.insert(name.to_owned(), len);
+                    on_name(len, name);
+                    global_index = Some(len);
+                  }
+                  final_name_index = global_index.unwrap() as i64;
+                } else {
+                  final_name_index = -1;
+                }
+                inner_name_index_mapping
+                  .insert(inner_name_index, final_name_index);
+              }
+            } else if name_index >= 0 {
+              // when we don't have an inner name,
+              // but we have an outer name
+              // it can be used when inner original code equals to the name
+              let mut inner_source_content_lines =
+                inner_source_content_lines.borrow_mut();
+              let mut original_source_lines = inner_source_content_lines
+                .get(&inner_source_index)
+                .cloned()
+                .and_then(|id| id);
+              if original_source_lines.is_none() {
+                let inner_source_contents = inner_source_contents.borrow_mut();
+                original_source_lines = inner_source_contents
+                  .get(&inner_source_index)
+                  .and_then(|original_source| {
+                    original_source.as_ref().map(|s| {
+                      split_into_lines(&s)
+                        .into_iter()
+                        .map(Into::into)
+                        .collect::<Vec<SmolStr>>()
+                    })
+                  });
+                inner_source_content_lines
+                  .insert(inner_source_index, original_source_lines.clone());
+              }
+              if let Some(original_source_lines) = original_source_lines {
+                let name_index_value_mapping =
+                  name_index_value_mapping.borrow();
+                let name =
+                  name_index_value_mapping.get(&name_index).cloned().unwrap();
+                let original_name = original_source_lines
+                  .get(inner_original_line as usize - 1)
+                  .map_or("", |i| {
+                    &i[inner_original_column as usize
+                      ..inner_original_column as usize + name.len()]
+                  });
+                if name == original_name {
+                  let mut name_index_mapping = name_index_mapping.borrow_mut();
+                  final_name_index =
+                    name_index_mapping.get(&name_index).copied().unwrap_or(-2);
+                  if final_name_index == -2 {
+                    if let Some(name) =
+                      name_index_value_mapping.get(&name_index)
+                    {
+                      let mut global_index = name_mapping.get(name).copied();
+                      if global_index.is_none() {
+                        let len = name_mapping.len() as u32;
+                        name_mapping.insert(name.to_owned(), len);
+                        on_name(len, name);
+                        global_index = Some(len);
+                      }
+                      final_name_index = global_index.unwrap() as i64;
+                    } else {
+                      final_name_index = -1;
+                    }
+                    name_index_mapping.insert(name_index, final_name_index);
+                  }
+                }
+              }
+            }
+            on_chunk(
+              chunk,
+              Mapping {
+                generated_line: mapping.generated_line,
+                generated_column: mapping.generated_column,
+                original: mapping.original.map(|original| OriginalLocation {
+                  source_index: original.source_index,
+                  original_line: inner_original_line as u32,
+                  original_column: inner_original_column as u32,
+                  name_index: (final_name_index >= 0)
+                    .then_some(final_name_index as u32),
+                }),
+              },
+            );
+            return;
+          }
+        }
+
+        // We have a mapping to the inner source, but no inner mapping
+        if remove_inner_source {
+          on_chunk(
+            chunk,
+            Mapping {
+              generated_line: mapping.generated_line,
+              generated_column: mapping.generated_column,
+              original: None,
+            },
+          );
+          return;
+        } else {
+          let mut source_index_mapping = source_index_mapping.borrow_mut();
+          if source_index_mapping.get(&source_index) == Some(&-2) {
+            let mut source_mapping = source_mapping.borrow_mut();
+            let mut global_index =
+              source_mapping.get(inner_source_name).copied();
+            if global_index.is_none() {
+              let len = source_mapping.len() as u32;
+              source_mapping.insert(source.into(), len);
+              on_source.borrow_mut()(
+                len,
+                inner_source_name,
+                inner_source.borrow().as_deref(),
+              );
+              global_index = Some(len);
+            }
+            source_index_mapping
+              .insert(source_index, global_index.unwrap() as i64);
+          }
+        }
+      }
+
+      let final_source_index = source_index_mapping
+        .borrow()
+        .get(&source_index)
+        .copied()
+        .unwrap_or(-1);
+      if final_source_index < 0 {
+        // no source, so we make it a generated chunk
+        on_chunk(
+          chunk,
+          Mapping {
+            generated_line: mapping.generated_line,
+            generated_column: mapping.generated_column,
+            original: None,
+          },
+        );
+      } else {
+        // Pass through the chunk with mapping
+        let mut name_index_mapping = name_index_mapping.borrow_mut();
+        let mut final_name_index =
+          name_index_mapping.get(&name_index).copied().unwrap_or(-1);
+        if final_name_index == -2 {
+          let name_index_value_mapping = name_index_value_mapping.borrow();
+          let name = name_index_value_mapping.get(&name_index).unwrap();
+          let mut global_index = name_mapping.get(name).copied();
+          if global_index.is_none() {
+            let len = name_index_value_mapping.len() as u32;
+            name_mapping.borrow_mut().insert(name.to_owned(), len);
+            on_name(len, name);
+            global_index = Some(len);
+          }
+          final_name_index = global_index.unwrap() as i64;
+          name_index_mapping.insert(name_index, final_name_index);
+        }
+        on_chunk(
+          chunk,
+          Mapping {
+            generated_line: mapping.generated_line,
+            generated_column: mapping.generated_column,
+            original: (final_source_index > 0).then_some(OriginalLocation {
+              source_index: final_source_index as u32,
+              original_line: original_line as u32,
+              original_column: original_column as u32,
+              name_index: (final_name_index >= 0)
+                .then_some(final_name_index as u32),
+            }),
+          },
+        );
+      }
+    },
+    &mut |i, source, source_content| {
+      let i = i as i64;
+      let mut source_content: Option<SmolStr> = source_content.map(Into::into);
+      if source == inner_source_name {
+        *inner_source_index.borrow_mut() = i;
+        let mut inner_source = inner_source.borrow_mut();
+        if let Some(inner_source) = inner_source.as_ref() {
+          source_content = Some(inner_source.clone());
+        } else {
+          *inner_source = source_content.clone();
+        }
+        source_index_mapping.borrow_mut().insert(i, -2);
+        stream_chunks_of_source_map(
+          &source_content.unwrap(),
+          inner_source_map,
+          &mut |chunk, mapping| {
+            let mut inner_source_map_line_data =
+              inner_source_map_line_data.borrow_mut();
+            while inner_source_map_line_data.len()
+              <= mapping.generated_line as usize
+            {
+              inner_source_map_line_data.push(SourceMapLineData::default());
+            }
+            let data = &mut inner_source_map_line_data
+              [mapping.generated_line as usize - 1];
+            data.mappings_data.push(mapping.generated_column as i64);
+            data.mappings_data.push(
+              mapping
+                .original
+                .as_ref()
+                .map_or(-1, |original| original.source_index as i64),
+            );
+            data.mappings_data.push(
+              mapping
+                .original
+                .as_ref()
+                .map_or(-1, |original| original.original_line as i64),
+            );
+            data.mappings_data.push(
+              mapping
+                .original
+                .as_ref()
+                .map_or(-1, |original| original.original_column as i64),
+            );
+            data.mappings_data.push(
+              mapping
+                .original
+                .and_then(|original| original.name_index)
+                .map(Into::into)
+                .unwrap_or(-1),
+            );
+            // SAFETY: final_source is false
+            data.chunks.push(chunk.unwrap().to_owned());
+          },
+          &mut |i, source, source_content| {
+            let i = i as i64;
+            inner_source_contents
+              .borrow_mut()
+              .insert(i, source_content.map(Into::into));
+            inner_source_content_lines.borrow_mut().insert(i, None);
+            inner_source_index_mapping.borrow_mut().insert(i, -2);
+            inner_source_index_value_mapping
+              .borrow_mut()
+              .insert(i, (source.into(), source_content.map(Into::into)));
+          },
+          &mut |i, name| {
+            let i = i as i64;
+            inner_name_index_mapping.borrow_mut().insert(i, -2);
+            inner_name_index_value_mapping
+              .borrow_mut()
+              .insert(i, name.into());
+          },
+          &MapOptions {
+            columns: options.columns,
+            final_source: false,
+          },
+        );
+      } else {
+        let mut source_mapping = source_mapping.borrow_mut();
+        let mut global_index = source_mapping.get(source).copied();
+        if global_index.is_none() {
+          let len = source_mapping.len() as u32;
+          source_mapping.insert(source.into(), len);
+          on_source.borrow_mut()(len, source, source_content.as_deref());
+          global_index = Some(len);
+        }
+        source_index_mapping
+          .borrow_mut()
+          .insert(i, global_index.unwrap() as i64);
+      }
+    },
+    &mut |i, name| {
+      let i = i as i64;
+      name_index_mapping.borrow_mut().insert(i, -2);
+      name_index_value_mapping.borrow_mut().insert(i, name.into());
+    },
+    options,
+  )
 }

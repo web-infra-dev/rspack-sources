@@ -23,6 +23,7 @@ jobs:
       - name: Install
         uses: actions-rs/toolchain@v1
         with:
+          toolchain: nightly
           profile: minimal
           override: true
           components: rustfmt, clippy

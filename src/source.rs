@@ -85,7 +85,7 @@ impl MapOptions {
   }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub struct SourceMap {
   file: Option<String>,
   mappings: String,
@@ -208,13 +208,13 @@ impl SourceMap {
     RawSourceMap::from_reader(s)?.try_into()
   }
 
-  pub fn to_json(&self) -> Result<String> {
-    let raw = RawSourceMap::from(self.clone());
+  pub fn to_json(self) -> Result<String> {
+    let raw = RawSourceMap::from(self);
     raw.to_json()
   }
 
-  pub fn to_writer<W: std::io::Write>(&self, w: W) -> Result<()> {
-    let raw = RawSourceMap::from(self.clone());
+  pub fn to_writer<W: std::io::Write>(self, w: W) -> Result<()> {
+    let raw = RawSourceMap::from(self);
     raw.to_writer(w)
   }
 }

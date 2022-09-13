@@ -4,11 +4,14 @@ use std::{
 };
 
 use crate::{
-  helpers::{get_map, stream_chunks_of_source_map, StreamChunks},
+  helpers::{
+    get_map, stream_chunks_of_combined_source_map, stream_chunks_of_source_map,
+    StreamChunks,
+  },
   MapOptions, Source, SourceMap,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct SourceMapSourceOptions<V, N> {
   pub value: V,
   pub name: N,
@@ -105,7 +108,18 @@ impl StreamChunks for SourceMapSource {
     on_name: crate::helpers::OnName,
   ) -> crate::helpers::GeneratedInfo {
     if let Some(inner_source_map) = &self.inner_source_map {
-      todo!()
+      stream_chunks_of_combined_source_map(
+        &self.value,
+        &self.source_map,
+        &self.name,
+        self.original_source.as_deref(),
+        inner_source_map,
+        self.remove_original_source,
+        on_chunk,
+        on_source,
+        on_name,
+        options,
+      )
     } else {
       stream_chunks_of_source_map(
         &self.value,
@@ -134,6 +148,68 @@ mod tests {
       Box::new(OriginalSource::new("Translate: ", "header.txt")),
       Box::new(RawSource::from("Other text")),
     ]);
+    let source_r_code =
+      "Translated: Hallo Welt\nist ein test Text\nAnderer Text";
+    let source_r_map = SourceMap::from_json(
+      r#"{
+        "version": 3,
+        "sources": [ "text" ],
+        "names": [ "Hello", "World", "nope" ],
+        "mappings": "YAAAA,K,CAAMC;AACNC,O,MAAU;AACC,O,CAAM",
+        "file": "translated.txt",
+        "sourcesContent": [ "Hello World\nis a test string\n" ]
+      }"#,
+    )
+    .unwrap();
+    let sms1 = SourceMapSource::new(SourceMapSourceOptions {
+      value: source_r_code,
+      name: "text",
+      source_map: source_r_map.clone(),
+      original_source: Some(inner_source.source().to_string()),
+      inner_source_map: inner_source.map(&MapOptions::default()),
+      remove_original_source: false,
+    });
+    let sms2 = SourceMapSource::new(SourceMapSourceOptions {
+      value: source_r_code,
+      name: "text",
+      source_map: source_r_map.clone(),
+      original_source: Some(inner_source.source().to_string()),
+      inner_source_map: inner_source.map(&MapOptions::default()),
+      remove_original_source: true,
+    });
+    let expected_content =
+      "Translated: Hallo Welt\nist ein test Text\nAnderer Text";
+    assert_eq!(sms1.source(), expected_content);
+    assert_eq!(sms2.source(), expected_content);
+    assert_eq!(
+      sms1.map(&MapOptions::default()).unwrap(),
+      SourceMap::from_json(
+        r#"{
+          "mappings": "YAAAA,K,CAAMC;AACN,O,MAAU;ACCC,O,CAAM",
+          "names": ["Hello", "World"],
+          "sources": ["hello-world.txt", "text"],
+          "sourcesContent": [
+            "Hello World\nis a test string\n",
+            "Hello World\nis a test string\nTranslate: Other text"
+          ],
+          "version": 3
+        }"#
+      )
+      .unwrap(),
+    );
+    assert_eq!(
+      sms2.map(&MapOptions::default()).unwrap(),
+      SourceMap::from_json(
+        r#"{
+          "mappings": "YAAAA,K,CAAMC;AACN,O,MAAU",
+          "names": ["Hello", "World"],
+          "sources": ["hello-world.txt"],
+          "sourcesContent": ["Hello World\nis a test string\n"],
+          "version": 3
+        }"#
+      )
+      .unwrap(),
+    );
   }
 
   #[test]
@@ -223,6 +299,47 @@ mod tests {
     assert_eq!(
       map.mappings(),
       "AAAA;AAAA;ACAA,ICAA,EDAA,ECAA,EFAA;AEAA,EFAA;ACAA",
+    );
+  }
+
+  #[test]
+  fn should_not_crash_without_original_source_when_mapping_names() {
+    let source = SourceMapSource::new(SourceMapSourceOptions {
+      value: "h",
+      name: "hello.txt",
+      source_map: SourceMap::from_json(
+        r#"{
+          "version": 3,
+          "sources": ["hello.txt"],
+          "mappings": "AAAAA",
+          "names": ["hello"]
+        }"#,
+      )
+      .unwrap(),
+      original_source: Some("hello".to_string()),
+      inner_source_map: Some(
+        SourceMap::from_json(
+          r#"{
+          "version": 3,
+          "sources": ["hello world.txt"],
+          "mappings": "AAAA"
+        }"#,
+        )
+        .unwrap(),
+      ),
+      remove_original_source: false,
+    });
+    assert_eq!(
+      source.map(&MapOptions::default()).unwrap(),
+      SourceMap::from_json(
+        r#"{
+          "mappings": "AAAA",
+          "names": [],
+          "sources": ["hello world.txt"],
+          "version": 3
+        }"#
+      )
+      .unwrap()
     );
   }
 }
