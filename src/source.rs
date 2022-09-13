@@ -26,7 +26,7 @@ impl<T: Source + 'static> From<T> for BoxSource {
   }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct MapOptions {
   pub columns: bool,
   pub final_source: bool,
@@ -85,7 +85,7 @@ impl SourceMap {
   }
 
   pub fn decoded_mappings(&self) -> Vec<Mapping> {
-    decode_mappings(&self.mappings)
+    decode_mappings(self)
   }
 
   pub fn mappings(&self) -> &str {

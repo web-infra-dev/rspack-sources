@@ -2,8 +2,8 @@ use std::borrow::Cow;
 
 use crate::{
   helpers::{
-    get_generated_source_info, split_into_lines, GeneratedInfo, OnChunk,
-    OnName, OnSource, StreamChunks,
+    get_generated_source_info, split_into_lines, stream_chunks_of_raw_source,
+    GeneratedInfo, OnChunk, OnName, OnSource, StreamChunks,
   },
   source::Mapping,
   MapOptions, Source, SourceMap,
@@ -149,38 +149,19 @@ impl StreamChunks for RawSource {
     &self,
     options: &MapOptions,
     on_chunk: OnChunk,
-    _on_source: OnSource,
-    _on_name: OnName,
+    on_source: OnSource,
+    on_name: OnName,
   ) -> crate::helpers::GeneratedInfo {
     if options.final_source {
       get_generated_source_info(&self.source())
     } else {
-      let mut line = 1;
-      let mut last_line = None;
-      let source = self.source();
-      for l in split_into_lines(&source) {
-        on_chunk(
-          Some(l),
-          Mapping {
-            generated_line: line,
-            generated_column: 0,
-            original: None,
-          },
-        );
-        line += 1;
-        last_line = Some(l);
-      }
-      if let Some(last_line) = last_line && !last_line.ends_with('\n') {
-        GeneratedInfo {
-          generated_line: line,
-          generated_column: last_line.len() as u32,
-        }
-      } else {
-        GeneratedInfo {
-          generated_line: line + 1,
-          generated_column: 0,
-        }
-      }
+      stream_chunks_of_raw_source(
+        &self.source(),
+        options,
+        on_chunk,
+        on_source,
+        on_name,
+      )
     }
   }
 }

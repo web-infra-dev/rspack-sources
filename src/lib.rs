@@ -1,3 +1,4 @@
+mod cached_source;
 mod concat_source;
 mod error;
 mod helpers;
@@ -8,6 +9,7 @@ mod source;
 mod source_map_source;
 mod vlq;
 
+pub use cached_source::CachedSource;
 pub use concat_source::ConcatSource;
 pub use error::{Error, Result};
 pub use original_source::OriginalSource;

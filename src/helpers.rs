@@ -65,7 +65,7 @@ pub struct GeneratedInfo {
   pub generated_column: u32,
 }
 
-pub fn decode_mappings(raw: &str) -> Vec<Mapping> {
+pub fn decode_mappings(source_map: &SourceMap) -> Vec<Mapping> {
   let mut source_index = 0;
   let mut original_line = 1;
   let mut original_column = 0;
@@ -73,7 +73,7 @@ pub fn decode_mappings(raw: &str) -> Vec<Mapping> {
   let mut nums = Vec::with_capacity(6);
 
   let mut mappings = Vec::new();
-  for (generated_line, line) in raw.split(';').enumerate() {
+  for (generated_line, line) in source_map.mappings().split(';').enumerate() {
     if line.is_empty() {
       continue;
     }
@@ -94,9 +94,12 @@ pub fn decode_mappings(raw: &str) -> Vec<Mapping> {
 
       if nums.len() > 1 {
         if nums.len() != 4 && nums.len() != 5 {
-          panic!();
+          panic!("got {} segments, expected 4 or 5", nums.len());
         }
         source_index = (i64::from(source_index) + nums[1]) as u32;
+        if source_index >= source_map.sources().len() as u32 {
+          panic!("bad reference to source #{}", source_index);
+        }
 
         src = Some(source_index);
         original_line = (i64::from(original_line) + nums[2]) as u32;
@@ -104,6 +107,9 @@ pub fn decode_mappings(raw: &str) -> Vec<Mapping> {
 
         if nums.len() > 4 {
           name_index = (i64::from(name_index) + nums[4]) as u32;
+          if name_index >= source_map.names().len() as u32 {
+            panic!("bad reference to name #{}", name_index);
+          }
           name = Some(name_index as u32);
         }
       }
@@ -350,14 +356,6 @@ pub fn split_into_lines(source: &str) -> Vec<&str> {
   results
 }
 
-#[test]
-fn t() {
-  let s = "Hello World!\n{}\nLine 3\nLine 4\nLine 5\nLast\nLine";
-  for i in split_into_lines(s) {
-    dbg!(i);
-  }
-}
-
 pub fn get_generated_source_info(source: &str) -> GeneratedInfo {
   let last_line_start = source.rfind('\n');
   if let Some(last_line_start) = last_line_start {
@@ -375,6 +373,40 @@ pub fn get_generated_source_info(source: &str) -> GeneratedInfo {
   GeneratedInfo {
     generated_line: 1,
     generated_column: source.len() as u32,
+  }
+}
+
+pub fn stream_chunks_of_raw_source(
+  source: &str,
+  _options: &MapOptions,
+  on_chunk: OnChunk,
+  _on_source: OnSource,
+  _on_name: OnName,
+) -> GeneratedInfo {
+  let mut line = 1;
+  let mut last_line = None;
+  for l in split_into_lines(&source) {
+    on_chunk(
+      Some(l),
+      Mapping {
+        generated_line: line,
+        generated_column: 0,
+        original: None,
+      },
+    );
+    line += 1;
+    last_line = Some(l);
+  }
+  if let Some(last_line) = last_line && !last_line.ends_with('\n') {
+    GeneratedInfo {
+      generated_line: line,
+      generated_column: last_line.len() as u32,
+    }
+  } else {
+    GeneratedInfo {
+      generated_line: line + 1,
+      generated_column: 0,
+    }
   }
 }
 
