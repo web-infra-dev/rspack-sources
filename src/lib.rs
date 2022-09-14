@@ -16,7 +16,8 @@ pub use original_source::OriginalSource;
 pub use raw_source::RawSource;
 pub use replace_source::ReplaceSource;
 pub use source::{
-  BoxSource, MapOptions, Mapping, OriginalLocation, RawSourceMap, Source,
-  SourceMap,
+  BoxSource, MapOptions, Mapping, OriginalLocation, Source, SourceMap,
 };
-pub use source_map_source::SourceMapSource;
+pub use source_map_source::{
+  SourceMapSource, SourceMapSourceOptions, WithoutOriginalOptions,
+};

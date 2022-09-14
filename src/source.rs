@@ -152,8 +152,8 @@ impl SourceMap {
   }
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct RawSourceMap {
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct RawSourceMap {
   pub version: Option<u8>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub file: Option<String>,

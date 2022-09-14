@@ -101,19 +101,12 @@ pub fn decode_mappings(source_map: &SourceMap) -> Vec<Mapping> {
           panic!("got {} segments, expected 4 or 5", nums.len());
         }
         source_index = (i64::from(source_index) + nums[1]) as u32;
-        if source_index >= source_map.sources().len() as u32 {
-          panic!("bad reference to source #{}", source_index);
-        }
-
         src = Some(source_index);
         original_line = (i64::from(original_line) + nums[2]) as u32;
         original_column = (i64::from(original_column) + nums[3]) as u32;
 
         if nums.len() > 4 {
           name_index = (i64::from(name_index) + nums[4]) as u32;
-          if name_index >= source_map.names().len() as u32 {
-            panic!("bad reference to name #{}", name_index);
-          }
           name = Some(name_index as u32);
         }
       }
@@ -156,15 +149,15 @@ fn encode_full_mappings(mappings: &[Mapping]) -> String {
     if active_mapping && current_line == mapping.generated_line {
       // A mapping is still active
       if let Some(original) = &mapping.original
-      && original.source_index == current_source_index
-      && original.original_line == current_original_line
-      && original.original_column == current_original_column
-      && !active_name
-      && original.name_index.is_none()
-    {
-      // avoid repeating the same original mapping
-      return acc;
-    }
+        && original.source_index == current_source_index
+        && original.original_line == current_original_line
+        && original.original_column == current_original_column
+        && !active_name
+        && original.name_index.is_none()
+      {
+        // avoid repeating the same original mapping
+        return acc;
+      }
     } else {
       // No mapping is active
       if mapping.original.is_none() {
@@ -1102,7 +1095,7 @@ pub fn stream_chunks_of_combined_source_map(
           let name = name_index_value_mapping.get(&name_index).unwrap();
           let mut global_index = name_mapping.get(name).copied();
           if global_index.is_none() {
-            let len = name_index_value_mapping.len() as u32;
+            let len = name_mapping.len() as u32;
             name_mapping.borrow_mut().insert(name.to_owned(), len);
             on_name(len, name);
             global_index = Some(len);
@@ -1115,7 +1108,7 @@ pub fn stream_chunks_of_combined_source_map(
           Mapping {
             generated_line: mapping.generated_line,
             generated_column: mapping.generated_column,
-            original: (final_source_index > 0).then_some(OriginalLocation {
+            original: (final_source_index >= 0).then_some(OriginalLocation {
               source_index: final_source_index as u32,
               original_line: original_line as u32,
               original_column: original_column as u32,

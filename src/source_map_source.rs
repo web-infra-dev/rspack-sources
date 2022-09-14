@@ -135,7 +135,9 @@ impl StreamChunks for SourceMapSource {
 
 #[cfg(test)]
 mod tests {
-  use crate::{BoxSource, ConcatSource, OriginalSource, RawSource};
+  use crate::{
+    BoxSource, ConcatSource, OriginalSource, RawSource, ReplaceSource,
+  };
 
   use super::*;
 
@@ -210,6 +212,10 @@ mod tests {
       )
       .unwrap(),
     );
+
+    let mut hasher = twox_hash::XxHash64::default();
+    sms1.hash(&mut hasher);
+    assert_eq!(format!("{:x}", hasher.finish()), "60180dd058e3cdd7");
   }
 
   #[test]
@@ -224,7 +230,7 @@ mod tests {
       name: "hello.txt",
       source_map: SourceMap::new(None, "AAAA", [], [], []),
     });
-    let a = SourceMapSource::new(WithoutOriginalOptions {
+    let c = SourceMapSource::new(WithoutOriginalOptions {
       value: "hello world\n",
       name: "hello.txt",
       source_map: SourceMap::new(
@@ -235,6 +241,39 @@ mod tests {
         [],
       ),
     });
+    let sources = [a, b, c].into_iter().map(|s| {
+      let mut r = ReplaceSource::new(s);
+      r.replace(1, 5, "i", None);
+      r
+    });
+    let source = ConcatSource::new(sources);
+    assert_eq!(source.source(), "hi world\nhi world\nhi world\n");
+    assert_eq!(
+      source.map(&MapOptions::default()).unwrap(),
+      SourceMap::from_json(
+        r#"{
+          "mappings": "AAAA;;ACAA,CAAC,CAAI",
+          "names": [],
+          "sources": [null, "hello-source.txt"],
+          "sourcesContent": [null,"hello world\n"],
+          "version": 3
+        }"#
+      )
+      .unwrap()
+    );
+    assert_eq!(
+      source.map(&MapOptions::new(false)).unwrap(),
+      SourceMap::from_json(
+        r#"{
+          "mappings": "AAAA;;ACAA",
+          "names": [],
+          "sources": [null, "hello-source.txt"],
+          "sourcesContent": [null,"hello world\n"],
+          "version": 3
+        }"#
+      )
+      .unwrap()
+    );
   }
 
   #[test]
@@ -336,6 +375,51 @@ mod tests {
           "mappings": "AAAA",
           "names": [],
           "sources": ["hello world.txt"],
+          "version": 3
+        }"#
+      )
+      .unwrap()
+    );
+  }
+
+  #[test]
+  fn should_map_generated_lines_to_the_inner_source() {
+    let source = SourceMapSource::new(SourceMapSourceOptions {
+      value: "Message: H W!",
+      name: "HELLO_WORLD.txt",
+      source_map: SourceMap::from_json(
+        r#"{
+          "version": 3,
+          "sources": ["messages.txt", "HELLO_WORLD.txt"],
+          "mappings": "AAAAA,SCAAC,EAAMC,C",
+          "names": ["Message", "hello", "world"]
+        }"#,
+      )
+      .unwrap(),
+      original_source: Some("HELLO WORLD".to_string()),
+      inner_source_map: Some(
+        SourceMap::from_json(
+          r#"{
+            "version": 3,
+            "mappings": "AAAAA,M",
+            "sources": ["hello world.txt"],
+            "sourcesContent": ["hello world"]
+          }"#,
+        )
+        .unwrap(),
+      ),
+      remove_original_source: false,
+    });
+    assert_eq!(source.source(), "Message: H W!");
+    assert_eq!(source.size(), 13);
+    assert_eq!(
+      source.map(&MapOptions::default()).unwrap(),
+      SourceMap::from_json(
+        r#"{
+          "mappings": "AAAAA,SCAA,ECAMC,C",
+          "names": ["Message", "world"],
+          "sources": ["messages.txt", "hello world.txt", "HELLO_WORLD.txt"],
+          "sourcesContent": [null, "hello world", "HELLO WORLD"],
           "version": 3
         }"#
       )
