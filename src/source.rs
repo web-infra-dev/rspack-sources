@@ -103,8 +103,8 @@ impl SourceMap {
     names: impl IntoIterator<Item = String>,
   ) -> Self {
     Self {
-      file: file.map(Into::into),
-      mappings: mappings.into(),
+      file,
+      mappings,
       sources: sources.into_iter().collect(),
       sources_content: sources_content.into_iter().collect(),
       names: names.into_iter().collect(),
