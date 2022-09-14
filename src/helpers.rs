@@ -382,7 +382,7 @@ pub fn stream_chunks_of_raw_source(
 ) -> GeneratedInfo {
   let mut line = 1;
   let mut last_line = None;
-  for l in split_into_lines(&source) {
+  for l in split_into_lines(source) {
     on_chunk(
       Some(l),
       Mapping {
@@ -758,6 +758,7 @@ struct SourceMapLineData {
   pub chunks: Vec<String>,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn stream_chunks_of_combined_source_map(
   source: &str,
   source_map: &SourceMap,
@@ -975,7 +976,7 @@ pub fn stream_chunks_of_combined_source_map(
                   .get(&inner_source_index)
                   .and_then(|original_source| {
                     original_source.as_ref().map(|s| {
-                      split_into_lines(&s)
+                      split_into_lines(s)
                         .into_iter()
                         .map(Into::into)
                         .collect::<Vec<SmolStr>>()
