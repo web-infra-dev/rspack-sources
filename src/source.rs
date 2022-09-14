@@ -95,19 +95,19 @@ pub struct SourceMap {
 }
 
 impl SourceMap {
-  pub fn new<S: Into<String>>(
-    file: Option<S>,
-    mappings: S,
-    sources: impl IntoIterator<Item = S>,
-    sources_content: impl IntoIterator<Item = S>,
-    names: impl IntoIterator<Item = S>,
+  pub fn new(
+    file: Option<String>,
+    mappings: String,
+    sources: impl IntoIterator<Item = String>,
+    sources_content: impl IntoIterator<Item = String>,
+    names: impl IntoIterator<Item = String>,
   ) -> Self {
     Self {
       file: file.map(Into::into),
       mappings: mappings.into(),
-      sources: sources.into_iter().map(|s| s.into()).collect(),
-      sources_content: sources_content.into_iter().map(|s| s.into()).collect(),
-      names: names.into_iter().map(|s| s.into()).collect(),
+      sources: sources.into_iter().collect(),
+      sources_content: sources_content.into_iter().collect(),
+      names: names.into_iter().collect(),
     }
   }
 

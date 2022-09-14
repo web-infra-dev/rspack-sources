@@ -223,21 +223,27 @@ mod tests {
     let a = SourceMapSource::new(WithoutOriginalOptions {
       value: "hello world\n",
       name: "hello.txt",
-      source_map: SourceMap::new(None, "AAAA", [""], [""], []),
+      source_map: SourceMap::new(
+        None,
+        "AAAA".to_string(),
+        ["".to_string()],
+        ["".to_string()],
+        [],
+      ),
     });
     let b = SourceMapSource::new(WithoutOriginalOptions {
       value: "hello world\n",
       name: "hello.txt",
-      source_map: SourceMap::new(None, "AAAA", [], [], []),
+      source_map: SourceMap::new(None, "AAAA".to_string(), [], [], []),
     });
     let c = SourceMapSource::new(WithoutOriginalOptions {
       value: "hello world\n",
       name: "hello.txt",
       source_map: SourceMap::new(
         None,
-        "AAAA",
-        ["hello-source.txt"],
-        ["hello world\n"],
+        "AAAA".to_string(),
+        ["hello-source.txt".to_string()],
+        ["hello world\n".to_string()],
         [],
       ),
     });
@@ -301,22 +307,46 @@ mod tests {
     let a = SourceMapSource::new(WithoutOriginalOptions {
       value: "hello\n",
       name: "a",
-      source_map: SourceMap::new(None, "AAAA;AACA", ["hello1"], [], []),
+      source_map: SourceMap::new(
+        None,
+        "AAAA;AACA".to_string(),
+        ["hello1".to_string()],
+        [],
+        [],
+      ),
     });
     let b = SourceMapSource::new(WithoutOriginalOptions {
       value: "hi",
       name: "b",
-      source_map: SourceMap::new(None, "AAAA,EAAE", ["hello2"], [], []),
+      source_map: SourceMap::new(
+        None,
+        "AAAA,EAAE".to_string(),
+        ["hello2".to_string()],
+        [],
+        [],
+      ),
     });
     let b2 = SourceMapSource::new(WithoutOriginalOptions {
       value: "hi",
       name: "b",
-      source_map: SourceMap::new(None, "AAAA,EAAE", ["hello3"], [], []),
+      source_map: SourceMap::new(
+        None,
+        "AAAA,EAAE".to_string(),
+        ["hello3".to_string()],
+        [],
+        [],
+      ),
     });
     let c = SourceMapSource::new(WithoutOriginalOptions {
       value: "",
       name: "c",
-      source_map: SourceMap::new(None, "AAAA", ["hello4"], [], []),
+      source_map: SourceMap::new(
+        None,
+        "AAAA".to_string(),
+        ["hello4".to_string()],
+        [],
+        [],
+      ),
     });
     let source = ConcatSource::new([
       a.clone(),
