@@ -1,3 +1,8 @@
+//! Rusty [`webpack-sources`](https://github.com/webpack/webpack-sources) port.
+
+#![forbid(unsafe_code)]
+#![deny(missing_docs)]
+
 mod cached_source;
 mod concat_source;
 mod error;
@@ -16,7 +21,8 @@ pub use original_source::OriginalSource;
 pub use raw_source::RawSource;
 pub use replace_source::ReplaceSource;
 pub use source::{
-  BoxSource, MapOptions, Mapping, OriginalLocation, Source, SourceMap,
+  BoxSource, MapOptions, Mapping, OriginalLocation, Source, SourceExt,
+  SourceMap,
 };
 pub use source_map_source::{
   SourceMapSource, SourceMapSourceOptions, WithoutOriginalOptions,

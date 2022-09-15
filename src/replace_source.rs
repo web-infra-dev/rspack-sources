@@ -12,6 +12,25 @@ use crate::{
   MapOptions, Mapping, OriginalLocation, Source, SourceMap,
 };
 
+/// Decorates a Source with replacements and insertions of source code,
+/// usally used in dependencies
+///
+/// - [webpack-sources docs](https://github.com/webpack/webpack-sources/#replacesource).
+///
+/// ```
+/// use rspack_sources::{OriginalSource, ReplaceSource, Source};
+///
+/// let code = "hello world\n";
+/// let mut source = ReplaceSource::new(OriginalSource::new(code, "file.txt"));
+///
+/// source.insert(0, "start1\n", None);
+/// source.replace(0, 0, "start2\n", None);
+/// source.replace(999, 10000, "end2", None);
+/// source.insert(888, "end1\n", None);
+/// source.replace(0, 999, "replaced!\n", Some("whole"));
+///
+/// assert_eq!(source.source(), "start1\nstart2\nreplaced!\nend1\nend2");
+/// ```
 #[derive(Debug)]
 pub struct ReplaceSource<T> {
   inner: T,
@@ -27,6 +46,7 @@ struct Replacement {
 }
 
 impl<T> ReplaceSource<T> {
+  /// Create a [ReplaceSource].
   pub fn new(source: T) -> Self {
     Self {
       inner: source,
@@ -34,10 +54,12 @@ impl<T> ReplaceSource<T> {
     }
   }
 
+  /// Get the original [Source].
   pub fn original(&self) -> &T {
     &self.inner
   }
 
+  /// Insert a content at start.
   pub fn insert(&mut self, start: u32, content: &str, name: Option<&str>) {
     self.replacements.lock().push(Replacement {
       start,
@@ -47,6 +69,7 @@ impl<T> ReplaceSource<T> {
     });
   }
 
+  /// Create a replacement with content at `[start, end)`.
   pub fn replace(
     &mut self,
     start: u32,

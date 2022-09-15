@@ -11,20 +11,32 @@ use crate::{
   MapOptions, Source, SourceMap,
 };
 
+/// Options for [SourceMapSource::new].
 #[derive(Debug, Clone, Default)]
 pub struct SourceMapSourceOptions<V, N> {
+  /// The source code.
   pub value: V,
+  /// Name of the file.
   pub name: N,
+  /// The source map of the source code.
   pub source_map: SourceMap,
+  /// The original source code.
   pub original_source: Option<String>,
+  /// The original source map.
   pub inner_source_map: Option<SourceMap>,
+  /// Whether remove the original source.
   pub remove_original_source: bool,
 }
 
+/// An convenient options for [SourceMapSourceOptions], `original_source` and
+/// `inner_source_map` will be `None`, `remove_original_source` will be false.
 #[derive(Debug, Clone)]
 pub struct WithoutOriginalOptions<V, N> {
+  /// The source code.
   pub value: V,
+  /// Name of the file.
   pub name: N,
+  /// The source map of the source code.
   pub source_map: SourceMap,
 }
 
@@ -41,6 +53,10 @@ impl<V, N> From<WithoutOriginalOptions<V, N>> for SourceMapSourceOptions<V, N> {
   }
 }
 
+/// Represents source code with source map, optionally having an additional
+/// source map for the original source.
+///
+/// - [webpack-sources docs](https://github.com/webpack/webpack-sources/#sourcemapsource).
 #[derive(Debug, Clone)]
 pub struct SourceMapSource {
   value: String,
@@ -52,6 +68,7 @@ pub struct SourceMapSource {
 }
 
 impl SourceMapSource {
+  /// Create a [SourceMapSource] with [SourceMapSourceOptions].
   pub fn new<V, N, O>(options: O) -> Self
   where
     V: Into<String>,
