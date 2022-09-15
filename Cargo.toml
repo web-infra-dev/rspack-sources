@@ -2,6 +2,16 @@
 name = "rspack-sources"
 version = "0.1.0"
 edition = "2021"
+authors = ["h-a-n-a <andywangsy@gmail.com>", "ahabhgk <ahabhgk@gmail.com>"]
+resolver = "2"
+license = "MIT"
+description = "Rusty webpack-sources port."
+keywords = ["sources", "sourcemap"]
+repository = "https://github.com/speedy-js/rspack-sources"
+documentation = "https://docs.rs/rspack-sources"
+readme = "README.md"
+
+include = ["/src/**/*.rs", "/*.toml", "/LICENSE", "/README.md"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
