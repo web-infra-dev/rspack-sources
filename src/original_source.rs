@@ -20,6 +20,8 @@ use crate::{
 /// - [webpack-sources docs](https://github.com/webpack/webpack-sources/#originalsource).
 ///
 /// ```
+/// use rspack_sources::{OriginalSource, MapOptions, Source};
+///
 /// let input = "if (hello()) { world(); hi(); there(); } done();\nif (hello()) { world(); hi(); there(); } done();";
 /// let source = OriginalSource::new(input, "file.js");
 /// assert_eq!(source.source(), input);
