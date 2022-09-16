@@ -471,7 +471,8 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
 #[cfg(test)]
 mod tests {
   use crate::{
-    source_map_source::WithoutOriginalOptions, OriginalSource, SourceMapSource,
+    source_map_source::WithoutOriginalOptions, OriginalSource, RawSource,
+    SourceExt, SourceMapSource,
   };
 
   use super::*;
@@ -859,5 +860,17 @@ return <div>{data.foo}</div>
 2:0 -> [file.txt] 1:0
 3:0 -> [file.txt] 1:0 (whole)"#
     );
+  }
+
+  #[test]
+  fn replace_source_over_a_box_source() {
+    let mut source = ReplaceSource::new(RawSource::from("boxed").boxed());
+    source.replace(3, 5, "", None);
+    assert_eq!(source.size(), 3);
+    assert_eq!(source.source(), "box");
+    assert_eq!(source.map(&MapOptions::default()), None);
+    let mut hasher = twox_hash::XxHash64::default();
+    source.hash(&mut hasher);
+    assert_eq!(format!("{:x}", hasher.finish()), "ab891b4c45dc95b4");
   }
 }

@@ -35,9 +35,35 @@ pub trait Source: StreamChunks + DynHash + fmt::Debug + Sync + Send {
   }
 }
 
-impl<T: Source + 'static> From<T> for BoxSource {
-  fn from(s: T) -> Self {
-    Box::new(s)
+impl Source for Box<dyn Source> {
+  fn source(&self) -> Cow<str> {
+    self.as_ref().source()
+  }
+
+  fn buffer(&self) -> Cow<[u8]> {
+    self.as_ref().buffer()
+  }
+
+  fn size(&self) -> usize {
+    self.as_ref().size()
+  }
+
+  fn map(&self, options: &MapOptions) -> Option<SourceMap> {
+    self.as_ref().map(options)
+  }
+}
+
+impl StreamChunks for Box<dyn Source> {
+  fn stream_chunks(
+    &self,
+    options: &MapOptions,
+    on_chunk: crate::helpers::OnChunk,
+    on_source: crate::helpers::OnSource,
+    on_name: crate::helpers::OnName,
+  ) -> crate::helpers::GeneratedInfo {
+    self
+      .as_ref()
+      .stream_chunks(options, on_chunk, on_source, on_name)
   }
 }
 
@@ -66,7 +92,7 @@ pub trait SourceExt {
 
 impl<T: Source + 'static> SourceExt for T {
   fn boxed(self) -> BoxSource {
-    self.into()
+    Box::new(self)
   }
 }
 
