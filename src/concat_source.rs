@@ -52,7 +52,7 @@ use crate::{
 ///   .unwrap()
 /// );
 /// ```
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct ConcatSource {
   children: Vec<BoxSource>,
 }
