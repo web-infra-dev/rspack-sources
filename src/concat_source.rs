@@ -11,12 +11,54 @@ use crate::{
   BoxSource, MapOptions, Source, SourceMap,
 };
 
-#[derive(Debug)]
+/// Concatenate multiple [Source]s to a single [Source].
+///
+/// - [webpack-sources docs](https://github.com/webpack/webpack-sources/#concatsource).
+///
+/// ```
+/// use rspack_sources::{
+///   BoxSource, ConcatSource, MapOptions, OriginalSource, RawSource, Source,
+///   SourceMap,
+/// };
+///
+/// let mut source = ConcatSource::new([
+///   Box::new(RawSource::from("Hello World\n".to_string())) as BoxSource,
+///   Box::new(OriginalSource::new(
+///     "console.log('test');\nconsole.log('test2');\n",
+///     "console.js",
+///   )),
+/// ]);
+/// source.add(OriginalSource::new("Hello2\n", "hello.md"));
+///
+/// assert_eq!(source.size(), 62);
+/// assert_eq!(
+///   source.source(),
+///   "Hello World\nconsole.log('test');\nconsole.log('test2');\nHello2\n"
+/// );
+/// assert_eq!(
+///   source.map(&MapOptions::new(false)).unwrap(),
+///   SourceMap::from_json(
+///     r#"{
+///       "version": 3,
+///       "mappings": ";AAAA;AACA;ACDA",
+///       "names": [],
+///       "sources": ["console.js", "hello.md"],
+///       "sourcesContent": [
+///         "console.log('test');\nconsole.log('test2');\n",
+///         "Hello2\n"
+///       ]
+///     }"#,
+///   )
+///   .unwrap()
+/// );
+/// ```
+#[derive(Debug, Default)]
 pub struct ConcatSource {
   children: Vec<BoxSource>,
 }
 
 impl ConcatSource {
+  /// Create a [ConcatSource] with [Source]s.
   pub fn new<S, T>(sources: S) -> Self
   where
     T: Into<BoxSource>,
@@ -27,6 +69,7 @@ impl ConcatSource {
     }
   }
 
+  /// Add a [Source] to concat.
   pub fn add<S: Into<BoxSource>>(&mut self, item: S) {
     self.children.push(item.into());
   }

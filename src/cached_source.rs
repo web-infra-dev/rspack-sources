@@ -10,6 +10,38 @@ use crate::{
   MapOptions, Source, SourceMap,
 };
 
+/// It tries to reused cached results from other methods to avoid calculations,
+/// usally used after modify is finished.
+///
+/// - [webpack-sources docs](https://github.com/webpack/webpack-sources/#cachedsource).
+///
+/// ```
+/// use rspack_sources::{
+///   BoxSource, CachedSource, ConcatSource, MapOptions, OriginalSource,
+///   RawSource, Source, SourceMap,
+/// };
+///
+/// let mut concat = ConcatSource::new([
+///   Box::new(RawSource::from("Hello World\n".to_string())) as BoxSource,
+///   Box::new(OriginalSource::new(
+///     "console.log('test');\nconsole.log('test2');\n",
+///     "console.js",
+///   )),
+/// ]);
+/// concat.add(OriginalSource::new("Hello2\n", "hello.md"));
+///
+/// let cached = CachedSource::new(concat);
+///
+/// assert_eq!(
+///   cached.source(),
+///   "Hello World\nconsole.log('test');\nconsole.log('test2');\nHello2\n"
+/// );
+/// // second time will be fast.
+/// assert_eq!(
+///   cached.source(),
+///   "Hello World\nconsole.log('test');\nconsole.log('test2');\nHello2\n"
+/// );
+/// ```
 #[derive(Debug)]
 pub struct CachedSource<T> {
   inner: T,
@@ -19,6 +51,7 @@ pub struct CachedSource<T> {
 }
 
 impl<T> CachedSource<T> {
+  /// Create a [CachedSource] with the original [Source].
   pub fn new(inner: T) -> Self {
     Self {
       inner,
@@ -28,7 +61,8 @@ impl<T> CachedSource<T> {
     }
   }
 
-  pub fn inner(&self) -> &T {
+  /// Get the original [Source].
+  pub fn original(&self) -> &T {
     &self.inner
   }
 }

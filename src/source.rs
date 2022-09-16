@@ -12,17 +12,24 @@ use crate::{
   Result,
 };
 
+/// An alias for [Box<dyn Source>].
 pub type BoxSource = Box<dyn Source>;
 
+/// [Source] abstraction, [webpack-sources docs](https://github.com/webpack/webpack-sources/#source).
 pub trait Source: StreamChunks + DynHash + fmt::Debug + Sync + Send {
+  /// Get the source code.
   fn source(&self) -> Cow<str>;
 
+  /// Get the source buffer.
   fn buffer(&self) -> Cow<[u8]>;
 
+  /// Get the size of the source.
   fn size(&self) -> usize;
 
+  /// Get the [SourceMap].
   fn map(&self, options: &MapOptions) -> Option<SourceMap>;
 
+  /// Update hash based on the source.
   fn update_hash(&self, state: &mut dyn Hasher) {
     self.dyn_hash(state);
   }
@@ -51,7 +58,9 @@ impl Hash for dyn Source {
   }
 }
 
+/// Extension methods for [Source].
 pub trait SourceExt {
+  /// An alias for [BoxSource::from].
   fn boxed(self) -> BoxSource;
 }
 
@@ -61,10 +70,13 @@ impl<T: Source + 'static> SourceExt for T {
   }
 }
 
+/// Options for [Source::map].
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct MapOptions {
+  /// Whether have columns info in generated [SourceMap] mappings.
   pub columns: bool,
-  pub final_source: bool,
+  /// Whether the source will have changes, internal used for [ReplaceSource], etc.
+  pub(crate) final_source: bool,
 }
 
 impl Default for MapOptions {
@@ -77,6 +89,7 @@ impl Default for MapOptions {
 }
 
 impl MapOptions {
+  /// Create [MapOptions] with columns.
   pub fn new(columns: bool) -> Self {
     Self {
       columns,
@@ -85,6 +98,7 @@ impl MapOptions {
   }
 }
 
+/// The source map created by [Source::map].
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub struct SourceMap {
   file: Option<String>,
@@ -95,6 +109,7 @@ pub struct SourceMap {
 }
 
 impl SourceMap {
+  /// Create a [SourceMap].
   pub fn new(
     file: Option<String>,
     mappings: String,
@@ -111,42 +126,52 @@ impl SourceMap {
     }
   }
 
+  /// Get the file field in [SourceMap].
   pub fn file(&self) -> Option<&str> {
     self.file.as_deref()
   }
 
+  /// Set the file field in [SourceMap].
   pub fn set_file(&mut self, file: Option<String>) {
     self.file = file;
   }
 
+  /// Get the decoded mappings in [SourceMap].
   pub fn decoded_mappings(&self) -> Vec<Mapping> {
     decode_mappings(self)
   }
 
+  /// Get the mappings string in [SourceMap].
   pub fn mappings(&self) -> &str {
     &self.mappings
   }
 
+  /// Get the sources field in [SourceMap].
   pub fn sources(&self) -> &[String] {
     &self.sources
   }
 
+  /// Get the source by index from sources field in [SourceMap].
   pub fn get_source(&self, index: usize) -> Option<&str> {
     self.sources.get(index).map(|s| s.as_str())
   }
 
+  /// Get the sourcesContent field in [SourceMap].
   pub fn sources_content(&self) -> &[String] {
     &self.sources_content
   }
 
+  /// Get the source content by index from sourcesContent field in [SourceMap].
   pub fn get_source_content(&self, index: usize) -> Option<&str> {
     self.sources_content.get(index).map(|s| s.as_str())
   }
 
+  /// Get the names field in [SourceMap].
   pub fn names(&self) -> &[String] {
     &self.names
   }
 
+  /// Get the name by index from names field in [SourceMap].
   pub fn get_name(&self, index: usize) -> Option<&str> {
     self.names.get(index).map(|s| s.as_str())
   }
@@ -196,23 +221,28 @@ impl RawSourceMap {
 }
 
 impl SourceMap {
+  /// Create a [SourceMap] from json string.
   pub fn from_json(s: &str) -> Result<Self> {
     RawSourceMap::from_json(s)?.try_into()
   }
 
+  /// Create a [SourceMap] from [&[u8]].
   pub fn from_slice(s: &[u8]) -> Result<Self> {
     RawSourceMap::from_slice(s)?.try_into()
   }
 
+  /// Create a [SourceMap] from reader.
   pub fn from_reader<R: std::io::Read>(s: R) -> Result<Self> {
     RawSourceMap::from_reader(s)?.try_into()
   }
 
+  /// Generate source map to a json string.
   pub fn to_json(self) -> Result<String> {
     let raw = RawSourceMap::from(self);
     raw.to_json()
   }
 
+  /// Generate source map to writer.
   pub fn to_writer<W: std::io::Write>(self, w: W) -> Result<()> {
     let raw = RawSourceMap::from(self);
     raw.to_writer(w)
@@ -299,21 +329,31 @@ impl From<SourceMap> for RawSourceMap {
   }
 }
 
+/// Represent a [Mapping] information of source map.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Mapping {
+  /// Generated line.
   pub generated_line: u32,
+  /// Generated column.
   pub generated_column: u32,
+  /// Original position information.
   pub original: Option<OriginalLocation>,
 }
 
+/// Represent original position information of a [Mapping].
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct OriginalLocation {
+  /// Source index.
   pub source_index: u32,
+  /// Original line.
   pub original_line: u32,
+  /// Original column.
   pub original_column: u32,
+  /// Name index.
   pub name_index: Option<u32>,
 }
 
+/// An convenient way to create a [Mapping].
 #[macro_export]
 macro_rules! m {
   ($gl:expr, $gc:expr, $si:expr, $ol:expr, $oc:expr, $ni:expr) => {{
@@ -336,6 +376,7 @@ macro_rules! m {
   }};
 }
 
+/// An convenient way to create [Mapping]s.
 #[macro_export]
 macro_rules! mappings {
   ($($mapping:expr),* $(,)?) => {

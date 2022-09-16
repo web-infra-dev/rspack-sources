@@ -13,6 +13,27 @@ use crate::{
   MapOptions, Source, SourceMap,
 };
 
+/// Represents source code, it will create source map for the source code,
+/// but the source map is created by splitting the source code at typical
+/// statement borders (`;`, `{`, `}`).
+///
+/// - [webpack-sources docs](https://github.com/webpack/webpack-sources/#originalsource).
+///
+/// ```
+/// use rspack_sources::{OriginalSource, MapOptions, Source};
+///
+/// let input = "if (hello()) { world(); hi(); there(); } done();\nif (hello()) { world(); hi(); there(); } done();";
+/// let source = OriginalSource::new(input, "file.js");
+/// assert_eq!(source.source(), input);
+/// assert_eq!(
+///   source.map(&MapOptions::default()).unwrap().mappings(),
+///   "AAAA,eAAe,SAAS,MAAM,WAAW;AACzC,eAAe,SAAS,MAAM,WAAW",
+/// );
+/// assert_eq!(
+///   source.map(&MapOptions::new(false)).unwrap().mappings(),
+///   "AAAA;AACA",
+/// );
+/// ```
 #[derive(Debug, Clone)]
 pub struct OriginalSource {
   value: String,
@@ -20,6 +41,7 @@ pub struct OriginalSource {
 }
 
 impl OriginalSource {
+  /// Create a [OriginalSource].
   pub fn new(value: impl Into<String>, name: impl Into<String>) -> Self {
     Self {
       value: value.into(),

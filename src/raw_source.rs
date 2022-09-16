@@ -11,13 +11,29 @@ use crate::{
   MapOptions, Source, SourceMap,
 };
 
+/// Represents source code without source map, it will not create source map for the source code.
+///
+/// - [webpack-sources docs](https://github.com/webpack/webpack-sources/#rawsource).
+///
+/// ```
+/// use rspack_sources::{MapOptions, RawSource, Source};
+///
+/// let code = "some source code";
+/// let s = RawSource::from(code.to_string());
+/// assert_eq!(s.source(), code);
+/// assert_eq!(s.map(&MapOptions::default()), None);
+/// assert_eq!(s.size(), 16);
+/// ```
 #[derive(Debug, Clone)]
 pub enum RawSource {
+  /// Represent buffer.
   Buffer(Vec<u8>),
+  /// Represent string.
   Source(String),
 }
 
 impl RawSource {
+  /// Whether the [RawSource] represent a buffer.
   pub fn is_buffer(&self) -> bool {
     matches!(self, Self::Buffer(_))
   }
