@@ -8,7 +8,7 @@ use std::{
 use crate::{
   helpers::{get_map, GeneratedInfo, OnChunk, OnName, OnSource, StreamChunks},
   source::{Mapping, OriginalLocation},
-  BoxSource, MapOptions, Source, SourceMap,
+  BoxSource, MapOptions, Source, SourceExt, SourceMap,
 };
 
 /// Concatenate multiple [Source]s to a single [Source].
@@ -61,17 +61,17 @@ impl ConcatSource {
   /// Create a [ConcatSource] with [Source]s.
   pub fn new<S, T>(sources: S) -> Self
   where
-    T: Into<BoxSource>,
+    T: Source + 'static,
     S: IntoIterator<Item = T>,
   {
     Self {
-      children: sources.into_iter().map(|s| s.into()).collect(),
+      children: sources.into_iter().map(|s| SourceExt::boxed(s)).collect(),
     }
   }
 
   /// Add a [Source] to concat.
-  pub fn add<S: Into<BoxSource>>(&mut self, item: S) {
-    self.children.push(item.into());
+  pub fn add<S: Source + 'static>(&mut self, item: S) {
+    self.children.push(SourceExt::boxed(item));
   }
 }
 
