@@ -177,9 +177,19 @@ impl SourceMap {
     &self.sources
   }
 
+  /// Get the mutable sources field in [SourceMap].
+  pub fn sources_mut(&mut self) -> &mut [String] {
+    &mut self.sources
+  }
+
   /// Get the source by index from sources field in [SourceMap].
   pub fn get_source(&self, index: usize) -> Option<&str> {
     self.sources.get(index).map(|s| s.as_str())
+  }
+
+  /// Get the mutable source by index from sources field in [SourceMap].
+  pub fn get_source_mut(&mut self, index: usize) -> Option<&mut str> {
+    self.sources.get_mut(index).map(|s| s.as_mut_str())
   }
 
   /// Get the sourcesContent field in [SourceMap].
@@ -187,9 +197,19 @@ impl SourceMap {
     &self.sources_content
   }
 
+  /// Get the mutable sourcesContent field in [SourceMap].
+  pub fn sources_content_mut(&mut self) -> &mut [String] {
+    &mut self.sources_content
+  }
+
   /// Get the source content by index from sourcesContent field in [SourceMap].
   pub fn get_source_content(&self, index: usize) -> Option<&str> {
     self.sources_content.get(index).map(|s| s.as_str())
+  }
+
+  /// Get the mutable source content by index from sourcesContent field in [SourceMap].
+  pub fn get_source_content_mut(&mut self, index: usize) -> Option<&mut str> {
+    self.sources_content.get_mut(index).map(|s| s.as_mut_str())
   }
 
   /// Get the names field in [SourceMap].
@@ -197,9 +217,19 @@ impl SourceMap {
     &self.names
   }
 
+  /// Get the names field in [SourceMap].
+  pub fn names_mut(&mut self) -> &mut [String] {
+    &mut self.names
+  }
+
   /// Get the name by index from names field in [SourceMap].
   pub fn get_name(&self, index: usize) -> Option<&str> {
     self.names.get(index).map(|s| s.as_str())
+  }
+
+  /// Get the mutable name by index from names field in [SourceMap].
+  pub fn get_name_mut(&mut self, index: usize) -> Option<&mut str> {
+    self.names.get_mut(index).map(|s| s.as_mut_str())
   }
 }
 
