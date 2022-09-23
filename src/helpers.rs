@@ -892,8 +892,10 @@ pub fn stream_chunks_of_combined_source_map(
                 let original_chunk = original_source_lines
                   .get(inner_original_line as usize - 1)
                   .map_or("", |lines| {
-                    &lines[inner_original_column as usize
-                      ..(inner_original_column + location_in_chunk) as usize]
+                    let start = inner_original_column as usize;
+                    let end =
+                      (start + location_in_chunk as usize).min(lines.len());
+                    &lines[start..end]
                   });
                 if &inner_chunk[..location_in_chunk as usize] == original_chunk
                 {
@@ -993,8 +995,9 @@ pub fn stream_chunks_of_combined_source_map(
                 let original_name = original_source_lines
                   .get(inner_original_line as usize - 1)
                   .map_or("", |i| {
-                    &i[inner_original_column as usize
-                      ..inner_original_column as usize + name.len()]
+                    let start = inner_original_column as usize;
+                    let end = (start + name.len()).min(i.len());
+                    &i[start..end]
                   });
                 if name == original_name {
                   let mut name_index_mapping = name_index_mapping.borrow_mut();
@@ -1025,8 +1028,8 @@ pub fn stream_chunks_of_combined_source_map(
               Mapping {
                 generated_line: mapping.generated_line,
                 generated_column: mapping.generated_column,
-                original: mapping.original.map(|original| OriginalLocation {
-                  source_index: original.source_index,
+                original: (source_index >= 0).then_some(OriginalLocation {
+                  source_index: source_index as u32,
                   original_line: inner_original_line as u32,
                   original_column: inner_original_column as u32,
                   name_index: (final_name_index >= 0)

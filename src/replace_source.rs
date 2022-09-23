@@ -480,7 +480,6 @@ mod tests {
   fn with_readable_mappings(sourcemap: &SourceMap) -> String {
     let mut first = true;
     let mut last_line = 0;
-    dbg!(&sourcemap.decoded_mappings());
     sourcemap
       .decoded_mappings()
       .iter()
