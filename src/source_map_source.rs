@@ -473,4 +473,56 @@ mod tests {
       .unwrap()
     );
   }
+
+  #[test]
+  fn should_map_generated_with_correct_inner_source_index() {
+    let source = SourceMapSource::new(SourceMapSourceOptions {
+      value: r#"(()=>{function n(){b1("*b0*")}function b(){n("*a0*")}b()})();"#,
+      name: "main.js",
+      source_map: SourceMap::from_json(
+        r#"{
+          "version": 3,
+          "sources": ["main.js"],
+          "mappings": "CAAC,IAAM,CAEL,SAASA,GAAK,CACZ,GAAG,MAAM,CACX,CAGA,SAASC,GAAK,CACZD,EAAG,MAAM,CACX,CACAC,EAAG,CACL,GAAG",
+          "names": ["b0", "a0"]
+        }"#,
+      ).unwrap(),
+      original_source: Some(r#"(() => {
+  // b.js
+  function b0() {
+    b1("*b0*");
+  }
+
+  // a.js
+  function a0() {
+    b0("*a0*");
+  }
+  a0();
+})();
+"#.to_string()),
+      inner_source_map: Some(SourceMap::from_json(
+        r#"{
+          "version": 3,
+          "sources": ["b.js", "a.js"],
+          "sourcesContent": ["export function b0() {\n\tb1(\"*b0*\");\n}\n", "import { b0 } from \"./b.js\";\nfunction a0() {\n\tb0(\"*a0*\");\n}\na0()\n"],
+          "mappings": ";;AAAO,WAAS,KAAK;AACpB,OAAG,MAAM;AAAA,EACV;;;ACDA,WAAS,KAAK;AACb,OAAG,MAAM;AAAA,EACV;AACA,KAAG;",
+          "names": []
+        }"#
+      ).unwrap()),
+      remove_original_source: true,
+    });
+    let map = source.map(&MapOptions::default()).unwrap();
+    assert_eq!(
+      map,
+      SourceMap::from_json(
+        r#"{
+          "version": 3,
+          "sources": ["b.js", "a.js"],
+          "sourcesContent": ["export function b0() {\n\tb1(\"*b0*\");\n}\n", "import { b0 } from \"./b.js\";\nfunction a0() {\n\tb0(\"*a0*\");\n}\na0()\n"],
+          "names": ["b0", "a0"],
+          "mappings": "MAAO,SAASA,GAAK,CACpB,GAAG,MAAM,CACV,CCDA,SAASC,GAAK,CACbD,EAAG,MAAM,CACV,CACAC,EAAG,C"
+        }"#
+      ).unwrap()
+    );
+  }
 }
