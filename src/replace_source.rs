@@ -37,12 +37,21 @@ pub struct ReplaceSource<T> {
   replacements: Mutex<Vec<Replacement>>,
 }
 
-#[derive(Debug, Hash)]
+#[derive(Debug, Hash, Clone)]
 struct Replacement {
   start: u32,
   end: u32,
   content: String,
   name: Option<String>,
+}
+
+impl<T: Source> Clone for ReplaceSource<T> {
+  fn clone(&self) -> Self {
+    Self {
+      inner: dyn_clone::clone(&self.inner),
+      replacements: Mutex::new(self.replacements.lock().clone()),
+    }
+  }
 }
 
 impl<T> ReplaceSource<T> {

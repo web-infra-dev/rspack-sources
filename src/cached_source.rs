@@ -67,6 +67,17 @@ impl<T> CachedSource<T> {
   }
 }
 
+impl<T: Source> Clone for CachedSource<T> {
+  fn clone(&self) -> Self {
+    Self {
+      inner: dyn_clone::clone(&self.inner),
+      cached_buffer: Mutex::new(self.cached_buffer.lock().clone()),
+      cached_source: Mutex::new(self.cached_source.lock().clone()),
+      cached_maps: Mutex::new(self.cached_maps.lock().clone()),
+    }
+  }
+}
+
 impl<T: Source + Hash> Source for CachedSource<T> {
   fn source(&self) -> Cow<str> {
     let mut cached_source = self.cached_source.lock();

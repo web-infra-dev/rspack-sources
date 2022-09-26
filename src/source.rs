@@ -5,6 +5,7 @@ use std::{
   hash::{Hash, Hasher},
 };
 
+use dyn_clone::DynClone;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -16,7 +17,9 @@ use crate::{
 pub type BoxSource = Box<dyn Source>;
 
 /// [Source] abstraction, [webpack-sources docs](https://github.com/webpack/webpack-sources/#source).
-pub trait Source: StreamChunks + DynHash + fmt::Debug + Sync + Send {
+pub trait Source:
+  StreamChunks + DynHash + DynClone + fmt::Debug + Sync + Send
+{
   /// Get the source code.
   fn source(&self) -> Cow<str>;
 
@@ -52,6 +55,8 @@ impl Source for Box<dyn Source> {
     self.as_ref().map(options)
   }
 }
+
+dyn_clone::clone_trait_object!(Source);
 
 impl StreamChunks for Box<dyn Source> {
   fn stream_chunks(
