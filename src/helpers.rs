@@ -64,6 +64,7 @@ pub type OnChunk<'a> = &'a mut dyn FnMut(Option<&str>, Mapping);
 pub type OnSource<'a> = &'a mut dyn FnMut(u32, &str, Option<&str>);
 pub type OnName<'a> = &'a mut dyn FnMut(u32, &str);
 
+#[derive(Debug)]
 pub struct GeneratedInfo {
   pub generated_line: u32,
   pub generated_column: u32,
@@ -652,8 +653,8 @@ fn stream_chunks_of_source_map_lines_final(
 
   let mut on_mapping = |mapping: &Mapping| {
     if let Some(original) = &mapping.original
-      && current_generated_line <= result.generated_line
-      && result.generated_line <= final_line {
+      && current_generated_line <= mapping.generated_line
+      && mapping.generated_line <= final_line {
       on_chunk(None, Mapping {
         generated_line: result.generated_line,
         generated_column: 0,
