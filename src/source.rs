@@ -360,6 +360,10 @@ impl TryFrom<RawSourceMap> for SourceMap {
 
 impl From<SourceMap> for RawSourceMap {
   fn from(map: SourceMap) -> Self {
+    let sources_content = map
+      .sources_content
+      .into_iter()
+      .map(|s| (!s.is_empty()).then_some(s));
     Self {
       version: Some(3),
       file: map.file,
@@ -371,13 +375,10 @@ impl From<SourceMap> for RawSourceMap {
           .collect(),
       ),
       source_root: None,
-      sources_content: Some(
-        map
-          .sources_content
-          .into_iter()
-          .map(|s| (!s.is_empty()).then_some(s))
-          .collect(),
-      ),
+      sources_content: sources_content
+        .clone()
+        .any(|s| s.is_some())
+        .then(|| sources_content.collect()),
       names: Some(
         map
           .names
@@ -446,4 +447,23 @@ macro_rules! mappings {
       $crate::m![mapping[0], mapping[1], mapping[2], mapping[3], mapping[4], mapping[5]]
     }),*]
   };
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn should_not_have_sources_content_field_when_it_is_empty() {
+    let map = SourceMap::new(
+      None,
+      ";;".to_string(),
+      ["a.js".to_string()],
+      ["".to_string(), "".to_string(), "".to_string()],
+      ["".to_string(), "".to_string()],
+    )
+    .to_json()
+    .unwrap();
+    assert!(!map.contains("sourcesContent"));
+  }
 }
