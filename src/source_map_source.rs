@@ -101,6 +101,9 @@ impl Source for SourceMapSource {
   }
 
   fn map(&self, options: &MapOptions) -> Option<SourceMap> {
+    if self.inner_source_map.is_none() {
+      return Some(self.source_map.clone());
+    }
     get_map(self, options)
   }
 }
@@ -524,5 +527,17 @@ mod tests {
         }"#
       ).unwrap()
     );
+  }
+
+  #[test]
+  fn should_have_map_when_columns_is_false_and_last_line_start_is_none() {
+    let original = OriginalSource::new("console.log('a')\n", "a.js");
+    let source = SourceMapSource::new(WithoutOriginalOptions {
+      value: "console.log('a')\n",
+      name: "a.js",
+      source_map: original.map(&MapOptions::new(false)).unwrap(),
+    });
+    let map = source.map(&MapOptions::new(false));
+    assert!(map.is_some());
   }
 }
