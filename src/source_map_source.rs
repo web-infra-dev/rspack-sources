@@ -157,6 +157,7 @@ impl StreamChunks for SourceMapSource {
 mod tests {
   use crate::{
     BoxSource, ConcatSource, OriginalSource, RawSource, ReplaceSource,
+    SourceExt,
   };
 
   use super::*;
@@ -537,7 +538,13 @@ mod tests {
       name: "a.js",
       source_map: original.map(&MapOptions::new(false)).unwrap(),
     });
-    let map = source.map(&MapOptions::new(false));
-    assert!(map.is_some());
+    let source = ConcatSource::new([
+      RawSource::from("\n").boxed(),
+      RawSource::from("\n").boxed(),
+      RawSource::from("\n").boxed(),
+      source.boxed(),
+    ]);
+    let map = source.map(&MapOptions::new(false)).unwrap();
+    assert_eq!(map.mappings(), ";;;AAAA");
   }
 }

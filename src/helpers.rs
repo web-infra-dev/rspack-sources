@@ -656,7 +656,7 @@ fn stream_chunks_of_source_map_lines_final(
       && current_generated_line <= mapping.generated_line
       && mapping.generated_line <= final_line {
       on_chunk(None, Mapping {
-        generated_line: result.generated_line,
+        generated_line: mapping.generated_line,
         generated_column: 0,
         original: Some(OriginalLocation {
           source_index: original.source_index,
@@ -665,7 +665,7 @@ fn stream_chunks_of_source_map_lines_final(
           name_index: None,
         }),
       });
-      current_generated_line = result.generated_line + 1;
+      current_generated_line = mapping.generated_line + 1;
     }
   };
   for mapping in &source_map.decoded_mappings() {
