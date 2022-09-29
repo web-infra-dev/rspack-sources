@@ -34,7 +34,7 @@ use crate::{
 ///   "AAAA;AACA",
 /// );
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq)]
 pub struct OriginalSource {
   value: String,
   name: String,
@@ -73,6 +73,12 @@ impl Hash for OriginalSource {
     "OriginalSource".hash(state);
     self.buffer().hash(state);
     self.name.hash(state);
+  }
+}
+
+impl PartialEq for OriginalSource {
+  fn eq(&self, other: &Self) -> bool {
+    self.value == other.value && self.name == other.name
   }
 }
 

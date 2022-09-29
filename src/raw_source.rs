@@ -24,7 +24,7 @@ use crate::{
 /// assert_eq!(s.map(&MapOptions::default()), None);
 /// assert_eq!(s.size(), 16);
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq)]
 pub enum RawSource {
   /// Represent buffer.
   Buffer(Vec<u8>),
@@ -94,6 +94,16 @@ impl Hash for RawSource {
   fn hash<H: Hasher>(&self, state: &mut H) {
     "RawSource".hash(state);
     self.buffer().hash(state);
+  }
+}
+
+impl PartialEq for RawSource {
+  fn eq(&self, other: &Self) -> bool {
+    match (self, other) {
+      (Self::Buffer(l0), Self::Buffer(r0)) => l0 == r0,
+      (Self::Source(l0), Self::Source(r0)) => l0 == r0,
+      _ => false,
+    }
   }
 }
 

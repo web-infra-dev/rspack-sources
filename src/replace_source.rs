@@ -37,21 +37,12 @@ pub struct ReplaceSource<T> {
   replacements: Mutex<Vec<Replacement>>,
 }
 
-#[derive(Debug, Hash, Clone)]
+#[derive(Debug, Hash, Clone, PartialEq, Eq)]
 struct Replacement {
   start: u32,
   end: u32,
   content: String,
   name: Option<String>,
-}
-
-impl<T: Source> Clone for ReplaceSource<T> {
-  fn clone(&self) -> Self {
-    Self {
-      inner: dyn_clone::clone(&self.inner),
-      replacements: Mutex::new(self.replacements.lock().clone()),
-    }
-  }
 }
 
 impl<T> ReplaceSource<T> {
@@ -102,7 +93,7 @@ impl<T> ReplaceSource<T> {
   }
 }
 
-impl<T: Source + Hash> Source for ReplaceSource<T> {
+impl<T: Source + Hash + PartialEq + Eq + 'static> Source for ReplaceSource<T> {
   fn source(&self) -> Cow<str> {
     self.sort_replacement();
 
@@ -144,16 +135,6 @@ impl<T: Source + Hash> Source for ReplaceSource<T> {
     }
     drop(replacements);
     get_map(self, options)
-  }
-}
-
-impl<T: Hash> Hash for ReplaceSource<T> {
-  fn hash<H: Hasher>(&self, state: &mut H) {
-    self.sort_replacement();
-    "ReplaceSource".hash(state);
-    for repl in self.replacements.lock().iter() {
-      repl.hash(state)
-    }
   }
 }
 
@@ -476,6 +457,34 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
     }
   }
 }
+
+impl<T: Source> Clone for ReplaceSource<T> {
+  fn clone(&self) -> Self {
+    Self {
+      inner: dyn_clone::clone(&self.inner),
+      replacements: Mutex::new(self.replacements.lock().clone()),
+    }
+  }
+}
+
+impl<T: Hash> Hash for ReplaceSource<T> {
+  fn hash<H: Hasher>(&self, state: &mut H) {
+    self.sort_replacement();
+    "ReplaceSource".hash(state);
+    for repl in self.replacements.lock().iter() {
+      repl.hash(state)
+    }
+  }
+}
+
+impl<T: PartialEq> PartialEq for ReplaceSource<T> {
+  fn eq(&self, other: &Self) -> bool {
+    self.inner == other.inner
+      && *self.replacements.lock() == *other.replacements.lock()
+  }
+}
+
+impl<T: Eq> Eq for ReplaceSource<T> {}
 
 #[cfg(test)]
 mod tests {

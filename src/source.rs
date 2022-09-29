@@ -1,4 +1,5 @@
 use std::{
+  any::Any,
   borrow::Cow,
   convert::{TryFrom, TryInto},
   fmt,
@@ -18,7 +19,7 @@ pub type BoxSource = Box<dyn Source>;
 
 /// [Source] abstraction, [webpack-sources docs](https://github.com/webpack/webpack-sources/#source).
 pub trait Source:
-  StreamChunks + DynHash + DynClone + fmt::Debug + Sync + Send
+  StreamChunks + DynHash + AsAny + DynEq + DynClone + fmt::Debug + Sync + Send
 {
   /// Get the source code.
   fn source(&self) -> Cow<str>;
@@ -85,9 +86,41 @@ impl<H: Hash> DynHash for H {
 
 impl Hash for dyn Source {
   fn hash<H: Hasher>(&self, state: &mut H) {
-    self.dyn_hash(state);
+    self.dyn_hash(state)
   }
 }
+
+pub trait AsAny {
+  fn as_any(&self) -> &dyn Any;
+}
+
+impl<T: Any> AsAny for T {
+  fn as_any(&self) -> &dyn Any {
+    self
+  }
+}
+
+pub trait DynEq {
+  fn dyn_eq(&self, other: &dyn Any) -> bool;
+}
+
+impl<E: Eq + Any> DynEq for E {
+  fn dyn_eq(&self, other: &dyn Any) -> bool {
+    if let Some(other) = other.downcast_ref::<E>() {
+      self == other
+    } else {
+      false
+    }
+  }
+}
+
+impl PartialEq for dyn Source {
+  fn eq(&self, other: &Self) -> bool {
+    self.dyn_eq(other.as_any())
+  }
+}
+
+impl Eq for dyn Source {}
 
 /// Extension methods for [Source].
 pub trait SourceExt {
@@ -451,6 +484,13 @@ macro_rules! mappings {
 
 #[cfg(test)]
 mod tests {
+  use std::collections::HashMap;
+
+  use crate::{
+    CachedSource, ConcatSource, OriginalSource, RawSource, ReplaceSource,
+    SourceMapSource, WithoutOriginalOptions,
+  };
+
   use super::*;
 
   #[test]
@@ -465,5 +505,106 @@ mod tests {
     .to_json()
     .unwrap();
     assert!(!map.contains("sourcesContent"));
+  }
+
+  #[test]
+  fn hash_available() {
+    let mut state = twox_hash::XxHash64::default();
+    RawSource::from("a").hash(&mut state);
+    OriginalSource::new("b", "").hash(&mut state);
+    SourceMapSource::new(WithoutOriginalOptions {
+      value: "c",
+      name: "",
+      source_map: SourceMap::from_json("{\"mappings\": \";\"}").unwrap(),
+    })
+    .hash(&mut state);
+    ConcatSource::new([RawSource::from("d")]).hash(&mut state);
+    CachedSource::new(RawSource::from("e")).hash(&mut state);
+    ReplaceSource::new(RawSource::from("f")).hash(&mut state);
+    RawSource::from("g").boxed().hash(&mut state);
+    (&RawSource::from("h") as &dyn Source).hash(&mut state);
+    ReplaceSource::new(RawSource::from("i").boxed()).hash(&mut state);
+    assert_eq!(format!("{:x}", state.finish()), "940ec870b6ce313a");
+  }
+
+  #[test]
+  fn eq_available() {
+    assert_eq!(RawSource::from("a"), RawSource::from("a"));
+    assert_eq!(OriginalSource::new("b", ""), OriginalSource::new("b", ""));
+    assert_eq!(
+      SourceMapSource::new(WithoutOriginalOptions {
+        value: "c",
+        name: "",
+        source_map: SourceMap::from_json("{\"mappings\": \";\"}").unwrap(),
+      }),
+      SourceMapSource::new(WithoutOriginalOptions {
+        value: "c",
+        name: "",
+        source_map: SourceMap::from_json("{\"mappings\": \";\"}").unwrap(),
+      })
+    );
+    assert_eq!(
+      ConcatSource::new([RawSource::from("d")]),
+      ConcatSource::new([RawSource::from("d")])
+    );
+    assert_eq!(
+      CachedSource::new(RawSource::from("e")),
+      CachedSource::new(RawSource::from("e"))
+    );
+    assert_eq!(
+      ReplaceSource::new(RawSource::from("f")),
+      ReplaceSource::new(RawSource::from("f"))
+    );
+    assert_eq!(&RawSource::from("g").boxed(), &RawSource::from("g").boxed());
+    assert_eq!(
+      (&RawSource::from("h") as &dyn Source),
+      (&RawSource::from("h") as &dyn Source)
+    );
+    assert_eq!(
+      ReplaceSource::new(RawSource::from("i").boxed()),
+      ReplaceSource::new(RawSource::from("i").boxed())
+    );
+  }
+
+  #[test]
+  fn clone_available() {
+    let a = RawSource::from("a");
+    assert_eq!(a, a.clone());
+    let b = OriginalSource::new("b", "");
+    assert_eq!(b, b.clone());
+    let c = SourceMapSource::new(WithoutOriginalOptions {
+      value: "c",
+      name: "",
+      source_map: SourceMap::from_json("{\"mappings\": \";\"}").unwrap(),
+    });
+    assert_eq!(c, c.clone());
+    let d = ConcatSource::new([RawSource::from("d")]);
+    assert_eq!(d, d.clone());
+    let e = CachedSource::new(RawSource::from("e"));
+    assert_eq!(e, e.clone());
+    let f = ReplaceSource::new(RawSource::from("f"));
+    assert_eq!(f, f.clone());
+    let g = RawSource::from("g").boxed();
+    assert_eq!(&g, &g.clone());
+    let h = &RawSource::from("h") as &dyn Source;
+    assert_eq!(h, h.clone());
+    let i = ReplaceSource::new(RawSource::from("i").boxed());
+    assert_eq!(i, i.clone());
+  }
+
+  #[test]
+  fn box_dyn_source_use_hashmap_available() {
+    let mut map = HashMap::new();
+    let a = RawSource::from("a").boxed();
+    map.insert(a.clone(), a.clone());
+    assert_eq!(map.get(&a).unwrap(), &a);
+  }
+
+  #[test]
+  fn ref_dyn_source_use_hashmap_available() {
+    let mut map = HashMap::new();
+    let a = &RawSource::from("a") as &dyn Source;
+    map.insert(a.clone(), a.clone());
+    assert_eq!(map.get(&a).unwrap(), &a);
   }
 }

@@ -67,18 +67,7 @@ impl<T> CachedSource<T> {
   }
 }
 
-impl<T: Source> Clone for CachedSource<T> {
-  fn clone(&self) -> Self {
-    Self {
-      inner: dyn_clone::clone(&self.inner),
-      cached_buffer: Mutex::new(self.cached_buffer.lock().clone()),
-      cached_source: Mutex::new(self.cached_source.lock().clone()),
-      cached_maps: Mutex::new(self.cached_maps.lock().clone()),
-    }
-  }
-}
-
-impl<T: Source + Hash> Source for CachedSource<T> {
+impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
   fn source(&self) -> Cow<str> {
     let mut cached_source = self.cached_source.lock();
     if let Some(cached_source) = &*cached_source {
@@ -117,13 +106,9 @@ impl<T: Source + Hash> Source for CachedSource<T> {
   }
 }
 
-impl<T: Hash> Hash for CachedSource<T> {
-  fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-    self.inner.hash(state);
-  }
-}
-
-impl<T: Source + Hash> StreamChunks for CachedSource<T> {
+impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks
+  for CachedSource<T>
+{
   fn stream_chunks(
     &self,
     options: &MapOptions,
@@ -143,3 +128,31 @@ impl<T: Source + Hash> StreamChunks for CachedSource<T> {
     }
   }
 }
+
+impl<T: Source> Clone for CachedSource<T> {
+  fn clone(&self) -> Self {
+    Self {
+      inner: dyn_clone::clone(&self.inner),
+      cached_buffer: Mutex::new(self.cached_buffer.lock().clone()),
+      cached_source: Mutex::new(self.cached_source.lock().clone()),
+      cached_maps: Mutex::new(self.cached_maps.lock().clone()),
+    }
+  }
+}
+
+impl<T: Hash> Hash for CachedSource<T> {
+  fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+    self.inner.hash(state);
+  }
+}
+
+impl<T: PartialEq> PartialEq for CachedSource<T> {
+  fn eq(&self, other: &Self) -> bool {
+    self.inner == other.inner
+      && *self.cached_buffer.lock() == *other.cached_buffer.lock()
+      && *self.cached_source.lock() == *other.cached_source.lock()
+      && *self.cached_maps.lock() == *other.cached_maps.lock()
+  }
+}
+
+impl<T: Eq> Eq for CachedSource<T> {}
