@@ -564,6 +564,10 @@ mod tests {
       ReplaceSource::new(RawSource::from("i").boxed()),
       ReplaceSource::new(RawSource::from("i").boxed())
     );
+    assert_eq!(
+      CachedSource::new(RawSource::from("j").boxed()),
+      CachedSource::new(RawSource::from("j").boxed())
+    );
   }
 
   #[test]
@@ -590,6 +594,8 @@ mod tests {
     assert_eq!(h, h.clone());
     let i = ReplaceSource::new(RawSource::from("i").boxed());
     assert_eq!(i, i.clone());
+    let j = CachedSource::new(RawSource::from("j").boxed());
+    assert_eq!(j, j.clone());
   }
 
   #[test]
