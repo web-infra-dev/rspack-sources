@@ -1,6 +1,7 @@
 use std::{borrow::Cow, hash::Hash};
 
 use dashmap::DashMap;
+use hashbrown::hash_map::DefaultHashBuilder;
 use once_cell::sync::OnceCell;
 use smol_str::SmolStr;
 
@@ -48,7 +49,7 @@ pub struct CachedSource<T> {
   inner: T,
   cached_buffer: OnceCell<Vec<u8>>,
   cached_source: OnceCell<SmolStr>,
-  cached_maps: DashMap<MapOptions, Option<SourceMap>>,
+  cached_maps: DashMap<MapOptions, Option<SourceMap>, DefaultHashBuilder>,
 }
 
 impl<T> CachedSource<T> {
