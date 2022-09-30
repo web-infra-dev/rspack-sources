@@ -1,8 +1,7 @@
 use std::{borrow::Cow, hash::Hash};
 
-use hashbrown::HashMap;
+use dashmap::DashMap;
 use once_cell::sync::OnceCell;
-use parking_lot::Mutex;
 use smol_str::SmolStr;
 
 use crate::{
@@ -49,7 +48,7 @@ pub struct CachedSource<T> {
   inner: T,
   cached_buffer: OnceCell<Vec<u8>>,
   cached_source: OnceCell<SmolStr>,
-  cached_maps: Mutex<HashMap<MapOptions, Option<SourceMap>>>,
+  cached_maps: DashMap<MapOptions, Option<SourceMap>>,
 }
 
 impl<T> CachedSource<T> {
@@ -89,12 +88,11 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
   }
 
   fn map(&self, options: &MapOptions) -> Option<SourceMap> {
-    let mut cached_maps = self.cached_maps.lock();
-    if let Some(map) = cached_maps.get(options) {
+    if let Some(map) = self.cached_maps.get(options) {
       map.clone()
     } else {
       let map = self.inner.map(options);
-      cached_maps.insert(options.to_owned(), map.clone());
+      self.cached_maps.insert(options.to_owned(), map.clone());
       map
     }
   }
@@ -129,7 +127,7 @@ impl<T: Source> Clone for CachedSource<T> {
       inner: dyn_clone::clone(&self.inner),
       cached_buffer: self.cached_buffer.clone(),
       cached_source: self.cached_source.clone(),
-      cached_maps: Mutex::new(self.cached_maps.lock().clone()),
+      cached_maps: self.cached_maps.clone(),
     }
   }
 }
@@ -143,9 +141,6 @@ impl<T: Hash> Hash for CachedSource<T> {
 impl<T: PartialEq> PartialEq for CachedSource<T> {
   fn eq(&self, other: &Self) -> bool {
     self.inner == other.inner
-      && self.cached_buffer == other.cached_buffer
-      && self.cached_source == other.cached_source
-      && *self.cached_maps.lock() == *other.cached_maps.lock()
   }
 }
 
