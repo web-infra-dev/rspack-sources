@@ -1,9 +1,10 @@
 use std::{
   borrow::Cow,
   cell::RefCell,
-  collections::HashMap,
   hash::{Hash, Hasher},
 };
+
+use hashbrown::HashMap;
 
 use crate::{
   helpers::{get_map, GeneratedInfo, OnChunk, OnName, OnSource, StreamChunks},

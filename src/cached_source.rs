@@ -1,6 +1,7 @@
-use std::{borrow::Cow, collections::HashMap, hash::Hash};
+use std::{borrow::Cow, hash::Hash};
 
-use parking_lot::Mutex;
+use dashmap::DashMap;
+use once_cell::sync::OnceCell;
 use smol_str::SmolStr;
 
 use crate::{
@@ -45,9 +46,9 @@ use crate::{
 #[derive(Debug)]
 pub struct CachedSource<T> {
   inner: T,
-  cached_buffer: Mutex<Option<Vec<u8>>>,
-  cached_source: Mutex<Option<SmolStr>>,
-  cached_maps: Mutex<HashMap<MapOptions, Option<SourceMap>>>,
+  cached_buffer: OnceCell<Vec<u8>>,
+  cached_source: OnceCell<SmolStr>,
+  cached_maps: DashMap<MapOptions, Option<SourceMap>>,
 }
 
 impl<T> CachedSource<T> {
@@ -55,9 +56,9 @@ impl<T> CachedSource<T> {
   pub fn new(inner: T) -> Self {
     Self {
       inner,
-      cached_buffer: Mutex::new(None),
-      cached_source: Mutex::new(None),
-      cached_maps: Mutex::new(HashMap::new()),
+      cached_buffer: Default::default(),
+      cached_source: Default::default(),
+      cached_maps: Default::default(),
     }
   }
 
@@ -69,25 +70,17 @@ impl<T> CachedSource<T> {
 
 impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
   fn source(&self) -> Cow<str> {
-    let mut cached_source = self.cached_source.lock();
-    if let Some(cached_source) = &*cached_source {
-      Cow::Owned(cached_source.to_string())
-    } else {
-      let source = self.inner.source().to_string();
-      *cached_source = Some(SmolStr::new(source.clone()));
-      Cow::Owned(source)
-    }
+    let cached = self
+      .cached_source
+      .get_or_init(|| SmolStr::from(self.inner.source()));
+    Cow::Owned(cached.to_string())
   }
 
   fn buffer(&self) -> Cow<[u8]> {
-    let mut cached_buffer = self.cached_buffer.lock();
-    if let Some(cached_buffer) = &*cached_buffer {
-      Cow::Owned(cached_buffer.to_owned())
-    } else {
-      let buffer = self.inner.buffer().to_vec();
-      *cached_buffer = Some(buffer.clone());
-      Cow::Owned(buffer)
-    }
+    let cached = self
+      .cached_buffer
+      .get_or_init(|| self.inner.buffer().to_vec());
+    Cow::Owned(cached.clone())
   }
 
   fn size(&self) -> usize {
@@ -95,12 +88,11 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
   }
 
   fn map(&self, options: &MapOptions) -> Option<SourceMap> {
-    let mut cached_maps = self.cached_maps.lock();
-    if let Some(map) = cached_maps.get(options) {
+    if let Some(map) = self.cached_maps.get(options) {
       map.clone()
     } else {
       let map = self.inner.map(options);
-      cached_maps.insert(options.to_owned(), map.clone());
+      self.cached_maps.insert(options.to_owned(), map.clone());
       map
     }
   }
@@ -133,9 +125,9 @@ impl<T: Source> Clone for CachedSource<T> {
   fn clone(&self) -> Self {
     Self {
       inner: dyn_clone::clone(&self.inner),
-      cached_buffer: Mutex::new(self.cached_buffer.lock().clone()),
-      cached_source: Mutex::new(self.cached_source.lock().clone()),
-      cached_maps: Mutex::new(self.cached_maps.lock().clone()),
+      cached_buffer: self.cached_buffer.clone(),
+      cached_source: self.cached_source.clone(),
+      cached_maps: self.cached_maps.clone(),
     }
   }
 }
@@ -149,9 +141,6 @@ impl<T: Hash> Hash for CachedSource<T> {
 impl<T: PartialEq> PartialEq for CachedSource<T> {
   fn eq(&self, other: &Self) -> bool {
     self.inner == other.inner
-      && *self.cached_buffer.lock() == *other.cached_buffer.lock()
-      && *self.cached_source.lock() == *other.cached_source.lock()
-      && *self.cached_maps.lock() == *other.cached_maps.lock()
   }
 }
 
