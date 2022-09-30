@@ -1,10 +1,10 @@
 use std::{
   borrow::Cow,
   cell::RefCell,
-  collections::HashMap,
   hash::{Hash, Hasher},
 };
 
+use hashbrown::HashMap;
 use parking_lot::Mutex;
 
 use crate::{

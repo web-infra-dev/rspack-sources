@@ -1,5 +1,6 @@
-use std::{borrow::BorrowMut, cell::RefCell, collections::HashMap};
+use std::{borrow::BorrowMut, cell::RefCell};
 
+use hashbrown::HashMap;
 use smol_str::SmolStr;
 
 use crate::{
