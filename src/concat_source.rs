@@ -52,7 +52,7 @@ use crate::{
 ///   .unwrap()
 /// );
 /// ```
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Eq)]
 pub struct ConcatSource {
   children: Vec<BoxSource>,
 }
@@ -110,6 +110,12 @@ impl Hash for ConcatSource {
     for child in self.children.iter() {
       child.hash(state);
     }
+  }
+}
+
+impl PartialEq for ConcatSource {
+  fn eq(&self, other: &Self) -> bool {
+    self.children == other.children
   }
 }
 
