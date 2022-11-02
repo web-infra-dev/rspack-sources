@@ -74,14 +74,14 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
     let cached = self
       .cached_source
       .get_or_init(|| SmolStr::from(self.inner.source()));
-    Cow::Owned(cached.to_string())
+    Cow::Borrowed(cached)
   }
 
   fn buffer(&self) -> Cow<[u8]> {
     let cached = self
       .cached_buffer
       .get_or_init(|| self.inner.buffer().to_vec());
-    Cow::Owned(cached.clone())
+    Cow::Borrowed(cached)
   }
 
   fn size(&self) -> usize {
