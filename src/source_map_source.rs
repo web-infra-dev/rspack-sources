@@ -318,11 +318,11 @@ mod tests {
   fn should_handle_es6_promise_correctly() {
     let code = include_str!(concat!(
       env!("CARGO_MANIFEST_DIR"),
-      "/tests/es6-promise.js"
+      "/tests/fixtures/es6-promise.js"
     ));
     let map = SourceMap::from_json(include_str!(concat!(
       env!("CARGO_MANIFEST_DIR"),
-      "/tests/es6-promise.map"
+      "/tests/fixtures/es6-promise.map"
     )))
     .unwrap();
     let inner = SourceMapSource::new(WithoutOriginalOptions {
