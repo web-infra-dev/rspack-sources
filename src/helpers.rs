@@ -2,6 +2,7 @@ use std::{borrow::BorrowMut, cell::RefCell};
 
 use hashbrown::HashMap;
 use smol_str::SmolStr;
+use substring::Substring;
 
 use crate::{
   source::{Mapping, OriginalLocation},
@@ -895,9 +896,8 @@ pub fn stream_chunks_of_combined_source_map(
                   .get(inner_original_line as usize - 1)
                   .map_or("", |lines| {
                     let start = inner_original_column as usize;
-                    let end =
-                      (start + location_in_chunk as usize).min(lines.len());
-                    &lines[start..end]
+                    let end = start + location_in_chunk as usize;
+                    lines.substring(start, end)
                   });
                 if &inner_chunk[..location_in_chunk as usize] == original_chunk
                 {
@@ -998,8 +998,8 @@ pub fn stream_chunks_of_combined_source_map(
                   .get(inner_original_line as usize - 1)
                   .map_or("", |i| {
                     let start = inner_original_column as usize;
-                    let end = (start + name.len()).min(i.len());
-                    &i[start..end]
+                    let end = start + name.len();
+                    i.substring(start, end)
                   });
                 if name == original_name {
                   let mut name_index_mapping = name_index_mapping.borrow_mut();
