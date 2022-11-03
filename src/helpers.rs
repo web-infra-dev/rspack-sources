@@ -7,7 +7,7 @@ use substring::Substring;
 use crate::{
   source::{Mapping, OriginalLocation},
   vlq::{decode, encode},
-  MapOptions, SourceMap,
+  MapOptions, Source, SourceMap,
 };
 
 pub fn get_map<S: StreamChunks>(
@@ -65,6 +65,33 @@ pub trait StreamChunks {
 pub type OnChunk<'a> = &'a mut dyn FnMut(Option<&str>, Mapping);
 pub type OnSource<'a> = &'a mut dyn FnMut(u32, &str, Option<&str>);
 pub type OnName<'a> = &'a mut dyn FnMut(u32, &str);
+
+fn stream_chunks_default<S: Source>(
+  source: &S,
+  options: &MapOptions,
+  on_chunk: OnChunk,
+  on_source: OnSource,
+  on_name: OnName,
+) {
+  if let Some(map) = source.map(options) {
+    stream_chunks_of_source_map(
+      &source.source(),
+      &map,
+      on_chunk,
+      on_source,
+      on_name,
+      option,
+    )
+  } else {
+    stream_chunks_of_raw_source(
+      &source.source(),
+      options,
+      on_chunk,
+      on_source,
+      on_name,
+    );
+  }
+}
 
 #[derive(Debug)]
 pub struct GeneratedInfo {
