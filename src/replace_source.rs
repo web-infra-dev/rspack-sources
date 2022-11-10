@@ -6,6 +6,7 @@ use std::{
 
 use hashbrown::HashMap;
 use parking_lot::Mutex;
+use substring::Substring;
 
 use crate::{
   helpers::{get_map, split_into_lines, GeneratedInfo, StreamChunks},
@@ -106,15 +107,17 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for ReplaceSource<T> {
     for replacement in self.replacements.lock().iter() {
       if inner_pos < replacement.start {
         let end_pos = (replacement.start as usize).min(inner_source_code.len());
-        source_code
-          .push_str(&inner_source_code[inner_pos as usize..end_pos as usize]);
+        source_code.push_str(
+          inner_source_code.substring(inner_pos as usize, end_pos as usize),
+        );
       }
       source_code.push_str(&replacement.content);
       inner_pos = inner_pos
         .max(replacement.end)
         .min(inner_source_code.len() as u32);
     }
-    source_code.push_str(&inner_source_code[inner_pos as usize..]);
+    source_code
+      .push_str(inner_source_code.substring(inner_pos as usize, usize::MAX));
 
     source_code.into()
   }
@@ -195,9 +198,10 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
           source_content_lines.borrow().get(source_index as usize)
         {
           if let Some(content_line) = content_lines.get(line as usize - 1) {
-            &content_line
-              [column as usize..column as usize + expected_chunk.len()]
-              == expected_chunk
+            content_line.substring(
+              column as usize,
+              column as usize + expected_chunk.len(),
+            ) == expected_chunk
           } else {
             false
           }
@@ -242,7 +246,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
               original.source_index,
               original.original_line,
               original.original_column,
-              &chunk[0..chunk_pos as usize],
+              chunk.substring(0, chunk_pos as usize),
             ) {
             original.original_column += chunk_pos as u32;
           }
@@ -263,7 +267,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
           if next_replacement_pos > pos {
             // Emit chunk until replacement
             let offset = next_replacement_pos - pos;
-            let chunk_slice = &chunk[chunk_pos as usize..(chunk_pos + offset) as usize];
+            let chunk_slice = chunk.substring(chunk_pos as usize, (chunk_pos + offset) as usize);
             on_chunk(Some(chunk_slice), Mapping {
               generated_line: line as u32,
               generated_column: mapping.generated_column + if line == generated_column_offset_line {generated_column_offset} else {0} as u32,
@@ -356,7 +360,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
 
             // Partially skip over chunk
             let line = mapping.generated_line as i64 + generated_line_offset;
-            if let Some(original) = &mut mapping.original && check_original_content(original.source_index, original.original_line, original.original_column, &chunk[chunk_pos as usize..(chunk_pos + offset as u32) as usize ]) {
+            if let Some(original) = &mut mapping.original && check_original_content(original.source_index, original.original_line, original.original_column, chunk.substring(chunk_pos as usize, (chunk_pos + offset as u32) as usize)) {
               original.original_column += offset as u32;
             }
             chunk_pos += offset as u32;
@@ -373,7 +377,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
 
 				// Emit remaining chunk
         if (chunk_pos as usize) < chunk.len() {
-          let chunk_slice = if chunk_pos == 0 {chunk} else {&chunk[chunk_pos as usize..]};
+          let chunk_slice = if chunk_pos == 0 {chunk} else {chunk.substring(chunk_pos as usize, usize::MAX)};
           let line = mapping.generated_line as i64 + generated_line_offset;
           on_chunk(Some(chunk_slice), Mapping {
             generated_line: line as u32,

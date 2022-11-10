@@ -577,12 +577,14 @@ fn stream_chunks_of_source_map_full(
       let mapping_column = current_generated_column;
       let line = lines[(current_generated_line - 1) as usize];
       if mapping.generated_line != current_generated_line {
-        chunk = &line[current_generated_column as usize..];
+        chunk = line.substring(current_generated_column as usize, usize::MAX);
         current_generated_line += 1;
         current_generated_column = 0;
       } else {
-        chunk = &line[current_generated_column as usize
-          ..mapping.generated_column as usize];
+        chunk = line.substring(
+          current_generated_column as usize,
+          mapping.generated_column as usize,
+        );
         current_generated_column = mapping.generated_column;
       }
       if !chunk.is_empty() {
@@ -602,7 +604,7 @@ fn stream_chunks_of_source_map_full(
     {
       if current_generated_line as usize <= lines.len() {
         let chunk = &lines[(current_generated_line - 1) as usize]
-          [current_generated_column as usize..];
+          .substring(current_generated_column as usize, usize::MAX);
         on_chunk(
           Some(chunk),
           Mapping {
@@ -630,9 +632,10 @@ fn stream_chunks_of_source_map_full(
     }
     if mapping.generated_column > current_generated_column {
       if current_generated_line as usize <= lines.len() {
-        let chunk = &lines[(current_generated_line as usize) - 1]
-          [current_generated_column as usize
-            ..mapping.generated_column as usize];
+        let chunk = lines[(current_generated_line as usize) - 1].substring(
+          current_generated_column as usize,
+          mapping.generated_column as usize,
+        );
         on_chunk(
           Some(chunk),
           Mapping {
@@ -937,7 +940,8 @@ pub fn stream_chunks_of_combined_source_map(
                     let end = start + location_in_chunk as usize;
                     lines.substring(start, end)
                   });
-                if &inner_chunk[..location_in_chunk as usize] == original_chunk
+                if inner_chunk.substring(0, location_in_chunk as usize)
+                  == original_chunk
                 {
                   inner_original_column += location_in_chunk;
                   inner_name_index = -1;
