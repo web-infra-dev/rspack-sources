@@ -2,6 +2,7 @@
 
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
+#![feature(let_chains)]
 
 mod cached_source;
 mod concat_source;
