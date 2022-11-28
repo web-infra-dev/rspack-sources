@@ -1,4 +1,4 @@
-use std::{borrow::BorrowMut, cell::RefCell};
+use std::{borrow::BorrowMut, cell::RefCell, sync::Arc};
 
 use hashbrown::HashMap;
 use smol_str::SmolStr;
@@ -835,8 +835,9 @@ pub fn stream_chunks_of_combined_source_map(
   > = RefCell::new(HashMap::new());
   let inner_source_contents: RefCell<HashMap<i64, Option<SmolStr>>> =
     RefCell::new(HashMap::new());
-  let inner_source_content_lines: RefCell<HashMap<i64, Option<Vec<SmolStr>>>> =
-    RefCell::new(HashMap::new());
+  let inner_source_content_lines: RefCell<
+    HashMap<i64, Option<Arc<Vec<SmolStr>>>>,
+  > = RefCell::new(HashMap::new());
   let inner_name_index_mapping: RefCell<HashMap<i64, i64>> =
     RefCell::new(HashMap::new());
   let inner_name_index_value_mapping: RefCell<HashMap<i64, SmolStr>> =
@@ -920,12 +921,12 @@ pub fn stream_chunks_of_combined_source_map(
                 original_source_lines = if let Some(Some(original_source)) =
                   inner_source_contents.get(&inner_source_index)
                 {
-                  Some(
+                  Some(Arc::new(
                     split_into_lines(original_source)
                       .into_iter()
                       .map(Into::into)
                       .collect(),
-                  )
+                  ))
                 } else {
                   None
                 };
@@ -1022,10 +1023,13 @@ pub fn stream_chunks_of_combined_source_map(
                   .get(&inner_source_index)
                   .and_then(|original_source| {
                     original_source.as_ref().map(|s| {
-                      split_into_lines(s)
-                        .into_iter()
-                        .map(Into::into)
-                        .collect::<Vec<SmolStr>>()
+                      let lines = split_into_lines(s);
+                      Arc::new(
+                        lines
+                          .into_iter()
+                          .map(SmolStr::from)
+                          .collect::<Vec<_>>(),
+                      )
                     })
                   });
                 inner_source_content_lines
