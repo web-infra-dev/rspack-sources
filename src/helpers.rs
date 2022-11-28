@@ -1,4 +1,4 @@
-use std::{borrow::BorrowMut, cell::RefCell};
+use std::{borrow::BorrowMut, cell::RefCell, sync::Arc};
 
 use hashbrown::HashMap;
 use smol_str::SmolStr;
@@ -835,7 +835,7 @@ pub fn stream_chunks_of_combined_source_map(
   > = RefCell::new(HashMap::new());
   let inner_source_contents: RefCell<HashMap<i64, Option<SmolStr>>> =
     RefCell::new(HashMap::new());
-  let inner_source_content_lines: RefCell<HashMap<i64, Option<Vec<SmolStr>>>> =
+  let inner_source_content_lines: RefCell<HashMap<i64, Option<Arc<Vec<SmolStr>>>>> =
     RefCell::new(HashMap::new());
   let inner_name_index_mapping: RefCell<HashMap<i64, i64>> =
     RefCell::new(HashMap::new());
@@ -921,10 +921,10 @@ pub fn stream_chunks_of_combined_source_map(
                   inner_source_contents.get(&inner_source_index)
                 {
                   Some(
-                    split_into_lines(original_source)
+                    Arc::new(split_into_lines(original_source)
                       .into_iter()
                       .map(Into::into)
-                      .collect(),
+                      .collect()),
                   )
                 } else {
                   None
@@ -1022,10 +1022,12 @@ pub fn stream_chunks_of_combined_source_map(
                   .get(&inner_source_index)
                   .and_then(|original_source| {
                     original_source.as_ref().map(|s| {
-                      split_into_lines(s)
-                        .into_iter()
-                        .map(Into::into)
-                        .collect::<Vec<SmolStr>>()
+                      let lines = split_into_lines(s);
+                      let res = lines.into_iter().map(|item| SmolStr::from(item)).collect::<Vec<_>>();
+                      Arc::new(res)
+                        // .into_iter()
+                        // .map(Into::into)
+                        // .collect::<Vec<SmolStr>>()
                     })
                   });
                 inner_source_content_lines
