@@ -1030,9 +1030,6 @@ pub fn stream_chunks_of_combined_source_map(
                           .map(SmolStr::from)
                           .collect::<Vec<_>>(),
                       )
-                      // .into_iter()
-                      // .map(Into::into)
-                      // .collect::<Vec<SmolStr>>()
                     })
                   });
                 inner_source_content_lines
