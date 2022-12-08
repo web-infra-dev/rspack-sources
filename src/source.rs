@@ -201,7 +201,7 @@ impl SourceMap {
   }
 
   /// Get the decoded mappings in [SourceMap].
-  pub fn decoded_mappings(&self) -> Vec<Mapping> {
+  pub fn decoded_mappings<'a>(&'a self) -> impl IntoIterator<Item = Mapping> + 'a {
     decode_mappings(self)
   }
 
@@ -425,7 +425,7 @@ impl From<SourceMap> for RawSourceMap {
 }
 
 /// Represent a [Mapping] information of source map.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 pub struct Mapping {
   /// Generated line.
   pub generated_line: u32,
@@ -436,7 +436,7 @@ pub struct Mapping {
 }
 
 /// Represent original position information of a [Mapping].
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 pub struct OriginalLocation {
   /// Source index.
   pub source_index: u32,

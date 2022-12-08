@@ -504,7 +504,7 @@ mod tests {
     let mut last_line = 0;
     sourcemap
       .decoded_mappings()
-      .iter()
+      .into_iter()
       .map(|token| {
         format!(
           "{}:{} ->{} {}:{}{}",
