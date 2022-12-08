@@ -116,18 +116,24 @@ pub struct GeneratedInfo {
   pub generated_column: u32,
 }
 
-pub fn decode_mappings<'a>(
+pub fn decode_mappings<'b, 'a: 'b>(
   source_map: &'a SourceMap,
-) -> impl Iterator<Item = Mapping> + 'a {
+) -> impl Iterator<Item = Mapping> + 'b {
   // let mut source_index = 0;
   // let mut original_line = 1;
   // let mut original_column = 0;
   // let mut name_index = 0;
+  DecodeMappings {
+    source_index: 0,
+    original_line: 1,
+    original_column: 0,
+    name_index: 0,
+    nums: Vec::with_capacity(6),
+    source_map: source_map.mappings().split(";").enumerate(),
+    part: None,
+    generated_line: 0
+  }
 
-  let res = source_map.mappings().split(";").enumerate();
-  let res = "".split(",").filter_map(|_| None);
-  let res = res.next();
-  todo!()
   // let mut nums = Vec::with_capacity(6);
   // nums.clear();
   // // let mut mappings = Vec::new();
@@ -141,65 +147,94 @@ pub fn decode_mappings<'a>(
   //     }
 
   //     let mut generated_column = 0;
-  //     Some(line.split(',').filter_map(move |segment| {
-  //       if segment.is_empty() {
-  //         return None;
-  //       }
-
-  //       decode(segment, &mut nums).unwrap();
-  //       generated_column = (i64::from(generated_column) + nums[0]) as u32;
-
-  //       let mut src = None;
-  //       let mut name = None;
-
-  //       if nums.len() > 1 {
-  //         if nums.len() != 4 && nums.len() != 5 {
-  //           panic!("got {} segments, expected 4 or 5", nums.len());
-  //         }
-  //         source_index = (i64::from(source_index) + nums[1]) as u32;
-  //         src = Some(source_index);
-  //         original_line = (i64::from(original_line) + nums[2]) as u32;
-  //         original_column = (i64::from(original_column) + nums[3]) as u32;
-
-  //         if nums.len() > 4 {
-  //           name_index = (i64::from(name_index) + nums[4]) as u32;
-  //           name = Some(name_index as u32);
-  //         }
-  //       }
-  //       Some(Mapping {
-  //         generated_line: 1 + generated_line as u32,
-  //         generated_column,
-  //         original: src.map(|src_id| OriginalLocation {
-  //           source_index: src_id,
-  //           original_line,
-  //           original_column,
-  //           name_index: name,
-  //         }),
-  //       })
-  //     }))
+  //     Some()
   //   })
   //   .flatten()
 }
 
-struct DecodeMappings<'a> {
+struct DecodeMappings<'b, 'a: 'b> {
   source_index: u32,
   original_line: u32,
   original_column: u32,
   name_index: u32,
   nums: Vec<i64>,
-  source_map: Enumerate<Split<'a, &'a str>>,
-
-  part: Option<FilterMap<Split<'a, &'a str>, Box<dyn FnMut() -> i32>>>,
+  source_map: Enumerate<Split<'b, &'a str>>,
+  part: Option<Box<dyn Iterator<Item = Mapping>>>,
+  generated_line: usize
 }
 
-impl<'a> Iterator for DecodeMappings<'a> {
+// impl<'a> DecodeMappings<'a> {
+//   pub fn get_next_part(&mut self) {
+
+//   }
+// }
+
+impl<'b, 'a> Iterator for DecodeMappings<'b, 'a> {
   type Item = Mapping;
 
   fn next(&mut self) -> Option<Self::Item> {
-    if let Some(source_map) = self.source_map {
-
+    if let Some(ref mut part) = self.part {
+      match part.next() {
+        Some(next_part) => Some(next_part),
+        None => self.next(),
+      }
     } else {
-      None
+      match self.source_map.next() {
+        Some((generated_line, line)) => {
+          self.generated_line = generated_line;
+          self.part = Some(Box::new(
+            line
+              .split(',')
+              .filter_map(|segment| {
+                if segment.is_empty() {
+                  return None;
+                }
+
+                let mut generated_column = 0;
+                decode(segment, &mut self.nums).unwrap();
+                generated_column =
+                  (i64::from(generated_column) + self.nums[0]) as u32;
+
+                let mut src = None;
+                let mut name = None;
+
+                if self.nums.len() > 1 {
+                  if self.nums.len() != 4 && self.nums.len() != 5 {
+                    panic!("got {} segments, expected 4 or 5", self.nums.len());
+                  }
+                  self.source_index =
+                    (i64::from(self.source_index) + self.nums[1]) as u32;
+                  src = Some(self.source_index);
+                  self.original_line =
+                    (i64::from(self.original_line) + self.nums[2]) as u32;
+                  self.original_column =
+                    (i64::from(self.original_column) + self.nums[3]) as u32;
+
+                  if self.nums.len() > 4 {
+                    self.name_index =
+                      (i64::from(self.name_index) + self.nums[4]) as u32;
+                    name = Some(self.name_index as u32);
+                  }
+                }
+                Some(Mapping {
+                  generated_line: 1 + self.generated_line as u32,
+                  generated_column,
+                  original: src.map(|src_id| OriginalLocation {
+                    source_index: src_id,
+                    original_line: self.original_line,
+                    original_column: self.original_column,
+                    name_index: name,
+                  }),
+                })
+              })
+              .into_iter(),
+          ));
+          None
+          // self.next()
+        }
+        None => None,
+      }
+      // None
     }
   }
 }
