@@ -201,10 +201,20 @@ impl SourceMap {
   }
 
   /// Get the decoded mappings in [SourceMap].
-  pub fn decoded_mappings<'b, 'a: 'b>(
+  pub fn decoded_mappings<'a>(
     &'a self,
-  ) -> impl IntoIterator<Item = Mapping> + 'b {
-    decode_mappings(self)
+    source_index: &'a mut u32,
+    original_line: &'a mut u32,
+    original_column: &'a mut u32,
+    name_index: &'a mut u32,
+  ) -> impl IntoIterator<Item = Mapping> + 'a {
+    decode_mappings(
+      self,
+      source_index,
+      original_line,
+      original_column,
+      name_index,
+    )
   }
 
   /// Get the mappings string in [SourceMap].
@@ -427,7 +437,7 @@ impl From<SourceMap> for RawSourceMap {
 }
 
 /// Represent a [Mapping] information of source map.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Mapping {
   /// Generated line.
   pub generated_line: u32,

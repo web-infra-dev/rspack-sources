@@ -1,5 +1,7 @@
 //! Implements utilities for dealing with the sourcemap vlq encoding.
 //! forked from [rust-sourcemap](https://github.com/getsentry/rust-sourcemap/blob/851f12bfa6c4cf2c737b94734b27f7d9bfb4de86/src/vlq.rs)
+use smallvec::SmallVec;
+
 use crate::{Error, Result};
 
 const B64_CHARS: &[u8] =
@@ -264,7 +266,7 @@ const B64: [i8; 256] = [
 ];
 
 /// Parses a VLQ segment into a pre-allocated `Vec` instead of returning a new allocation.
-pub fn decode(segment: &str, rv: &mut Vec<i64>) -> Result<()> {
+pub fn decode(segment: &str, rv: &mut SmallVec<[i64; 6]>) -> Result<()> {
   let mut cur = 0;
   let mut shift = 0;
 

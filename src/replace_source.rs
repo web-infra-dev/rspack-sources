@@ -503,9 +503,10 @@ mod tests {
     let mut first = true;
     let mut last_line = 0;
     sourcemap
-      .decoded_mappings()
+      .decoded_mappings(&mut 0, &mut 1, &mut 0, &mut 0)
       .into_iter()
       .map(|token| {
+        // dbg!(&token);
         format!(
           "{}:{} ->{} {}:{}{}",
           if !first && token.generated_line == last_line {
