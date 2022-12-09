@@ -2,7 +2,6 @@
 
 #![forbid(unsafe_code)]
 // #![deny(missing_docs)]
-#![feature(slice_internals)]
 
 mod cached_source;
 mod concat_source;

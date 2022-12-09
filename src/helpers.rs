@@ -1,11 +1,9 @@
-use core::slice::memchr::memchr;
 // !# something[]
 use std::{
   borrow::BorrowMut, cell::RefCell, iter::Filter, str::Split, sync::Arc,
 };
 
 use hashbrown::HashMap;
-use smallvec::SmallVec;
 use smol_str::SmolStr;
 use substring::Substring;
 
@@ -125,7 +123,7 @@ pub fn decode_mappings<'b, 'a: 'b>(
   // let mut nums = Vec::with_capacity(6);
 
   // let mut mappings = Vec::new();
-  let ret = SegmentIter {
+  SegmentIter {
     line: "",
     mapping_str: source_map.mappings(),
     source_index: 0,
@@ -135,8 +133,8 @@ pub fn decode_mappings<'b, 'a: 'b>(
     generated_line: 0,
     segment_cursor: 0,
     generated_column: 0,
-  };
-  ret
+    nums: Vec::with_capacity(6),
+  }
   // for (generated_line, line) in source_map.mappings().split(';').enumerate() {
   //   if line.is_empty() {
   //     continue;
@@ -162,6 +160,7 @@ pub struct SegmentIter<'a> {
   pub name_index: u32,
   pub line: &'a str,
   // pub cursor: usize,
+  pub nums: Vec<i64>,
   pub segment_cursor: usize,
 }
 
@@ -226,26 +225,26 @@ impl<'a> Iterator for SegmentIter<'a> {
     match self.next_segment() {
       Some(segment) => {
         // dbg!(&segment);
-        let mut nums: SmallVec<[i64; 6]> = SmallVec::new();
-        decode(segment, &mut nums).unwrap();
+        self.nums.clear();
+        decode(segment, &mut self.nums).unwrap();
         self.generated_column =
-          (i64::from(self.generated_column) + nums[0]) as u32;
+          (i64::from(self.generated_column) + self.nums[0]) as u32;
 
         let mut src = None;
         let mut name = None;
 
-        if nums.len() > 1 {
-          if nums.len() != 4 && nums.len() != 5 {
-            panic!("got {} segments, expected 4 or 5", nums.len());
+        if self.nums.len() > 1 {
+          if self.nums.len() != 4 && self.nums.len() != 5 {
+            panic!("got {} segments, expected 4 or 5", self.nums.len());
           }
-          self.source_index = (i64::from(self.source_index) + nums[1]) as u32;
+          self.source_index = (i64::from(self.source_index) + self.nums[1]) as u32;
           src = Some(self.source_index);
-          self.original_line = (i64::from(self.original_line) + nums[2]) as u32;
+          self.original_line = (i64::from(self.original_line) + self.nums[2]) as u32;
           self.original_column =
-            (i64::from(self.original_column) + nums[3]) as u32;
+            (i64::from(self.original_column) + self.nums[3]) as u32;
 
-          if nums.len() > 4 {
-            self.name_index = (i64::from(self.name_index) + nums[4]) as u32;
+          if self.nums.len() > 4 {
+            self.name_index = (i64::from(self.name_index) + self.nums[4]) as u32;
             name = Some(self.name_index as u32);
           }
         }
