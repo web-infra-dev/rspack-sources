@@ -1,4 +1,6 @@
-use std::{borrow::BorrowMut, cell::RefCell, sync::Arc};
+use std::{
+  borrow::BorrowMut, cell::RefCell, iter::Filter, str::Split, sync::Arc,
+};
 
 use hashbrown::HashMap;
 use smallvec::SmallVec;
@@ -125,65 +127,18 @@ pub fn decode_mappings<'b, 'a: 'b>(
   // let mut nums = Vec::with_capacity(6);
 
   // let mut mappings = Vec::new();
-  source_map
-    .mappings()
-    .split(';')
-    .enumerate()
-    .filter_map(|(generated_line, line)| {
-      if line.is_empty() {
-        return None;
-      }
-      let mut generated_column = 0;
-      // let mut source_index_inner = *source_index;
-      // let mut original_line_inner = *original_line;
-      // let mut original_column_inner = *original_column;
-      // let mut name_index_inner = *name_index;
-      // println!("{}", generated_line);
-      let ret = line
-        .split(',')
-        .filter_map(|segment| {
-          if segment.is_empty() {
-            return None;
-          }
-          // let mut nums = Vec::with_capacity(6);
-          let mut nums: SmallVec<[i64; 6]> = SmallVec::new();
-
-          decode(segment, &mut nums).unwrap();
-          generated_column = (i64::from(generated_column) + nums[0]) as u32;
-
-          let mut src = None;
-          let mut name = None;
-
-          if nums.len() > 1 {
-            if nums.len() != 4 && nums.len() != 5 {
-              panic!("got {} segments, expected 4 or 5", nums.len());
-            }
-            *source_index = (i64::from(*source_index) + nums[1]) as u32;
-            src = Some(*source_index);
-            *original_line = (i64::from(*original_line) + nums[2]) as u32;
-            *original_column = (i64::from(*original_column) + nums[3]) as u32;
-
-            if nums.len() > 4 {
-              *name_index = (i64::from(*name_index) + nums[4]) as u32;
-              name = Some(*name_index as u32);
-            }
-          }
-
-          Some(Mapping {
-            generated_line: 1 + generated_line as u32,
-            generated_column,
-            original: src.map(|src_id| OriginalLocation {
-              source_index: src_id,
-              original_line: *original_line,
-              original_column: *original_column,
-              name_index: name,
-            }),
-          })
-        })
-        .collect::<Vec<_>>();
-      Some(ret)
-    })
-    .flatten()
+  let ret = SegmentIter {
+    line: "",
+    cursor: 0,
+    mapping_str: source_map.mappings(),
+    source_index: *source_index,
+    original_line: *original_line,
+    original_column: *original_column,
+    name_index: *name_index,
+    generated_line: 0,
+    segment_cursor: 0,
+  };
+  ret
   // for (generated_line, line) in source_map.mappings().split(';').enumerate() {
   //   if line.is_empty() {
   //     continue;
@@ -197,6 +152,55 @@ pub fn decode_mappings<'b, 'a: 'b>(
   //   }
   // }
   // mappings
+}
+
+struct SegmentIter<'a> {
+  mapping_str: &'a str,
+  generated_line: usize,
+  source_index: u32,
+  original_line: u32,
+  original_column: u32,
+  name_index: u32,
+  line: &'a str,
+  cursor: usize,
+  segment_cursor: usize,
+}
+
+impl<'a> SegmentIter<'a> {
+  fn next_segment(&mut self) -> Option<&'a str> {
+    if self.line.is_empty() {
+      match self.next_line() {
+        Some(line) => {
+          self.line = line;
+          self.segment_cursor = 0;
+        }
+        None => return None,
+      }
+    }
+
+    if let Some(i) = self.line[self.segment_cursor..].find(',') {
+      self.segment_cursor = i + 1;
+      return Some(&self.line[self.segment_cursor..i]);
+    } else {
+      self.line = "";
+      return Some(&self.line[self.segment_cursor..]);
+    }
+  }
+
+  fn next_line(&mut self) -> Option<&'a str> {
+    todo!()
+  }
+}
+
+impl<'a> Iterator for SegmentIter<'a> {
+  type Item = Mapping;
+
+  fn next(&mut self) -> Option<Self::Item> {
+    match self.next_segment() {
+      Some(segment) => {}
+      None => None,
+    }
+  }
 }
 
 pub fn encode_mappings(mappings: &[Mapping], options: &MapOptions) -> String {
