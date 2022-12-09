@@ -117,10 +117,6 @@ pub struct GeneratedInfo {
 
 pub fn decode_mappings<'b, 'a: 'b>(
   source_map: &'a SourceMap,
-  source_index: &'a mut u32,
-  original_line: &'a mut u32,
-  original_column: &'a mut u32,
-  name_index: &'a mut u32,
 ) -> impl Iterator<Item = Mapping> + 'b {
   // let mut source_index = 0;
   // let mut original_line = 1;
@@ -190,7 +186,7 @@ impl<'a> SegmentIter<'a> {
       }
     }
 
-    if let Some(i) = memchr(b',', self.line[self.segment_cursor..].as_bytes()) {
+    if let Some(i) = memchr::memchr(b',', self.line[self.segment_cursor..].as_bytes()) {
       let cursor = self.segment_cursor;
       self.segment_cursor = self.segment_cursor + i + 1;
       return Some(&self.line[cursor..cursor + i]);
@@ -205,7 +201,7 @@ impl<'a> SegmentIter<'a> {
     if self.mapping_str.is_empty() {
       return None;
     }
-    match memchr(b';', self.mapping_str.as_bytes()) {
+    match memchr::memchr(b';', self.mapping_str.as_bytes()) {
       Some(i) => {
         let temp_str = self.mapping_str;
         self.mapping_str = &self.mapping_str[i + 1..];
@@ -633,7 +629,7 @@ fn stream_chunks_of_source_map_final(
       );
     }
   };
-  for mapping in source_map.decoded_mappings(&mut 0, &mut 1, &mut 0, &mut 0) {
+  for mapping in source_map.decoded_mappings() {
     on_mapping(&mapping);
   }
   result
@@ -759,7 +755,7 @@ fn stream_chunks_of_source_map_full(
     }
   };
 
-  for mapping in source_map.decoded_mappings(&mut 0, &mut 1, &mut 0, &mut 0) {
+  for mapping in source_map.decoded_mappings() {
     on_mapping(&mapping);
   }
   on_mapping(&Mapping {
@@ -814,7 +810,7 @@ fn stream_chunks_of_source_map_lines_final(
       current_generated_line = mapping.generated_line + 1;
     }
   };
-  for mapping in source_map.decoded_mappings(&mut 0, &mut 1, &mut 0, &mut 0) {
+  for mapping in source_map.decoded_mappings() {
     on_mapping(&mapping);
   }
   result
@@ -872,7 +868,7 @@ fn stream_chunks_of_source_map_lines_full(
       current_generated_line += 1;
     }
   };
-  for mapping in source_map.decoded_mappings(&mut 0, &mut 1, &mut 0, &mut 0) {
+  for mapping in source_map.decoded_mappings() {
     on_mapping(&mapping);
   }
   while current_generated_line as usize <= lines.len() {

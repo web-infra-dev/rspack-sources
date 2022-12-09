@@ -503,7 +503,7 @@ mod tests {
     let mut first = true;
     let mut last_line = 0;
     sourcemap
-      .decoded_mappings(&mut 0, &mut 1, &mut 0, &mut 0)
+      .decoded_mappings()
       .into_iter()
       .map(|token| {
         // dbg!(&token);

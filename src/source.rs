@@ -203,18 +203,8 @@ impl SourceMap {
   /// Get the decoded mappings in [SourceMap].
   pub fn decoded_mappings<'a>(
     &'a self,
-    source_index: &'a mut u32,
-    original_line: &'a mut u32,
-    original_column: &'a mut u32,
-    name_index: &'a mut u32,
   ) -> impl IntoIterator<Item = Mapping> + 'a {
-    decode_mappings(
-      self,
-      source_index,
-      original_line,
-      original_column,
-      name_index,
-    )
+    decode_mappings(self)
   }
 
   /// Get the mappings string in [SourceMap].

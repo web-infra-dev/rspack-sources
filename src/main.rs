@@ -3,7 +3,7 @@ use core::slice::memchr::memchr;
 use std::time::Instant;
 
 use memchr::memmem;
-use rspack_sources::helpers::SegmentIter;
+use rspack_sources::{helpers::SegmentIter, substring1};
 fn main() {
   let source = r#"AAAA,eAAe,SAASA,UAAT,OAA8B;AAAA,MAARC,IAAQ,QAARA,IAAQ;AAC3C,sBAAO;AAAA,cAAMA,IAAI,CAACC;AAAX,IAAP;AACD"#;
 
@@ -14,6 +14,8 @@ fn main() {
     // dbg!(&res);
   }
   dbg!(&start.elapsed());
+
+
 
   let start = Instant::now();
   for i in 0..100 {
@@ -29,6 +31,7 @@ fn main() {
     // dbg!(&res);
   }
   dbg!(&start.elapsed());
+  dbg!(&substring1("我的你的", 0, 1));
   //   let ret = SegmentIter {
   //     line: "",
   //     // cursor: 0,
