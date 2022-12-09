@@ -1,18 +1,20 @@
 //! Rusty [`webpack-sources`](https://github.com/webpack/webpack-sources) port.
 
 #![forbid(unsafe_code)]
-#![deny(missing_docs)]
+// #![deny(missing_docs)]
+#![feature(slice_internals)]
 
 mod cached_source;
 mod concat_source;
 mod error;
-mod helpers;
+// mod helpers;
 mod original_source;
 mod raw_source;
 mod replace_source;
 mod source;
 mod source_map_source;
 mod vlq;
+pub mod helpers;
 
 pub use cached_source::CachedSource;
 pub use concat_source::ConcatSource;
