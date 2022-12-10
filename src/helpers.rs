@@ -185,7 +185,9 @@ impl<'a> SegmentIter<'a> {
       }
     }
 
-    if let Some(i) = memchr::memchr(b',', self.line[self.segment_cursor..].as_bytes()) {
+    if let Some(i) =
+      memchr::memchr(b',', self.line[self.segment_cursor..].as_bytes())
+    {
       let cursor = self.segment_cursor;
       self.segment_cursor = self.segment_cursor + i + 1;
       return Some(&self.line[cursor..cursor + i]);
@@ -237,14 +239,17 @@ impl<'a> Iterator for SegmentIter<'a> {
           if self.nums.len() != 4 && self.nums.len() != 5 {
             panic!("got {} segments, expected 4 or 5", self.nums.len());
           }
-          self.source_index = (i64::from(self.source_index) + self.nums[1]) as u32;
+          self.source_index =
+            (i64::from(self.source_index) + self.nums[1]) as u32;
           src = Some(self.source_index);
-          self.original_line = (i64::from(self.original_line) + self.nums[2]) as u32;
+          self.original_line =
+            (i64::from(self.original_line) + self.nums[2]) as u32;
           self.original_column =
             (i64::from(self.original_column) + self.nums[3]) as u32;
 
           if self.nums.len() > 4 {
-            self.name_index = (i64::from(self.name_index) + self.nums[4]) as u32;
+            self.name_index =
+              (i64::from(self.name_index) + self.nums[4]) as u32;
             name = Some(self.name_index as u32);
           }
         }
@@ -284,7 +289,8 @@ fn encode_full_mappings(mappings: &[Mapping]) -> String {
   let mut active_name = false;
   let mut initial = true;
 
-  mappings.iter().fold(String::new(), |acc, mapping| {
+  let mut out = String::new();
+  mappings.iter().fold(String::with_capacity(mappings.len() * 5), |acc, mapping| {
     if active_mapping && current_line == mapping.generated_line {
       // A mapping is still active
       if let Some(original) = &mapping.original
@@ -300,12 +306,12 @@ fn encode_full_mappings(mappings: &[Mapping]) -> String {
     } else {
       // No mapping is active
       if mapping.original.is_none() {
-        // avoid writing unneccessary generated mappings
+        // avoid writing unnecessary generated mappings
         return acc;
       }
     }
 
-    let mut out = String::new();
+    out.clear();
     if current_line < mapping.generated_line {
       (0..mapping.generated_line - current_line).for_each(|_| out.push(';'));
       current_line = mapping.generated_line;
