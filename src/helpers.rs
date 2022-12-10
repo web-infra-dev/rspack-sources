@@ -290,7 +290,7 @@ fn encode_full_mappings(mappings: &[Mapping]) -> String {
   let mut initial = true;
 
   let mut out = String::new();
-  mappings.iter().fold(String::with_capacity(mappings.len() * 5), |acc, mapping| {
+  mappings.iter().fold(String::with_capacity(mappings.len() * 4), |acc, mapping| {
     if active_mapping && current_line == mapping.generated_line {
       // A mapping is still active
       if let Some(original) = &mapping.original
