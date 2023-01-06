@@ -1,7 +1,4 @@
-// !# something[]
-use std::{
-  borrow::BorrowMut, cell::RefCell, iter::Filter, str::Split, sync::Arc,
-};
+use std::{borrow::BorrowMut, cell::RefCell, sync::Arc};
 
 use hashbrown::HashMap;
 use smol_str::SmolStr;
@@ -116,13 +113,6 @@ pub struct GeneratedInfo {
 pub fn decode_mappings<'b, 'a: 'b>(
   source_map: &'a SourceMap,
 ) -> impl Iterator<Item = Mapping> + 'b {
-  // let mut source_index = 0;
-  // let mut original_line = 1;
-  // let mut original_column = 0;
-  // let mut name_index = 0;
-  // let mut nums = Vec::with_capacity(6);
-
-  // let mut mappings = Vec::new();
   SegmentIter {
     line: "",
     mapping_str: source_map.mappings(),
@@ -135,19 +125,6 @@ pub fn decode_mappings<'b, 'a: 'b>(
     generated_column: 0,
     nums: Vec::with_capacity(6),
   }
-  // for (generated_line, line) in source_map.mappings().split(';').enumerate() {
-  //   if line.is_empty() {
-  //     continue;
-  //   }
-
-  //   for segment in  {
-  //     if segment.is_empty() {
-  //       continue;
-  //     }
-
-  //   }
-  // }
-  // mappings
 }
 
 pub struct SegmentIter<'a> {
@@ -159,7 +136,6 @@ pub struct SegmentIter<'a> {
   pub original_column: u32,
   pub name_index: u32,
   pub line: &'a str,
-  // pub cursor: usize,
   pub nums: Vec<i64>,
   pub segment_cursor: usize,
 }
@@ -170,7 +146,6 @@ impl<'a> SegmentIter<'a> {
       loop {
         match self.next_line() {
           Some(line) => {
-            // dbg!(&line);
             self.generated_line += 1;
             if line.is_empty() {
               continue;
@@ -190,11 +165,11 @@ impl<'a> SegmentIter<'a> {
     {
       let cursor = self.segment_cursor;
       self.segment_cursor = self.segment_cursor + i + 1;
-      return Some(&self.line[cursor..cursor + i]);
+      Some(&self.line[cursor..cursor + i])
     } else {
       let line = self.line;
       self.line = "";
-      return Some(&line[self.segment_cursor..]);
+      Some(&line[self.segment_cursor..])
     }
   }
 
@@ -206,15 +181,12 @@ impl<'a> SegmentIter<'a> {
       Some(i) => {
         let temp_str = self.mapping_str;
         self.mapping_str = &self.mapping_str[i + 1..];
-        // dbg!(cursor, i, &self.mapping_str[self.cursor..]);
-        // self.cursor = self.cursor + i + 1;
         Some(&temp_str[..i])
       }
       None => {
-        // let cursor = self.cursor;
         let tem_str = self.mapping_str;
         self.mapping_str = "";
-        Some(&tem_str)
+        Some(tem_str)
       }
     }
   }
@@ -226,7 +198,6 @@ impl<'a> Iterator for SegmentIter<'a> {
   fn next(&mut self) -> Option<Self::Item> {
     match self.next_segment() {
       Some(segment) => {
-        // dbg!(&segment);
         self.nums.clear();
         decode(segment, &mut self.nums).unwrap();
         self.generated_column =
@@ -290,10 +261,12 @@ fn encode_full_mappings(mappings: &[Mapping]) -> String {
   let mut initial = true;
 
   let mut out = String::new();
-  mappings.iter().fold(String::with_capacity(mappings.len() * 4), |acc, mapping| {
-    if active_mapping && current_line == mapping.generated_line {
-      // A mapping is still active
-      if let Some(original) = &mapping.original
+  mappings.iter().fold(
+    String::with_capacity(mappings.len() * 4),
+    |acc, mapping| {
+      if active_mapping && current_line == mapping.generated_line {
+        // A mapping is still active
+        if let Some(original) = &mapping.original
         && original.source_index == current_source_index
         && original.original_line == current_original_line
         && original.original_column == current_original_column
@@ -303,56 +276,57 @@ fn encode_full_mappings(mappings: &[Mapping]) -> String {
         // avoid repeating the same original mapping
         return acc;
       }
-    } else {
-      // No mapping is active
-      if mapping.original.is_none() {
-        // avoid writing unnecessary generated mappings
-        return acc;
+      } else {
+        // No mapping is active
+        if mapping.original.is_none() {
+          // avoid writing unnecessary generated mappings
+          return acc;
+        }
       }
-    }
 
-    out.clear();
-    if current_line < mapping.generated_line {
-      (0..mapping.generated_line - current_line).for_each(|_| out.push(';'));
-      current_line = mapping.generated_line;
-      current_column = 0;
-      initial = false;
-    } else if initial {
-      initial = false;
-    } else {
-      out.push(',');
-    }
+      out.clear();
+      if current_line < mapping.generated_line {
+        (0..mapping.generated_line - current_line).for_each(|_| out.push(';'));
+        current_line = mapping.generated_line;
+        current_column = 0;
+        initial = false;
+      } else if initial {
+        initial = false;
+      } else {
+        out.push(',');
+      }
 
-    encode(&mut out, mapping.generated_column, current_column);
-    current_column = mapping.generated_column;
-    if let Some(original) = &mapping.original {
-      active_mapping = true;
-      if original.source_index == current_source_index {
-        out.push('A');
+      encode(&mut out, mapping.generated_column, current_column);
+      current_column = mapping.generated_column;
+      if let Some(original) = &mapping.original {
+        active_mapping = true;
+        if original.source_index == current_source_index {
+          out.push('A');
+        } else {
+          encode(&mut out, original.source_index, current_source_index);
+          current_source_index = original.source_index;
+        }
+        encode(&mut out, original.original_line, current_original_line);
+        current_original_line = original.original_line;
+        if original.original_column == current_original_column {
+          out.push('A');
+        } else {
+          encode(&mut out, original.original_column, current_original_column);
+          current_original_column = original.original_column;
+        }
+        if let Some(name_index) = original.name_index {
+          encode(&mut out, name_index, current_name_index);
+          current_name_index = name_index;
+          active_name = true;
+        } else {
+          active_name = false;
+        }
       } else {
-        encode(&mut out, original.source_index, current_source_index);
-        current_source_index = original.source_index;
+        active_mapping = false;
       }
-      encode(&mut out, original.original_line, current_original_line);
-      current_original_line = original.original_line;
-      if original.original_column == current_original_column {
-        out.push('A');
-      } else {
-        encode(&mut out, original.original_column, current_original_column);
-        current_original_column = original.original_column;
-      }
-      if let Some(name_index) = original.name_index {
-        encode(&mut out, name_index, current_name_index);
-        current_name_index = name_index;
-        active_name = true;
-      } else {
-        active_name = false;
-      }
-    } else {
-      active_mapping = false;
-    }
-    acc + &out
-  })
+      acc + &out
+    },
+  )
 }
 
 fn encode_lines_only_mappings(mappings: &[Mapping]) -> String {
@@ -619,7 +593,7 @@ fn stream_chunks_of_source_map_final(
         Mapping {
           generated_line: mapping.generated_line,
           generated_column: mapping.generated_column,
-          original: Some(original.clone()),
+          original: Some(*original),
         },
       );
       mapping_active_line = mapping.generated_line;
@@ -697,7 +671,7 @@ fn stream_chunks_of_source_map_full(
           Mapping {
             generated_line: mapping_line,
             generated_column: mapping_column,
-            original: active_mapping_original.clone(),
+            original: active_mapping_original,
           },
         )
       }
@@ -756,7 +730,7 @@ fn stream_chunks_of_source_map_full(
         || (mapping.generated_line == final_line
         && mapping.generated_column < final_column)) {
       mapping_active = true;
-      active_mapping_original = Some(original.clone());
+      active_mapping_original = Some(*original);
     }
   };
 

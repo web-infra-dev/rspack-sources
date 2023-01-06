@@ -9,27 +9,27 @@ use rspack_sources::{
   SourceMapSourceOptions,
 };
 
-const HELLOWORLD_JS: &'static str = include_str!(concat!(
+const HELLOWORLD_JS: &str = include_str!(concat!(
   env!("CARGO_MANIFEST_DIR"),
   "/benches/fixtures/transpile-minify/files/helloworld.js"
 ));
-const HELLOWORLD_JS_MAP: &'static str = include_str!(concat!(
+const HELLOWORLD_JS_MAP: &str = include_str!(concat!(
   env!("CARGO_MANIFEST_DIR"),
   "/benches/fixtures/transpile-minify/files/helloworld.js.map"
 ));
-const HELLOWORLD_MIN_JS: &'static str = include_str!(concat!(
+const HELLOWORLD_MIN_JS: &str = include_str!(concat!(
   env!("CARGO_MANIFEST_DIR"),
   "/benches/fixtures/transpile-minify/files/helloworld.min.js"
 ));
-const HELLOWORLD_MIN_JS_MAP: &'static str = include_str!(concat!(
+const HELLOWORLD_MIN_JS_MAP: &str = include_str!(concat!(
   env!("CARGO_MANIFEST_DIR"),
   "/benches/fixtures/transpile-minify/files/helloworld.min.js.map"
 ));
-const BUNDLE_JS: &'static str = include_str!(concat!(
+const BUNDLE_JS: &str = include_str!(concat!(
   env!("CARGO_MANIFEST_DIR"),
   "/benches/fixtures/transpile-rollup/files/bundle.js"
 ));
-const BUNDLE_JS_MAP: &'static str = include_str!(concat!(
+const BUNDLE_JS_MAP: &str = include_str!(concat!(
   env!("CARGO_MANIFEST_DIR"),
   "/benches/fixtures/transpile-rollup/files/bundle.js.map"
 ));
@@ -52,7 +52,7 @@ fn benchmark_concat_generate_string(b: &mut Bencher) {
     inner_source_map: None,
     remove_original_source: false,
   });
-  let concat = ConcatSource::new([sms_minify.clone(), sms_rollup.clone()]);
+  let concat = ConcatSource::new([sms_minify, sms_rollup]);
 
   b.iter(|| {
     concat
@@ -111,7 +111,7 @@ fn benchmark_concat_generate_base64(b: &mut Bencher) {
     inner_source_map: None,
     remove_original_source: false,
   });
-  let concat = ConcatSource::new([sms_minify.clone(), sms_rollup.clone()]);
+  let concat = ConcatSource::new([sms_minify, sms_rollup]);
 
   b.iter(|| {
     let json = concat
@@ -141,7 +141,7 @@ fn benchmark_concat_generate_base64_with_cache(b: &mut Bencher) {
     inner_source_map: None,
     remove_original_source: false,
   });
-  let concat = ConcatSource::new([sms_minify.clone(), sms_rollup.clone()]);
+  let concat = ConcatSource::new([sms_minify, sms_rollup]);
   let cached = CachedSource::new(concat);
 
   b.iter(|| {

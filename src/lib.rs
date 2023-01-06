@@ -15,7 +15,6 @@ mod source;
 mod source_map_source;
 mod vlq;
 
-use std::ffi::c_long;
 
 pub use cached_source::CachedSource;
 pub use concat_source::ConcatSource;
@@ -39,7 +38,7 @@ pub mod stream_chunks {
   };
 }
 
-pub fn substring1(str: &str, start: usize, end: usize) -> &str {
+pub fn substring1(str: &str, _start: usize, _end: usize) -> &str {
   let chars = str.chars();
   let start_index = chars.clone().fold(0, |acc, cur| acc + cur.len_utf8());
 
