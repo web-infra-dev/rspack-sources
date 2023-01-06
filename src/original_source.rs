@@ -257,7 +257,7 @@ mod tests {
   #[test]
   fn should_return_the_correct_size_for_binary_files() {
     let source = OriginalSource::new(
-      &String::from_utf8(vec![0; 256]).unwrap(),
+      String::from_utf8(vec![0; 256]).unwrap(),
       "file.wasm",
     );
     assert_eq!(source.size(), 256);

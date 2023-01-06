@@ -1,5 +1,6 @@
 //! Rusty [`webpack-sources`](https://github.com/webpack/webpack-sources) port.
 
+#![feature(let_chains)]
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 

@@ -22,7 +22,7 @@ impl fmt::Display for Error {
       Error::VlqLeftover => write!(f, "leftover cur/shift in vlq decode"),
       Error::VlqNoValues => write!(f, "vlq decode did not produce any values"),
       Error::VlqOverflow => write!(f, "vlq decode caused an overflow"),
-      Error::BadJson(err) => write!(f, "bad json: {}", err),
+      Error::BadJson(err) => write!(f, "bad json: {err}"),
     }
   }
 }
