@@ -1,13 +1,12 @@
 //! Rusty [`webpack-sources`](https://github.com/webpack/webpack-sources) port.
 
 #![forbid(unsafe_code)]
-// #![deny(missing_docs)]
+#![deny(missing_docs)]
 
 mod cached_source;
 mod concat_source;
 mod error;
-// mod helpers;
-pub mod helpers;
+mod helpers;
 mod original_source;
 mod raw_source;
 mod replace_source;
@@ -35,16 +34,4 @@ pub mod stream_chunks {
     stream_chunks_default, GeneratedInfo, OnChunk, OnName, OnSource,
     StreamChunks,
   };
-}
-
-pub fn substring1(str: &str, _start: usize, _end: usize) -> &str {
-  let chars = str.chars();
-  let start_index = chars.clone().fold(0, |acc, cur| acc + cur.len_utf8());
-
-  dbg!(&chars.clone().take(1).next());
-  let end_index = chars
-    .take(1)
-    .fold(start_index, |acc, cur| acc + cur.len_utf8());
-  dbg!(start_index, end_index);
-  &str[start_index..end_index]
 }
