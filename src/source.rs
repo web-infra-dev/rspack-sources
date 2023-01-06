@@ -201,7 +201,7 @@ impl SourceMap {
   }
 
   /// Get the decoded mappings in [SourceMap].
-  pub fn decoded_mappings(&self) -> Vec<Mapping> {
+  pub fn decoded_mappings(&'_ self) -> impl IntoIterator<Item = Mapping> + '_ {
     decode_mappings(self)
   }
 
@@ -436,7 +436,7 @@ pub struct Mapping {
 }
 
 /// Represent original position information of a [Mapping].
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
 pub struct OriginalLocation {
   /// Source index.
   pub source_index: u32,
@@ -591,7 +591,7 @@ mod tests {
     let g = RawSource::from("g").boxed();
     assert_eq!(&g, &g.clone());
     let h = &RawSource::from("h") as &dyn Source;
-    assert_eq!(h, h.clone());
+    assert_eq!(h, h);
     let i = ReplaceSource::new(RawSource::from("i").boxed());
     assert_eq!(i, i.clone());
     let j = CachedSource::new(RawSource::from("j").boxed());
@@ -610,7 +610,7 @@ mod tests {
   fn ref_dyn_source_use_hashmap_available() {
     let mut map = HashMap::new();
     let a = &RawSource::from("a") as &dyn Source;
-    map.insert(a.clone(), a.clone());
+    map.insert(a, a);
     assert_eq!(map.get(&a).unwrap(), &a);
   }
 }

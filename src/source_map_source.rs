@@ -206,7 +206,7 @@ mod tests {
     let sms2 = SourceMapSource::new(SourceMapSourceOptions {
       value: source_r_code,
       name: "text",
-      source_map: source_r_map.clone(),
+      source_map: source_r_map,
       original_source: Some(inner_source.source().to_string()),
       inner_source_map: inner_source.map(&MapOptions::default()),
       remove_original_source: true,
@@ -391,10 +391,10 @@ mod tests {
       c.clone(),
       b2.clone(),
       a.clone(),
-      b2.clone(),
-      c.clone(),
-      a.clone(),
-      b.clone(),
+      b2,
+      c,
+      a,
+      b,
     ]);
     let map = source.map(&MapOptions::default()).unwrap();
     assert_eq!(

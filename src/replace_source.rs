@@ -504,7 +504,7 @@ mod tests {
     let mut last_line = 0;
     sourcemap
       .decoded_mappings()
-      .iter()
+      .into_iter()
       .map(|token| {
         format!(
           "{}:{} ->{} {}:{}{}",
@@ -551,8 +551,7 @@ mod tests {
     let line3 = "Line 3";
     let line4 = "Line 4";
     let line5 = "Line 5";
-    let code =
-      [&line1, &line2, &line3, &line4, &line5, "Last", "Line"].join("\n");
+    let code = [line1, line2, line3, line4, line5, "Last", "Line"].join("\n");
     let mut source =
       ReplaceSource::new(OriginalSource::new(code.as_str(), "file.txt"));
 

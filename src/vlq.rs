@@ -1,5 +1,6 @@
 //! Implements utilities for dealing with the sourcemap vlq encoding.
 //! forked from [rust-sourcemap](https://github.com/getsentry/rust-sourcemap/blob/851f12bfa6c4cf2c737b94734b27f7d9bfb4de86/src/vlq.rs)
+
 use crate::{Error, Result};
 
 const B64_CHARS: &[u8] =
