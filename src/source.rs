@@ -201,9 +201,7 @@ impl SourceMap {
   }
 
   /// Get the decoded mappings in [SourceMap].
-  pub fn decoded_mappings(
-    &'_ self,
-  ) -> impl IntoIterator<Item = Mapping> + '_ {
+  pub fn decoded_mappings(&'_ self) -> impl IntoIterator<Item = Mapping> + '_ {
     decode_mappings(self)
   }
 

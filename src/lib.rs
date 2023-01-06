@@ -15,7 +15,6 @@ mod source;
 mod source_map_source;
 mod vlq;
 
-
 pub use cached_source::CachedSource;
 pub use concat_source::ConcatSource;
 pub use error::{Error, Result};
@@ -41,7 +40,6 @@ pub mod stream_chunks {
 pub fn substring1(str: &str, _start: usize, _end: usize) -> &str {
   let chars = str.chars();
   let start_index = chars.clone().fold(0, |acc, cur| acc + cur.len_utf8());
-
 
   dbg!(&chars.clone().take(1).next());
   let end_index = chars
