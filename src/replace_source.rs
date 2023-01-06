@@ -107,14 +107,16 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for ReplaceSource<T> {
     for replacement in self.replacements.lock().iter() {
       if inner_pos < replacement.start {
         let end_pos = (replacement.start as usize).min(inner_source_code.len());
-        source_code.push_str(
-          inner_source_code.substring(inner_pos as usize, end_pos as usize),
-        );
+        source_code
+          .push_str(inner_source_code.substring(inner_pos as usize, end_pos));
       }
       source_code.push_str(&replacement.content);
-      inner_pos = inner_pos
-        .max(replacement.end)
-        .min(inner_source_code.len() as u32);
+      #[allow(clippy::manual_clamp)]
+      {
+        inner_pos = inner_pos
+          .max(replacement.end)
+          .min(inner_source_code.len() as u32);
+      }
     }
     source_code
       .push_str(inner_source_code.substring(inner_pos as usize, usize::MAX));
@@ -248,7 +250,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
               original.original_column,
               chunk.substring(0, chunk_pos as usize),
             ) {
-            original.original_column += chunk_pos as u32;
+            original.original_column += chunk_pos;
           }
           pos += chunk_pos;
           let line = mapping.generated_line as i64 + generated_line_offset;
@@ -258,7 +260,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
             generated_column_offset = -(chunk_pos as i64);
             generated_column_offset_line = line;
           }
-          mapping.generated_column += chunk_pos as u32;
+          mapping.generated_column += chunk_pos;
         }
 
 				// Is a replacement in the chunk?
@@ -278,7 +280,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
                 name_index: original.name_index.and_then(|name_index| name_index_mapping.borrow().get(&name_index).copied()),
               }),
             });
-            mapping.generated_column += offset as u32;
+            mapping.generated_column += offset;
             chunk_pos += offset;
             pos = next_replacement_pos;
             if let Some(original) = &mut mapping.original
@@ -522,7 +524,7 @@ mod tests {
             .and_then(
               |original| sourcemap.get_source(original.source_index as usize)
             )
-            .map_or("".to_owned(), |source| format!(" [{}]", source)),
+            .map_or("".to_owned(), |source| format!(" [{source}]")),
           token
             .original
             .as_ref()
@@ -538,7 +540,7 @@ mod tests {
             .as_ref()
             .and_then(|original| original.name_index)
             .and_then(|name_index| sourcemap.get_name(name_index as usize))
-            .map_or("".to_owned(), |source| format!(" ({})", source)),
+            .map_or("".to_owned(), |source| format!(" ({source})")),
         )
       })
       .collect()

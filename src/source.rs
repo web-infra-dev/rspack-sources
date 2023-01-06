@@ -362,7 +362,7 @@ impl TryFrom<RawSourceMap> for SourceMap {
             if is_valid {
               x
             } else {
-              format!("{}/{}", source_root, x)
+              format!("{source_root}/{x}")
             }
           })
           .collect()
@@ -571,6 +571,7 @@ mod tests {
   }
 
   #[test]
+  #[allow(clippy::clone_double_ref)]
   fn clone_available() {
     let a = RawSource::from("a");
     assert_eq!(a, a.clone());
@@ -607,6 +608,7 @@ mod tests {
   }
 
   #[test]
+  #[allow(clippy::clone_double_ref)]
   fn ref_dyn_source_use_hashmap_available() {
     let mut map = HashMap::new();
     let a = &RawSource::from("a") as &dyn Source;

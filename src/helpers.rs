@@ -221,7 +221,7 @@ impl<'a> Iterator for SegmentIter<'a> {
           if self.nums.len() > 4 {
             self.name_index =
               (i64::from(self.name_index) + self.nums[4]) as u32;
-            name = Some(self.name_index as u32);
+            name = Some(self.name_index);
           }
         }
 
@@ -933,7 +933,7 @@ pub fn stream_chunks_of_combined_source_map(
     let mut r = mappings_data.len() / 5;
     while l < r {
       let m = (l + r) >> 1;
-      if mappings_data[m * 5] <= column as i64 {
+      if mappings_data[m * 5] <= column {
         l = m + 1;
       } else {
         r = m;
