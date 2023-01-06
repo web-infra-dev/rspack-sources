@@ -78,26 +78,22 @@ impl ConcatSource {
 
 impl Source for ConcatSource {
   fn source(&self) -> Cow<str> {
-    let all = self.children.iter().fold(String::new(), |mut acc, cur| {
-      acc.push_str(&cur.source());
-      acc
-    });
+    let all = self.children.iter().map(|child| child.source()).collect();
     Cow::Owned(all)
   }
 
   fn buffer(&self) -> Cow<[u8]> {
-    let all = self.children.iter().fold(Vec::new(), |mut acc, cur| {
-      acc.extend(&*cur.buffer());
-      acc
-    });
+    let all = self
+      .children
+      .iter()
+      .map(|child| child.buffer())
+      .collect::<Vec<_>>()
+      .concat();
     Cow::Owned(all)
   }
 
   fn size(&self) -> usize {
-    self.children.iter().fold(0, |mut acc, cur| {
-      acc += cur.size();
-      acc
-    })
+    self.children.iter().map(|child| child.size()).sum()
   }
 
   fn map(&self, options: &MapOptions) -> Option<SourceMap> {
