@@ -1,7 +1,6 @@
 use std::{borrow::BorrowMut, cell::RefCell, sync::Arc};
 
 use hashbrown::HashMap;
-use smol_str::SmolStr;
 use substring::Substring;
 
 use crate::{
@@ -9,6 +8,8 @@ use crate::{
   vlq::{decode, encode},
   MapOptions, Source, SourceMap,
 };
+
+type ArcStr = Arc<str>;
 
 pub fn get_map<S: StreamChunks>(
   stream: &S,
@@ -895,31 +896,31 @@ pub fn stream_chunks_of_combined_source_map(
   options: &MapOptions,
 ) -> GeneratedInfo {
   let on_source = RefCell::new(on_source);
-  let inner_source: RefCell<Option<SmolStr>> =
+  let inner_source: RefCell<Option<ArcStr>> =
     RefCell::new(inner_source.map(Into::into));
-  let source_mapping: RefCell<HashMap<SmolStr, u32>> =
+  let source_mapping: RefCell<HashMap<ArcStr, u32>> =
     RefCell::new(HashMap::new());
-  let mut name_mapping: HashMap<SmolStr, u32> = HashMap::new();
+  let mut name_mapping: HashMap<ArcStr, u32> = HashMap::new();
   let source_index_mapping: RefCell<HashMap<i64, i64>> =
     RefCell::new(HashMap::new());
   let name_index_mapping: RefCell<HashMap<i64, i64>> =
     RefCell::new(HashMap::new());
-  let name_index_value_mapping: RefCell<HashMap<i64, SmolStr>> =
+  let name_index_value_mapping: RefCell<HashMap<i64, ArcStr>> =
     RefCell::new(HashMap::new());
   let inner_source_index: RefCell<i64> = RefCell::new(-2);
   let inner_source_index_mapping: RefCell<HashMap<i64, i64>> =
     RefCell::new(HashMap::new());
   let inner_source_index_value_mapping: RefCell<
-    HashMap<i64, (SmolStr, Option<SmolStr>)>,
+    HashMap<i64, (ArcStr, Option<ArcStr>)>,
   > = RefCell::new(HashMap::new());
-  let inner_source_contents: RefCell<HashMap<i64, Option<SmolStr>>> =
+  let inner_source_contents: RefCell<HashMap<i64, Option<ArcStr>>> =
     RefCell::new(HashMap::new());
   let inner_source_content_lines: RefCell<
-    HashMap<i64, Option<Arc<Vec<SmolStr>>>>,
+    HashMap<i64, Option<Arc<Vec<ArcStr>>>>,
   > = RefCell::new(HashMap::new());
   let inner_name_index_mapping: RefCell<HashMap<i64, i64>> =
     RefCell::new(HashMap::new());
-  let inner_name_index_value_mapping: RefCell<HashMap<i64, SmolStr>> =
+  let inner_name_index_value_mapping: RefCell<HashMap<i64, ArcStr>> =
     RefCell::new(HashMap::new());
   let inner_source_map_line_data: RefCell<Vec<SourceMapLineData>> =
     RefCell::new(Vec::new());
@@ -1106,7 +1107,7 @@ pub fn stream_chunks_of_combined_source_map(
                       Arc::new(
                         lines
                           .into_iter()
-                          .map(SmolStr::from)
+                          .map(|s| s.to_string().into())
                           .collect::<Vec<_>>(),
                       )
                     })
@@ -1126,7 +1127,7 @@ pub fn stream_chunks_of_combined_source_map(
                     let end = start + name.len();
                     i.substring(start, end)
                   });
-                if name == original_name {
+                if name.as_ref() == original_name {
                   let mut name_index_mapping = name_index_mapping.borrow_mut();
                   final_name_index =
                     name_index_mapping.get(&name_index).copied().unwrap_or(-2);
@@ -1252,7 +1253,7 @@ pub fn stream_chunks_of_combined_source_map(
     },
     &mut |i, source, source_content| {
       let i = i as i64;
-      let mut source_content: Option<SmolStr> = source_content.map(Into::into);
+      let mut source_content: Option<ArcStr> = source_content.map(Into::into);
       if source == inner_source_name {
         *inner_source_index.borrow_mut() = i;
         let mut inner_source = inner_source.borrow_mut();
