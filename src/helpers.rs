@@ -859,6 +859,7 @@ fn stream_chunks_of_source_map_lines_full(
         original: None,
       },
     );
+    current_generated_line += 1;
   }
   let last_line = lines[lines.len() - 1];
   let last_new_line = last_line.ends_with('\n');
