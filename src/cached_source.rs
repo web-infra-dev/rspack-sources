@@ -1,9 +1,8 @@
-use std::{borrow::Cow, hash::Hash};
+use std::{borrow::Cow, hash::Hash, sync::Arc};
 
 use dashmap::DashMap;
 use hashbrown::hash_map::DefaultHashBuilder;
 use once_cell::sync::OnceCell;
-use smol_str::SmolStr;
 
 use crate::{
   helpers::{
@@ -48,7 +47,7 @@ use crate::{
 pub struct CachedSource<T> {
   inner: T,
   cached_buffer: OnceCell<Vec<u8>>,
-  cached_source: OnceCell<SmolStr>,
+  cached_source: OnceCell<Arc<str>>,
   cached_maps: DashMap<MapOptions, Option<SourceMap>, DefaultHashBuilder>,
 }
 
@@ -73,7 +72,7 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
   fn source(&self) -> Cow<str> {
     let cached = self
       .cached_source
-      .get_or_init(|| SmolStr::from(self.inner.source()));
+      .get_or_init(|| self.inner.source().into());
     Cow::Borrowed(cached)
   }
 
