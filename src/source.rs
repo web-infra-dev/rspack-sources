@@ -37,6 +37,9 @@ pub trait Source:
   fn update_hash(&self, state: &mut dyn Hasher) {
     self.dyn_hash(state);
   }
+
+  /// Writes the source into a writer, preferably a `std::io::BufWriter<std::io::Write>`.
+  fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()>;
 }
 
 impl Source for Box<dyn Source> {
@@ -54,6 +57,10 @@ impl Source for Box<dyn Source> {
 
   fn map(&self, options: &MapOptions) -> Option<SourceMap> {
     self.as_ref().map(options)
+  }
+
+  fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
+    self.as_ref().to_writer(writer)
   }
 }
 
@@ -614,5 +621,18 @@ mod tests {
     let a = &RawSource::from("a") as &dyn Source;
     map.insert(a, a);
     assert_eq!(map.get(&a).unwrap(), &a);
+  }
+
+  #[test]
+  fn to_writer() {
+    let sources =
+      ConcatSource::new([RawSource::from("a"), RawSource::from("b")]);
+    let mut writer = std::io::BufWriter::new(Vec::new());
+    let result = sources.to_writer(&mut writer);
+    assert!(result.is_ok());
+    assert_eq!(
+      String::from_utf8(writer.into_inner().unwrap()).unwrap(),
+      "ab"
+    );
   }
 }
