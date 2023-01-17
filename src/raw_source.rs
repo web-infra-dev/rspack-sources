@@ -88,6 +88,13 @@ impl Source for RawSource {
   fn map(&self, _: &MapOptions) -> Option<SourceMap> {
     None
   }
+
+  fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
+    writer.write_all(match self {
+      RawSource::Buffer(i) => i,
+      RawSource::Source(i) => i.as_bytes(),
+    })
+  }
 }
 
 impl Hash for RawSource {

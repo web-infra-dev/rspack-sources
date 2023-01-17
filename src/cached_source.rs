@@ -96,6 +96,10 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
       map
     }
   }
+
+  fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
+    self.inner.to_writer(writer)
+  }
 }
 
 impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks

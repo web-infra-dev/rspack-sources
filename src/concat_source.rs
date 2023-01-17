@@ -99,6 +99,13 @@ impl Source for ConcatSource {
   fn map(&self, options: &MapOptions) -> Option<SourceMap> {
     get_map(self, options)
   }
+
+  fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
+    for child in &self.children {
+      child.to_writer(writer)?;
+    }
+    Ok(())
+  }
 }
 
 impl Hash for ConcatSource {

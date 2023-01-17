@@ -106,6 +106,10 @@ impl Source for SourceMapSource {
     }
     get_map(self, options)
   }
+
+  fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
+    writer.write_all(self.value.as_bytes())
+  }
 }
 
 impl Hash for SourceMapSource {
