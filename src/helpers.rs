@@ -1350,3 +1350,46 @@ pub fn stream_chunks_of_combined_source_map(
     options,
   )
 }
+
+// pub fn stream_and_get_source_and_map<S: StreamChunks>(
+//   input_source: &S,
+//   options: &MapOptions,
+//   on_chunk: OnChunk,
+//   on_source: OnSource,
+//   on_name: OnName,
+// ) -> () {
+//   let mappings = vec![];
+//   let sources = vec![];
+//   let sources_content = vec![];
+//   let names = vec![];
+//   let info = input_source.stream_chunks(
+//     options,
+//     &mut |chunk, mapping| {
+//       mappings.push(mapping.clone());
+//       return on_chunk(chunk, mapping);
+//     },
+//     &mut |source_index, source, source_content| {
+//       let source_index2 = source_index as usize;
+//       while sources.len() <= source_index2 {
+//         sources.push("".to_string());
+//       }
+//       sources[source_index2] = source.to_owned();
+//       if let Some(source_content) = source_content {
+//         while sources_content.len() <= source_index2 {
+//           sources_content.push("".to_string());
+//         }
+//         sources_content[source_index2] = source_content.to_owned();
+//       }
+//       return on_source(source_index, source, source_content);
+//     },
+//     &mut |name_index, name| {
+//       let name_index2 = name_index as usize;
+//       while names.len() <= name_index2 {
+//         names.push("".to_string());
+//       }
+//       names[name_index2] = name.to_owned();
+//       return on_name(name_index, name);
+//     },
+//   );
+//   (info, map)
+// }

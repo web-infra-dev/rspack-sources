@@ -4,12 +4,7 @@ use dashmap::DashMap;
 use hashbrown::hash_map::DefaultHashBuilder;
 use once_cell::sync::OnceCell;
 
-use crate::{
-  helpers::{
-    stream_chunks_of_raw_source, stream_chunks_of_source_map, StreamChunks,
-  },
-  MapOptions, Source, SourceMap,
-};
+use crate::{helpers::StreamChunks, MapOptions, Source, SourceMap};
 
 /// It tries to reused cached results from other methods to avoid calculations,
 /// usally used after modify is finished.
@@ -112,16 +107,24 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks
     on_source: crate::helpers::OnSource,
     on_name: crate::helpers::OnName,
   ) -> crate::helpers::GeneratedInfo {
-    let source = self.source();
-    if let Some(map) = &self.map(options) {
-      stream_chunks_of_source_map(
-        &source, map, on_chunk, on_source, on_name, options,
-      )
-    } else {
-      stream_chunks_of_raw_source(
-        &source, options, on_chunk, on_source, on_name,
-      )
-    }
+    // if self.cached_maps.contains_key(options)
+    //   && (self.cached_buffer.get().is_some()
+    //     || self.cached_source.get().is_some())
+    // {
+    //   let source = self.source();
+    //   if let Some(map) = &self.map(options) {
+    //     return stream_chunks_of_source_map(
+    //       &source, map, on_chunk, on_source, on_name, options,
+    //     );
+    //   } else {
+    //     return stream_chunks_of_raw_source(
+    //       &source, options, on_chunk, on_source, on_name,
+    //     );
+    //   }
+    // }
+    self
+      .inner
+      .stream_chunks(options, on_chunk, on_source, on_name)
   }
 }
 
@@ -149,3 +152,33 @@ impl<T: PartialEq> PartialEq for CachedSource<T> {
 }
 
 impl<T: Eq> Eq for CachedSource<T> {}
+
+#[cfg(test)]
+mod tests {
+  use crate::{
+    ConcatSource, RawSource, SourceExt, SourceMapSource, WithoutOriginalOptions,
+  };
+
+  use super::*;
+
+  #[test]
+  fn line_number_should_not_add_one() {
+    let source = ConcatSource::new([
+      CachedSource::new(RawSource::from("\n")).boxed(),
+      SourceMapSource::new(WithoutOriginalOptions {
+        value: "\nconsole.log(1);\n".to_string(),
+        name: "index.js".to_string(),
+        source_map: SourceMap::new(
+          None,
+          ";AACA".to_string(),
+          vec!["index.js".to_string()],
+          vec!["// DELETE IT\nconsole.log(1)".to_string()],
+          vec![],
+        ),
+      })
+      .boxed(),
+    ]);
+    let map = source.map(&Default::default()).unwrap();
+    assert_eq!(map.mappings(), ";;AACA");
+  }
+}
