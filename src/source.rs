@@ -3,7 +3,7 @@ use std::{
   borrow::Cow,
   convert::{TryFrom, TryInto},
   fmt,
-  hash::{Hash, Hasher},
+  hash::{Hash, Hasher}, sync::Arc,
 };
 
 use dyn_clone::DynClone;
@@ -15,7 +15,7 @@ use crate::{
 };
 
 /// An alias for [Box<dyn Source>].
-pub type BoxSource = Box<dyn Source>;
+pub type BoxSource = Arc<dyn Source>;
 
 /// [Source] abstraction, [webpack-sources docs](https://github.com/webpack/webpack-sources/#source).
 pub trait Source:
@@ -42,7 +42,7 @@ pub trait Source:
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()>;
 }
 
-impl Source for Box<dyn Source> {
+impl Source for BoxSource {
   fn source(&self) -> Cow<str> {
     self.as_ref().source()
   }
@@ -66,7 +66,7 @@ impl Source for Box<dyn Source> {
 
 dyn_clone::clone_trait_object!(Source);
 
-impl StreamChunks for Box<dyn Source> {
+impl StreamChunks for BoxSource {
   fn stream_chunks(
     &self,
     options: &MapOptions,
@@ -137,7 +137,7 @@ pub trait SourceExt {
 
 impl<T: Source + 'static> SourceExt for T {
   fn boxed(self) -> BoxSource {
-    Box::new(self)
+    Arc::new(self)
   }
 }
 

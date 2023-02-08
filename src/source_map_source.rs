@@ -171,8 +171,7 @@ impl StreamChunks for SourceMapSource {
 #[cfg(test)]
 mod tests {
   use crate::{
-    BoxSource, ConcatSource, OriginalSource, RawSource, ReplaceSource,
-    SourceExt,
+    ConcatSource, OriginalSource, RawSource, ReplaceSource, SourceExt,
   };
 
   use super::*;
@@ -181,10 +180,9 @@ mod tests {
   fn map_correctly() {
     let inner_source_code = "Hello World\nis a test string\n";
     let inner_source = ConcatSource::new([
-      Box::new(OriginalSource::new(inner_source_code, "hello-world.txt"))
-        as BoxSource,
-      Box::new(OriginalSource::new("Translate: ", "header.txt")),
-      Box::new(RawSource::from("Other text")),
+      OriginalSource::new(inner_source_code, "hello-world.txt").boxed(),
+      OriginalSource::new("Translate: ", "header.txt").boxed(),
+      RawSource::from("Other text").boxed(),
     ]);
     let source_r_code =
       "Translated: Hallo Welt\nist ein test Text\nAnderer Text";

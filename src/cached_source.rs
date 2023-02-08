@@ -14,15 +14,15 @@ use crate::{helpers::StreamChunks, MapOptions, Source, SourceMap};
 /// ```
 /// use rspack_sources::{
 ///   BoxSource, CachedSource, ConcatSource, MapOptions, OriginalSource,
-///   RawSource, Source, SourceMap,
+///   RawSource, Source, SourceMap, SourceExt,
 /// };
 ///
 /// let mut concat = ConcatSource::new([
-///   Box::new(RawSource::from("Hello World\n".to_string())) as BoxSource,
-///   Box::new(OriginalSource::new(
+///   RawSource::from("Hello World\n".to_string()).boxed(),
+///   OriginalSource::new(
 ///     "console.log('test');\nconsole.log('test2');\n",
 ///     "console.js",
-///   )),
+///   ).boxed(),
 /// ]);
 /// concat.add(OriginalSource::new("Hello2\n", "hello.md"));
 ///
