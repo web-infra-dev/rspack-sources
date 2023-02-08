@@ -2,6 +2,7 @@ use std::{
   borrow::Cow,
   cell::RefCell,
   hash::{Hash, Hasher},
+  sync::Arc,
 };
 
 use hashbrown::HashMap;
@@ -34,7 +35,7 @@ use crate::{
 /// ```
 #[derive(Debug)]
 pub struct ReplaceSource<T> {
-  inner: T,
+  inner: Arc<T>,
   replacements: Mutex<Vec<Replacement>>,
 }
 
@@ -50,7 +51,7 @@ impl<T> ReplaceSource<T> {
   /// Create a [ReplaceSource].
   pub fn new(source: T) -> Self {
     Self {
-      inner: source,
+      inner: Arc::new(source),
       replacements: Mutex::new(Vec::new()),
     }
   }
@@ -471,7 +472,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
 impl<T: Source> Clone for ReplaceSource<T> {
   fn clone(&self) -> Self {
     Self {
-      inner: dyn_clone::clone(&self.inner),
+      inner: self.inner.clone(),
       replacements: Mutex::new(self.replacements.lock().clone()),
     }
   }

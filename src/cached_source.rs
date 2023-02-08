@@ -40,7 +40,7 @@ use crate::{helpers::StreamChunks, MapOptions, Source, SourceMap};
 /// ```
 #[derive(Debug)]
 pub struct CachedSource<T> {
-  inner: T,
+  inner: Arc<T>,
   cached_buffer: OnceCell<Vec<u8>>,
   cached_source: OnceCell<Arc<str>>,
   cached_maps: DashMap<MapOptions, Option<SourceMap>, DefaultHashBuilder>,
@@ -50,7 +50,7 @@ impl<T> CachedSource<T> {
   /// Create a [CachedSource] with the original [Source].
   pub fn new(inner: T) -> Self {
     Self {
-      inner,
+      inner: Arc::new(inner),
       cached_buffer: Default::default(),
       cached_source: Default::default(),
       cached_maps: Default::default(),
@@ -131,7 +131,7 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks
 impl<T: Source> Clone for CachedSource<T> {
   fn clone(&self) -> Self {
     Self {
-      inner: dyn_clone::clone(&self.inner),
+      inner: self.inner.clone(),
       cached_buffer: self.cached_buffer.clone(),
       cached_source: self.cached_source.clone(),
       cached_maps: self.cached_maps.clone(),
