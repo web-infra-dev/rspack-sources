@@ -3,7 +3,8 @@ use std::{
   borrow::Cow,
   convert::{TryFrom, TryInto},
   fmt,
-  hash::{Hash, Hasher}, sync::Arc,
+  hash::{Hash, Hasher},
+  sync::Arc,
 };
 
 use dyn_clone::DynClone;

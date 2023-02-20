@@ -14,7 +14,7 @@ use crate::{helpers::StreamChunks, MapOptions, Source, SourceMap};
 /// ```
 /// use rspack_sources::{
 ///   BoxSource, CachedSource, ConcatSource, MapOptions, OriginalSource,
-///   RawSource, Source, SourceMap, SourceExt,
+///   RawSource, Source, SourceExt, SourceMap,
 /// };
 ///
 /// let mut concat = ConcatSource::new([
@@ -22,7 +22,8 @@ use crate::{helpers::StreamChunks, MapOptions, Source, SourceMap};
 ///   OriginalSource::new(
 ///     "console.log('test');\nconsole.log('test2');\n",
 ///     "console.js",
-///   ).boxed(),
+///   )
+///   .boxed(),
 /// ]);
 /// concat.add(OriginalSource::new("Hello2\n", "hello.md"));
 ///

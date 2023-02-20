@@ -19,7 +19,7 @@ use crate::{
 /// ```
 /// use rspack_sources::{
 ///   BoxSource, ConcatSource, MapOptions, OriginalSource, RawSource, Source,
-///   SourceMap, SourceExt
+///   SourceExt, SourceMap,
 /// };
 ///
 /// let mut source = ConcatSource::new([
@@ -27,7 +27,8 @@ use crate::{
 ///   OriginalSource::new(
 ///     "console.log('test');\nconsole.log('test2');\n",
 ///     "console.js",
-///   ).boxed(),
+///   )
+///   .boxed(),
 /// ]);
 /// source.add(OriginalSource::new("Hello2\n", "hello.md"));
 ///
