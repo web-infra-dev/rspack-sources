@@ -4,7 +4,7 @@ use std::{
   hash::{Hash, Hasher},
 };
 
-use hashbrown::HashMap;
+use rustc_hash::FxHashMap as HashMap;
 
 use crate::{
   helpers::{get_map, GeneratedInfo, OnChunk, OnName, OnSource, StreamChunks},
@@ -138,14 +138,14 @@ impl StreamChunks for ConcatSource {
     }
     let mut current_line_offset = 0;
     let mut current_column_offset = 0;
-    let mut source_mapping: HashMap<String, u32> = HashMap::new();
-    let mut name_mapping: HashMap<String, u32> = HashMap::new();
+    let mut source_mapping: HashMap<String, u32> = HashMap::default();
+    let mut name_mapping: HashMap<String, u32> = HashMap::default();
     let mut need_to_cloas_mapping = false;
     for item in &self.children {
       let source_index_mapping: RefCell<HashMap<u32, u32>> =
-        RefCell::new(HashMap::new());
+        RefCell::new(HashMap::default());
       let name_index_mapping: RefCell<HashMap<u32, u32>> =
-        RefCell::new(HashMap::new());
+        RefCell::new(HashMap::default());
       let mut last_mapping_line = 0;
       let GeneratedInfo {
         generated_line,

@@ -5,8 +5,8 @@ use std::{
   sync::Arc,
 };
 
-use hashbrown::HashMap;
 use parking_lot::Mutex;
+use rustc_hash::FxHashMap as HashMap;
 use substring::Substring;
 
 use crate::{
@@ -169,9 +169,9 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
     let source_content_lines: RefCell<Vec<Option<Vec<String>>>> =
       RefCell::new(Vec::new());
     let name_mapping: RefCell<HashMap<String, u32>> =
-      RefCell::new(HashMap::new());
+      RefCell::new(HashMap::default());
     let name_index_mapping: RefCell<HashMap<u32, u32>> =
-      RefCell::new(HashMap::new());
+      RefCell::new(HashMap::default());
 
     // check if source_content[line][col] is equal to expect
     // Why this is needed?

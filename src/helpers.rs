@@ -1,6 +1,6 @@
 use std::{borrow::BorrowMut, cell::RefCell, sync::Arc};
 
-use hashbrown::HashMap;
+use rustc_hash::FxHashMap as HashMap;
 use substring::Substring;
 
 use crate::{
@@ -899,29 +899,29 @@ pub fn stream_chunks_of_combined_source_map(
   let inner_source: RefCell<Option<ArcStr>> =
     RefCell::new(inner_source.map(Into::into));
   let source_mapping: RefCell<HashMap<ArcStr, u32>> =
-    RefCell::new(HashMap::new());
-  let mut name_mapping: HashMap<ArcStr, u32> = HashMap::new();
+    RefCell::new(HashMap::default());
+  let mut name_mapping: HashMap<ArcStr, u32> = HashMap::default();
   let source_index_mapping: RefCell<HashMap<i64, i64>> =
-    RefCell::new(HashMap::new());
+    RefCell::new(HashMap::default());
   let name_index_mapping: RefCell<HashMap<i64, i64>> =
-    RefCell::new(HashMap::new());
+    RefCell::new(HashMap::default());
   let name_index_value_mapping: RefCell<HashMap<i64, ArcStr>> =
-    RefCell::new(HashMap::new());
+    RefCell::new(HashMap::default());
   let inner_source_index: RefCell<i64> = RefCell::new(-2);
   let inner_source_index_mapping: RefCell<HashMap<i64, i64>> =
-    RefCell::new(HashMap::new());
+    RefCell::new(HashMap::default());
   let inner_source_index_value_mapping: RefCell<
     HashMap<i64, (ArcStr, Option<ArcStr>)>,
-  > = RefCell::new(HashMap::new());
+  > = RefCell::new(HashMap::default());
   let inner_source_contents: RefCell<HashMap<i64, Option<ArcStr>>> =
-    RefCell::new(HashMap::new());
+    RefCell::new(HashMap::default());
   let inner_source_content_lines: RefCell<
     HashMap<i64, Option<Arc<Vec<ArcStr>>>>,
-  > = RefCell::new(HashMap::new());
+  > = RefCell::new(HashMap::default());
   let inner_name_index_mapping: RefCell<HashMap<i64, i64>> =
-    RefCell::new(HashMap::new());
+    RefCell::new(HashMap::default());
   let inner_name_index_value_mapping: RefCell<HashMap<i64, ArcStr>> =
-    RefCell::new(HashMap::new());
+    RefCell::new(HashMap::default());
   let inner_source_map_line_data: RefCell<Vec<SourceMapLineData>> =
     RefCell::new(Vec::new());
   let find_inner_mapping = |line: i64, column: i64| -> Option<u32> {
