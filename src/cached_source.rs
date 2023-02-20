@@ -1,4 +1,8 @@
-use std::{borrow::Cow, hash::BuildHasherDefault, hash::Hash, sync::Arc};
+use std::{
+  borrow::Cow,
+  hash::{BuildHasherDefault, Hash},
+  sync::Arc,
+};
 
 use dashmap::DashMap;
 use once_cell::sync::OnceCell;
