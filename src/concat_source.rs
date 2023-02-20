@@ -19,15 +19,16 @@ use crate::{
 /// ```
 /// use rspack_sources::{
 ///   BoxSource, ConcatSource, MapOptions, OriginalSource, RawSource, Source,
-///   SourceMap,
+///   SourceExt, SourceMap,
 /// };
 ///
 /// let mut source = ConcatSource::new([
-///   Box::new(RawSource::from("Hello World\n".to_string())) as BoxSource,
-///   Box::new(OriginalSource::new(
+///   RawSource::from("Hello World\n".to_string()).boxed(),
+///   OriginalSource::new(
 ///     "console.log('test');\nconsole.log('test2');\n",
 ///     "console.js",
-///   )),
+///   )
+///   .boxed(),
 /// ]);
 /// source.add(OriginalSource::new("Hello2\n", "hello.md"));
 ///
@@ -279,11 +280,12 @@ mod tests {
   #[test]
   fn should_concat_two_sources() {
     let mut source = ConcatSource::new([
-      Box::new(RawSource::from("Hello World\n".to_string())) as BoxSource,
-      Box::new(OriginalSource::new(
+      RawSource::from("Hello World\n".to_string()).boxed(),
+      OriginalSource::new(
         "console.log('test');\nconsole.log('test2');\n",
         "console.js",
-      )),
+      )
+      .boxed(),
     ]);
     source.add(OriginalSource::new("Hello2\n", "hello.md"));
 
@@ -328,11 +330,12 @@ mod tests {
   #[test]
   fn should_be_able_to_handle_strings_for_all_methods() {
     let mut source = ConcatSource::new([
-      Box::new(RawSource::from("Hello World\n".to_string())) as BoxSource,
-      Box::new(OriginalSource::new(
+      RawSource::from("Hello World\n".to_string()).boxed(),
+      OriginalSource::new(
         "console.log('test');\nconsole.log('test2');\n",
         "console.js",
-      )),
+      )
+      .boxed(),
     ]);
     let inner_source =
       ConcatSource::new([RawSource::from("("), "'string'".into(), ")".into()]);
@@ -382,14 +385,14 @@ mod tests {
   #[test]
   fn should_allow_to_concatenate_in_a_single_line() {
     let source = ConcatSource::new([
-      Box::new(OriginalSource::new("Hello", "hello.txt")) as BoxSource,
-      Box::new(RawSource::from(" ")),
-      Box::new(OriginalSource::new("World ", "world.txt")),
-      Box::new(RawSource::from("is here\n")),
-      Box::new(OriginalSource::new("Hello\n", "hello.txt")),
-      Box::new(RawSource::from(" \n")),
-      Box::new(OriginalSource::new("World\n", "world.txt")),
-      Box::new(RawSource::from("is here")),
+      OriginalSource::new("Hello", "hello.txt").boxed(),
+      RawSource::from(" ").boxed(),
+      OriginalSource::new("World ", "world.txt").boxed(),
+      RawSource::from("is here\n").boxed(),
+      OriginalSource::new("Hello\n", "hello.txt").boxed(),
+      RawSource::from(" \n").boxed(),
+      OriginalSource::new("World\n", "world.txt").boxed(),
+      RawSource::from("is here").boxed(),
     ]);
 
     assert_eq!(
