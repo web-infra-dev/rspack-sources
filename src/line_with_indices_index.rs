@@ -1,13 +1,15 @@
 #[derive(Debug, Clone)]
 pub struct LineWithIndicesArray<T: AsRef<str>> {
+  /// line is a string reference 
   pub line: T,
-  pub prefix_array: Box<[u32]>,
+  /// the byte position of each `char` in `line` string slice .
+  pub indices_indexes: Box<[u32]>,
 }
 
 impl<T: AsRef<str>> LineWithIndicesArray<T> {
   pub fn new(line: T) -> Self {
     Self {
-      prefix_array: line
+      indices_indexes: line
         .as_ref()
         .char_indices()
         .map(|(i, _)| i as u32)
@@ -25,8 +27,8 @@ impl<T: AsRef<str>> LineWithIndicesArray<T> {
     }
 
     let str_len = self.line.as_ref().len() as u32;
-    let start = *self.prefix_array.get(start_index).unwrap_or(&str_len);
-    let end = *self.prefix_array.get(end_index).unwrap_or(&str_len);
+    let start = *self.indices_indexes.get(start_index).unwrap_or(&str_len);
+    let end = *self.indices_indexes.get(end_index).unwrap_or(&str_len);
     unsafe {
       // SAFETY: Since `indices` iterates over the `CharIndices` of `self`, we can guarantee
       // that the indices obtained from it will always be within the bounds of `self` and they
