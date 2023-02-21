@@ -1,7 +1,7 @@
 #[derive(Debug, Clone)]
 pub struct LineWithIndicesArray<T: AsRef<str>> {
   pub line: T,
-  pub prefix_array: Vec<usize>,
+  pub prefix_array: Box<[u32]>,
 }
 
 impl<T: AsRef<str>> LineWithIndicesArray<T> {
@@ -10,8 +10,8 @@ impl<T: AsRef<str>> LineWithIndicesArray<T> {
       prefix_array: line
         .as_ref()
         .char_indices()
-        .map(|(i, _)| i)
-        .collect::<Vec<_>>(),
+        .map(|(i, _)| i as u32)
+        .collect::<Vec<_>>().into_boxed_slice(),
       line,
     }
   }
@@ -23,17 +23,17 @@ impl<T: AsRef<str>> LineWithIndicesArray<T> {
       return "";
     }
 
-    let str_len = self.line.as_ref().len();
+    let str_len = self.line.as_ref().len() as u32;
     let start = *self
       .prefix_array
       .get(start_index)
-      .unwrap_or_else(|| &str_len);
-    let end = *self.prefix_array.get(end_index).unwrap_or_else(|| &str_len);
+      .unwrap_or(&str_len);
+    let end = *self.prefix_array.get(end_index).unwrap_or(&str_len);
     unsafe {
       // SAFETY: Since `indices` iterates over the `CharIndices` of `self`, we can guarantee
       // that the indices obtained from it will always be within the bounds of `self` and they
       // will always lie on UTF-8 sequence boundaries.
-      self.line.as_ref().get_unchecked(start..end)
+      self.line.as_ref().get_unchecked(start as usize..end as usize)
     }
   }
 }
