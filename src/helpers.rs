@@ -4,12 +4,16 @@ use rustc_hash::FxHashMap as HashMap;
 use substring::Substring;
 
 use crate::{
+  line_with_indices_index::LineWithIndicesArray,
   source::{Mapping, OriginalLocation},
   vlq::{decode, encode},
   MapOptions, Source, SourceMap,
 };
 
 type ArcStr = Arc<str>;
+// Adding this type because sourceContentLine not happy
+type InnerSourceContentLine =
+  RefCell<HashMap<i64, Option<Arc<Vec<LineWithIndicesArray<ArcStr>>>>>>;
 
 pub fn get_map<S: StreamChunks>(
   stream: &S,
@@ -623,7 +627,12 @@ fn stream_chunks_of_source_map_full(
   on_name: OnName,
 ) -> GeneratedInfo {
   let lines = split_into_lines(source);
-  if lines.is_empty() {
+  let line_with_indices_list = lines
+    .into_iter()
+    .map(LineWithIndicesArray::new)
+    .collect::<Vec<_>>();
+
+  if line_with_indices_list.is_empty() {
     return GeneratedInfo {
       generated_line: 1,
       generated_column: 0,
@@ -635,12 +644,12 @@ fn stream_chunks_of_source_map_full(
   for (i, name) in source_map.names().iter().enumerate() {
     on_name(i as u32, name);
   }
-  let last_line = lines[lines.len() - 1];
+  let last_line = line_with_indices_list[line_with_indices_list.len() - 1].line;
   let last_new_line = last_line.ends_with('\n');
   let final_line: u32 = if last_new_line {
-    lines.len() + 1
+    line_with_indices_list.len() + 1
   } else {
-    lines.len()
+    line_with_indices_list.len()
   } as u32;
   let final_column: u32 =
     if last_new_line { 0 } else { last_line.len() } as u32;
@@ -650,11 +659,13 @@ fn stream_chunks_of_source_map_full(
   let mut active_mapping_original: Option<OriginalLocation> = None;
 
   let mut on_mapping = |mapping: &Mapping| {
-    if mapping_active && current_generated_line as usize <= lines.len() {
-      let chunk;
+    if mapping_active
+      && current_generated_line as usize <= line_with_indices_list.len()
+    {
+      let chunk: &str;
       let mapping_line = current_generated_line;
       let mapping_column = current_generated_column;
-      let line = lines[(current_generated_line - 1) as usize];
+      let line = &line_with_indices_list[(current_generated_line - 1) as usize];
       if mapping.generated_line != current_generated_line {
         chunk = line.substring(current_generated_column as usize, usize::MAX);
         current_generated_line += 1;
@@ -681,8 +692,9 @@ fn stream_chunks_of_source_map_full(
     if mapping.generated_line > current_generated_line
       && current_generated_column > 0
     {
-      if current_generated_line as usize <= lines.len() {
-        let chunk = &lines[(current_generated_line - 1) as usize]
+      if current_generated_line as usize <= line_with_indices_list.len() {
+        let chunk = &line_with_indices_list
+          [(current_generated_line - 1) as usize]
           .substring(current_generated_column as usize, usize::MAX);
         on_chunk(
           Some(chunk),
@@ -697,9 +709,11 @@ fn stream_chunks_of_source_map_full(
       current_generated_column = 0;
     }
     while mapping.generated_line > current_generated_line {
-      if current_generated_line as usize <= lines.len() {
+      if current_generated_line as usize <= line_with_indices_list.len() {
         on_chunk(
-          Some(lines[(current_generated_line as usize) - 1]),
+          Some(
+            line_with_indices_list[(current_generated_line as usize) - 1].line,
+          ),
           Mapping {
             generated_line: current_generated_line,
             generated_column: 0,
@@ -710,11 +724,13 @@ fn stream_chunks_of_source_map_full(
       current_generated_line += 1;
     }
     if mapping.generated_column > current_generated_column {
-      if current_generated_line as usize <= lines.len() {
-        let chunk = lines[(current_generated_line as usize) - 1].substring(
-          current_generated_column as usize,
-          mapping.generated_column as usize,
-        );
+      if current_generated_line as usize <= line_with_indices_list.len() {
+        let chunk = line_with_indices_list
+          [(current_generated_line as usize) - 1]
+          .substring(
+            current_generated_column as usize,
+            mapping.generated_column as usize,
+          );
         on_chunk(
           Some(chunk),
           Mapping {
@@ -915,9 +931,8 @@ pub fn stream_chunks_of_combined_source_map(
   > = RefCell::new(HashMap::default());
   let inner_source_contents: RefCell<HashMap<i64, Option<ArcStr>>> =
     RefCell::new(HashMap::default());
-  let inner_source_content_lines: RefCell<
-    HashMap<i64, Option<Arc<Vec<ArcStr>>>>,
-  > = RefCell::new(HashMap::default());
+  let inner_source_content_lines: InnerSourceContentLine =
+    RefCell::new(HashMap::default());
   let inner_name_index_mapping: RefCell<HashMap<i64, i64>> =
     RefCell::new(HashMap::default());
   let inner_name_index_value_mapping: RefCell<HashMap<i64, ArcStr>> =
@@ -1004,7 +1019,7 @@ pub fn stream_chunks_of_combined_source_map(
                   Some(Arc::new(
                     split_into_lines(original_source)
                       .into_iter()
-                      .map(Into::into)
+                      .map(|s| LineWithIndicesArray::new(s.into()))
                       .collect(),
                   ))
                 } else {
@@ -1107,7 +1122,9 @@ pub fn stream_chunks_of_combined_source_map(
                       Arc::new(
                         lines
                           .into_iter()
-                          .map(|s| s.to_string().into())
+                          .map(|s| {
+                            LineWithIndicesArray::new(s.to_string().into())
+                          })
                           .collect::<Vec<_>>(),
                       )
                     })
