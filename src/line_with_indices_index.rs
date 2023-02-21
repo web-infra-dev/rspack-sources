@@ -1,6 +1,6 @@
 #[derive(Debug, Clone)]
 pub struct LineWithIndicesArray<T: AsRef<str>> {
-  /// line is a string reference 
+  /// line is a string reference
   pub line: T,
   /// the byte position of each `char` in `line` string slice .
   pub indices_indexes: Box<[u32]>,
