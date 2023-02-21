@@ -1,7 +1,7 @@
 //! Rusty [`webpack-sources`](https://github.com/webpack/webpack-sources) port.
 
 #![feature(let_chains)]
-#![forbid(unsafe_code)]
+#![warn(unsafe_code)]
 #![deny(missing_docs)]
 
 mod cached_source;
@@ -14,7 +14,7 @@ mod replace_source;
 mod source;
 mod source_map_source;
 mod vlq;
-
+mod line_with_indices_index;
 pub use cached_source::CachedSource;
 pub use concat_source::ConcatSource;
 pub use error::{Error, Result};
