@@ -931,7 +931,7 @@ pub fn stream_chunks_of_combined_source_map(
   > = RefCell::new(HashMap::default());
   let inner_source_contents: RefCell<HashMap<i64, Option<ArcStr>>> =
     RefCell::new(HashMap::default());
-  let inner_source_content_lines: InnerSourceMap =
+  let inner_source_content_lines: InnerSourceContentLine =
     RefCell::new(HashMap::default());
   let inner_name_index_mapping: RefCell<HashMap<i64, i64>> =
     RefCell::new(HashMap::default());
