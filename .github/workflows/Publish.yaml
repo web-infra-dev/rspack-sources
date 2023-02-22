@@ -12,7 +12,6 @@ jobs:
       - uses: actions/checkout@v3
       - uses: actions-rs/toolchain@v1
         with:
-          toolchain: nightly-2022-08-06
           profile: minimal
           override: true
       - name: publish
