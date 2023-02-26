@@ -4,6 +4,7 @@ use std::{
   hash::{Hash, Hasher},
 };
 
+use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use rustc_hash::FxHashMap as HashMap;
 
 use crate::{
@@ -86,7 +87,7 @@ impl Source for ConcatSource {
   fn buffer(&self) -> Cow<[u8]> {
     let all = self
       .children
-      .iter()
+      .par_iter()
       .map(|child| child.buffer())
       .collect::<Vec<_>>()
       .concat();

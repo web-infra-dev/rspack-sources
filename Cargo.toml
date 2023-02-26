@@ -24,6 +24,7 @@ dashmap = "5"
 substring = "1"
 smallvec = "1.10.0"
 memchr = "2.5.0"
+rayon = "1.6.1"
 
 [dev-dependencies]
 twox-hash = "1"
