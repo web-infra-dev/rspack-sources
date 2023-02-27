@@ -146,6 +146,10 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for ReplaceSource<T> {
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
     writer.write_all(self.source().as_bytes())
   }
+
+  fn flatten(&self) -> Vec<&dyn Source> {
+    self.inner.flatten()
+  }
 }
 
 impl<T: Source> StreamChunks for ReplaceSource<T> {

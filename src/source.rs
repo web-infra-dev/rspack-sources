@@ -39,6 +39,9 @@ pub trait Source:
     self.dyn_hash(state);
   }
 
+  /// flatten the source tree
+  fn flatten(&self) -> Vec<&dyn Source>;
+
   /// Writes the source into a writer, preferably a `std::io::BufWriter<std::io::Write>`.
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()>;
 }
@@ -62,6 +65,11 @@ impl Source for BoxSource {
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
     self.as_ref().to_writer(writer)
+  }
+
+  fn flatten(&self) -> Vec<&dyn Source> {
+    // vec![self]
+    self.as_ref().flatten()
   }
 }
 

@@ -107,6 +107,10 @@ impl Source for ConcatSource {
     }
     Ok(())
   }
+
+  fn flatten(&self) -> Vec<&dyn Source> {
+    self.children.iter().flat_map(|item| item.flatten()).collect()
+  }
 }
 
 impl Hash for ConcatSource {

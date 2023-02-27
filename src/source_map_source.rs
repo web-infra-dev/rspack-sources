@@ -110,6 +110,10 @@ impl Source for SourceMapSource {
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
     writer.write_all(self.value.as_bytes())
   }
+
+  fn flatten(&self) -> Vec<&dyn Source> {
+    vec![self]
+  }
 }
 
 impl Hash for SourceMapSource {

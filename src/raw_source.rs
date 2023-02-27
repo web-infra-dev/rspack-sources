@@ -95,6 +95,10 @@ impl Source for RawSource {
       RawSource::Source(i) => i.as_bytes(),
     })
   }
+
+  fn flatten(&self) -> Vec<&dyn Source> {
+    vec![self]
+  }
 }
 
 impl Hash for RawSource {
