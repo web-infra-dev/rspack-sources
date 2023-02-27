@@ -109,7 +109,11 @@ impl Source for ConcatSource {
   }
 
   fn flatten(&self) -> Vec<&dyn Source> {
-    self.children.iter().flat_map(|item| item.flatten()).collect()
+    self
+      .children
+      .iter()
+      .flat_map(|item| item.flatten())
+      .collect()
   }
 }
 
