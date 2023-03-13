@@ -1,7 +1,5 @@
-use std::{borrow::BorrowMut, cell::RefCell, sync::Arc};
-
 use rustc_hash::FxHashMap as HashMap;
-use substring::Substring;
+use std::{borrow::BorrowMut, cell::RefCell, sync::Arc};
 
 use crate::{
   line_with_indices_index::LineWithIndicesArray,
@@ -892,10 +890,32 @@ fn stream_chunks_of_source_map_lines_full(
   }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct SourceMapLineData {
   pub mappings_data: Vec<i64>,
-  pub chunks: Vec<String>,
+  pub chunks: Vec<SourceMapLineChunk>,
+}
+
+#[derive(Debug)]
+struct SourceMapLineChunk {
+  content: Box<str>,
+  cached: once_cell::sync::OnceCell<LineWithIndicesArray<Box<str>>>,
+}
+
+impl SourceMapLineChunk {
+  pub fn new(content: Box<str>) -> Self {
+    Self {
+      content,
+      cached: once_cell::sync::OnceCell::new(),
+    }
+  }
+
+  pub fn substring(&self, start_index: usize, end_index: usize) -> &str {
+    let cached = self
+      .cached
+      .get_or_init(|| LineWithIndicesArray::new(self.content.clone()));
+    cached.substring(start_index, end_index)
+  }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1289,7 +1309,10 @@ pub fn stream_chunks_of_combined_source_map(
             while inner_source_map_line_data.len()
               <= mapping.generated_line as usize
             {
-              inner_source_map_line_data.push(SourceMapLineData::default());
+              inner_source_map_line_data.push(SourceMapLineData {
+                mappings_data: Default::default(),
+                chunks: vec![],
+              });
             }
             let data = &mut inner_source_map_line_data
               [mapping.generated_line as usize - 1];
@@ -1320,7 +1343,8 @@ pub fn stream_chunks_of_combined_source_map(
                 .unwrap_or(-1),
             );
             // SAFETY: final_source is false
-            data.chunks.push(chunk.unwrap().to_owned());
+            let chunk = SourceMapLineChunk::new(chunk.unwrap().into());
+            data.chunks.push(chunk);
           },
           &mut |i, source, source_content| {
             let i = i as i64;
