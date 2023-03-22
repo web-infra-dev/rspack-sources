@@ -830,8 +830,8 @@ fn stream_chunks_of_source_map_lines_full(
   let mut current_generated_line = 1;
   let mut on_mapping = |mapping: &Mapping| {
     if mapping.original.is_none()
-      && mapping.generated_line < current_generated_line
-      && mapping.generated_line as usize > lines.len()
+      || mapping.generated_line < current_generated_line
+      || mapping.generated_line as usize > lines.len()
     {
       return;
     }
