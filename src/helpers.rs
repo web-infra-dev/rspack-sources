@@ -898,12 +898,12 @@ struct SourceMapLineData {
 
 #[derive(Debug)]
 struct SourceMapLineChunk {
-  content: Box<str>,
-  cached: once_cell::sync::OnceCell<LineWithIndicesArray<Box<str>>>,
+  content: ArcStr,
+  cached: once_cell::sync::OnceCell<LineWithIndicesArray<ArcStr>>,
 }
 
 impl SourceMapLineChunk {
-  pub fn new(content: Box<str>) -> Self {
+  pub fn new(content: ArcStr) -> Self {
     Self {
       content,
       cached: once_cell::sync::OnceCell::new(),
@@ -1142,9 +1142,7 @@ pub fn stream_chunks_of_combined_source_map(
                       Arc::new(
                         lines
                           .into_iter()
-                          .map(|s| {
-                            LineWithIndicesArray::new(s.to_string().into())
-                          })
+                          .map(|s| LineWithIndicesArray::new(s.into()))
                           .collect::<Vec<_>>(),
                       )
                     })
