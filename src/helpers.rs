@@ -2,9 +2,9 @@ use rustc_hash::FxHashMap as HashMap;
 use std::{borrow::BorrowMut, cell::RefCell, sync::Arc};
 
 use crate::{
-  line_with_indices_index::WithIndices,
   source::{Mapping, OriginalLocation},
   vlq::{decode, encode},
+  with_indices::WithIndices,
   MapOptions, Source, SourceMap,
 };
 

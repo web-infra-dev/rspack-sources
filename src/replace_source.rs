@@ -11,7 +11,7 @@ use rustc_hash::FxHashMap as HashMap;
 
 use crate::{
   helpers::{get_map, split_into_lines, GeneratedInfo, StreamChunks},
-  line_with_indices_index::WithIndices,
+  with_indices::WithIndices,
   MapOptions, Mapping, OriginalLocation, Source, SourceMap,
 };
 
