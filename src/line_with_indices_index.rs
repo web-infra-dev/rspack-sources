@@ -52,10 +52,7 @@ mod tests {
 
   #[test]
   fn test_out_of_bounds() {
-    assert_eq!(
-      WithIndices::new("foobar").substring(0, 10),
-      "foobar"
-    );
+    assert_eq!(WithIndices::new("foobar").substring(0, 10), "foobar");
     assert_eq!(WithIndices::new("foobar").substring(6, 10), "");
   }
 

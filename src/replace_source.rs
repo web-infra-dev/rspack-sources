@@ -41,7 +41,7 @@ pub struct ReplaceSource<T> {
   replacements: Mutex<Vec<Replacement>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Eq)]
 struct Replacement {
   start: u32,
   end: u32,
@@ -57,6 +57,15 @@ impl Hash for Replacement {
     self.end.hash(state);
     self.content.hash(state);
     self.name.hash(state);
+  }
+}
+
+impl PartialEq for Replacement {
+  fn eq(&self, other: &Self) -> bool {
+    self.start == other.start
+      && self.end == other.end
+      && self.content == other.content
+      && self.name == other.name
   }
 }
 
@@ -149,8 +158,7 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for ReplaceSource<T> {
     self.sort_replacement();
 
     let inner_source_code = self.get_inner_source_code();
-    let inner_source_code_with_indices =
-      WithIndices::new(inner_source_code);
+    let inner_source_code_with_indices = WithIndices::new(inner_source_code);
 
     // mut_string_push_str is faster that vec join
     // concatenate strings benchmark, see https://github.com/hoodie/concatenation_benchmarks-rs
@@ -220,9 +228,8 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
     let mut generated_line_offset: i64 = 0;
     let mut generated_column_offset: i64 = 0;
     let mut generated_column_offset_line = 0;
-    let source_content_lines: RefCell<
-      Vec<Option<Vec<WithIndices<String>>>>,
-    > = RefCell::new(Vec::new());
+    let source_content_lines: RefCell<Vec<Option<Vec<WithIndices<String>>>>> =
+      RefCell::new(Vec::new());
     let name_mapping: RefCell<HashMap<String, u32>> =
       RefCell::new(HashMap::default());
     let name_index_mapping: RefCell<HashMap<u32, u32>> =
