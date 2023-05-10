@@ -2,7 +2,7 @@ use rustc_hash::FxHashMap as HashMap;
 use std::{borrow::BorrowMut, cell::RefCell, sync::Arc};
 
 use crate::{
-  line_with_indices_index::LineWithIndicesArray,
+  line_with_indices_index::WithIndices,
   source::{Mapping, OriginalLocation},
   vlq::{decode, encode},
   MapOptions, Source, SourceMap,
@@ -11,7 +11,7 @@ use crate::{
 type ArcStr = Arc<str>;
 // Adding this type because sourceContentLine not happy
 type InnerSourceContentLine =
-  RefCell<HashMap<i64, Option<Arc<Vec<LineWithIndicesArray<ArcStr>>>>>>;
+  RefCell<HashMap<i64, Option<Arc<Vec<WithIndices<ArcStr>>>>>>;
 
 pub fn get_map<S: StreamChunks>(
   stream: &S,
@@ -625,10 +625,8 @@ fn stream_chunks_of_source_map_full(
   on_name: OnName,
 ) -> GeneratedInfo {
   let lines = split_into_lines(source);
-  let line_with_indices_list = lines
-    .into_iter()
-    .map(LineWithIndicesArray::new)
-    .collect::<Vec<_>>();
+  let line_with_indices_list =
+    lines.into_iter().map(WithIndices::new).collect::<Vec<_>>();
 
   if line_with_indices_list.is_empty() {
     return GeneratedInfo {
@@ -899,7 +897,7 @@ struct SourceMapLineData {
 #[derive(Debug)]
 struct SourceMapLineChunk {
   content: ArcStr,
-  cached: once_cell::sync::OnceCell<LineWithIndicesArray<ArcStr>>,
+  cached: once_cell::sync::OnceCell<WithIndices<ArcStr>>,
 }
 
 impl SourceMapLineChunk {
@@ -913,7 +911,7 @@ impl SourceMapLineChunk {
   pub fn substring(&self, start_index: usize, end_index: usize) -> &str {
     let cached = self
       .cached
-      .get_or_init(|| LineWithIndicesArray::new(self.content.clone()));
+      .get_or_init(|| WithIndices::new(self.content.clone()));
     cached.substring(start_index, end_index)
   }
 }
@@ -1039,7 +1037,7 @@ pub fn stream_chunks_of_combined_source_map(
                   Some(Arc::new(
                     split_into_lines(original_source)
                       .into_iter()
-                      .map(|s| LineWithIndicesArray::new(s.into()))
+                      .map(|s| WithIndices::new(s.into()))
                       .collect(),
                   ))
                 } else {
@@ -1142,7 +1140,7 @@ pub fn stream_chunks_of_combined_source_map(
                       Arc::new(
                         lines
                           .into_iter()
-                          .map(|s| LineWithIndicesArray::new(s.into()))
+                          .map(|s| WithIndices::new(s.into()))
                           .collect::<Vec<_>>(),
                       )
                     })
