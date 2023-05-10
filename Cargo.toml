@@ -24,7 +24,9 @@ dashmap = "5"
 substring = "1"
 smallvec = "1.10.0"
 memchr = "2.5.0"
+str_indices = "0.4.1"
 
 [dev-dependencies]
 twox-hash = "1"
 base64-simd = "0.7"
+regex = "1.8.1"

@@ -5,12 +5,13 @@ use std::{
   sync::Arc,
 };
 
+use once_cell::sync::OnceCell;
 use parking_lot::Mutex;
 use rustc_hash::FxHashMap as HashMap;
-use substring::Substring;
 
 use crate::{
   helpers::{get_map, split_into_lines, GeneratedInfo, StreamChunks},
+  with_indices::WithIndices,
   MapOptions, Mapping, OriginalLocation, Source, SourceMap,
 };
 
@@ -36,15 +37,68 @@ use crate::{
 #[derive(Debug)]
 pub struct ReplaceSource<T> {
   inner: Arc<T>,
+  inner_source_code: OnceCell<Box<str>>,
   replacements: Mutex<Vec<Replacement>>,
 }
 
-#[derive(Debug, Hash, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Eq)]
 struct Replacement {
   start: u32,
   end: u32,
+  char_start: OnceCell<u32>,
+  char_end: OnceCell<u32>,
   content: String,
   name: Option<String>,
+}
+
+impl Hash for Replacement {
+  fn hash<H: Hasher>(&self, state: &mut H) {
+    self.start.hash(state);
+    self.end.hash(state);
+    self.content.hash(state);
+    self.name.hash(state);
+  }
+}
+
+impl PartialEq for Replacement {
+  fn eq(&self, other: &Self) -> bool {
+    self.start == other.start
+      && self.end == other.end
+      && self.content == other.content
+      && self.name == other.name
+  }
+}
+
+impl Replacement {
+  pub fn new(
+    start: u32,
+    end: u32,
+    content: String,
+    name: Option<String>,
+  ) -> Self {
+    Self {
+      start,
+      end,
+      char_start: OnceCell::new(),
+      char_end: OnceCell::new(),
+      content,
+      name,
+    }
+  }
+
+  pub fn char_start(&self, inner_source_code: &str) -> u32 {
+    *self.char_start.get_or_init(|| {
+      str_indices::chars::from_byte_idx(inner_source_code, self.start as usize)
+        as u32
+    })
+  }
+
+  pub fn char_end(&self, inner_source_code: &str) -> u32 {
+    *self.char_end.get_or_init(|| {
+      str_indices::chars::from_byte_idx(inner_source_code, self.end as usize)
+        as u32
+    })
+  }
 }
 
 impl<T> ReplaceSource<T> {
@@ -52,6 +106,7 @@ impl<T> ReplaceSource<T> {
   pub fn new(source: T) -> Self {
     Self {
       inner: Arc::new(source),
+      inner_source_code: OnceCell::new(),
       replacements: Mutex::new(Vec::new()),
     }
   }
@@ -59,32 +114,6 @@ impl<T> ReplaceSource<T> {
   /// Get the original [Source].
   pub fn original(&self) -> &T {
     &self.inner
-  }
-
-  /// Insert a content at start.
-  pub fn insert(&mut self, start: u32, content: &str, name: Option<&str>) {
-    self.replacements.lock().push(Replacement {
-      start,
-      end: start,
-      content: content.into(),
-      name: name.map(|s| s.into()),
-    });
-  }
-
-  /// Create a replacement with content at `[start, end)`.
-  pub fn replace(
-    &mut self,
-    start: u32,
-    end: u32,
-    content: &str,
-    name: Option<&str>,
-  ) {
-    self.replacements.lock().push(Replacement {
-      start,
-      end,
-      content: content.into(),
-      name: name.map(|s| s.into()),
-    });
   }
 
   fn sort_replacement(&self) {
@@ -95,32 +124,65 @@ impl<T> ReplaceSource<T> {
   }
 }
 
+impl<T: Source> ReplaceSource<T> {
+  fn get_inner_source_code(&self) -> &str {
+    self
+      .inner_source_code
+      .get_or_init(|| Box::from(self.inner.source()))
+  }
+
+  /// Insert a content at start.
+  pub fn insert(&mut self, start: u32, content: &str, name: Option<&str>) {
+    self.replace(start, start, content, name)
+  }
+
+  /// Create a replacement with content at `[start, end)`.
+  pub fn replace(
+    &mut self,
+    start: u32,
+    end: u32,
+    content: &str,
+    name: Option<&str>,
+  ) {
+    self.replacements.lock().push(Replacement::new(
+      start,
+      end,
+      content.into(),
+      name.map(|s| s.into()),
+    ));
+  }
+}
+
 impl<T: Source + Hash + PartialEq + Eq + 'static> Source for ReplaceSource<T> {
   fn source(&self) -> Cow<str> {
     self.sort_replacement();
 
-    let inner_source_code = self.inner.source();
+    let inner_source_code = self.get_inner_source_code();
+    let inner_source_code_with_indices = WithIndices::new(inner_source_code);
 
     // mut_string_push_str is faster that vec join
     // concatenate strings benchmark, see https://github.com/hoodie/concatenation_benchmarks-rs
     let mut source_code = String::new();
     let mut inner_pos = 0;
     for replacement in self.replacements.lock().iter() {
-      if inner_pos < replacement.start {
-        let end_pos = (replacement.start as usize).min(inner_source_code.len());
-        source_code
-          .push_str(inner_source_code.substring(inner_pos as usize, end_pos));
+      if inner_pos < replacement.char_start(inner_source_code) {
+        let end_pos = (replacement.char_start(inner_source_code) as usize)
+          .min(inner_source_code.len());
+        source_code.push_str(
+          inner_source_code_with_indices.substring(inner_pos as usize, end_pos),
+        );
       }
       source_code.push_str(&replacement.content);
       #[allow(clippy::manual_clamp)]
       {
         inner_pos = inner_pos
-          .max(replacement.end)
+          .max(replacement.char_end(inner_source_code))
           .min(inner_source_code.len() as u32);
       }
     }
-    source_code
-      .push_str(inner_source_code.substring(inner_pos as usize, usize::MAX));
+    source_code.push_str(
+      inner_source_code_with_indices.substring(inner_pos as usize, usize::MAX),
+    );
 
     source_code.into()
   }
@@ -166,7 +228,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
     let mut generated_line_offset: i64 = 0;
     let mut generated_column_offset: i64 = 0;
     let mut generated_column_offset_line = 0;
-    let source_content_lines: RefCell<Vec<Option<Vec<String>>>> =
+    let source_content_lines: RefCell<Vec<Option<Vec<WithIndices<String>>>>> =
       RefCell::new(Vec::new());
     let name_mapping: RefCell<HashMap<String, u32>> =
       RefCell::new(HashMap::default());
@@ -224,6 +286,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
       &mut |chunk, mut mapping| {
         // SAFETY: final_source is false in ReplaceSource
         let chunk = chunk.unwrap();
+        let chunk_with_indices = WithIndices::new(chunk);
         let mut chunk_pos = 0;
         let end_pos = pos + chunk.len() as u32;
         // Skip over when it has been replaced
@@ -253,7 +316,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
               original.source_index,
               original.original_line,
               original.original_column,
-              chunk.substring(0, chunk_pos as usize),
+              chunk_with_indices.substring(0, chunk_pos as usize),
             ) {
             original.original_column += chunk_pos;
           }
@@ -274,7 +337,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
           if next_replacement_pos > pos {
             // Emit chunk until replacement
             let offset = next_replacement_pos - pos;
-            let chunk_slice = chunk.substring(chunk_pos as usize, (chunk_pos + offset) as usize);
+            let chunk_slice = chunk_with_indices.substring(chunk_pos as usize, (chunk_pos + offset) as usize);
             on_chunk(Some(chunk_slice), Mapping {
               generated_line: line as u32,
               generated_column: mapping.generated_column + if line == generated_column_offset_line {generated_column_offset} else {0} as u32,
@@ -367,7 +430,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
 
             // Partially skip over chunk
             let line = mapping.generated_line as i64 + generated_line_offset;
-            if let Some(original) = &mut mapping.original && check_original_content(original.source_index, original.original_line, original.original_column, chunk.substring(chunk_pos as usize, (chunk_pos + offset as u32) as usize)) {
+            if let Some(original) = &mut mapping.original && check_original_content(original.source_index, original.original_line, original.original_column, chunk_with_indices.substring(chunk_pos as usize, (chunk_pos + offset as u32) as usize)) {
               original.original_column += offset as u32;
             }
             chunk_pos += offset as u32;
@@ -384,7 +447,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
 
 				// Emit remaining chunk
         if (chunk_pos as usize) < chunk.len() {
-          let chunk_slice = if chunk_pos == 0 {chunk} else {chunk.substring(chunk_pos as usize, usize::MAX)};
+          let chunk_slice = if chunk_pos == 0 {chunk} else {chunk_with_indices.substring(chunk_pos as usize, usize::MAX)};
           let line = mapping.generated_line as i64 + generated_line_offset;
           on_chunk(Some(chunk_slice), Mapping {
             generated_line: line as u32,
@@ -400,7 +463,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
           source_content_lines.push(None);
         }
         source_content_lines[source_index as usize] = source_content.map(|source_content| {
-          split_into_lines(source_content).into_iter().map(Into::into).collect()
+          split_into_lines(source_content).into_iter().map(|line| WithIndices::new(line.into())).collect()
         });
         on_source(source_index, source, source_content);
       },
@@ -473,6 +536,7 @@ impl<T: Source> Clone for ReplaceSource<T> {
   fn clone(&self) -> Self {
     Self {
       inner: self.inner.clone(),
+      inner_source_code: self.inner_source_code.clone(),
       replacements: Mutex::new(self.replacements.lock().clone()),
     }
   }
@@ -899,5 +963,42 @@ return <div>{data.foo}</div>
     let mut hasher = twox_hash::XxHash64::default();
     source.hash(&mut hasher);
     assert_eq!(format!("{:x}", hasher.finish()), "ab891b4c45dc95b4");
+  }
+
+  #[test]
+  fn should_replace_correctly_with_unicode() {
+    let content = r#"
+"abc"; url(__PUBLIC_PATH__logo.png);
+"ヒラギノ角ゴ"; url(__PUBLIC_PATH__logo.png);
+"游ゴシック体"; url(__PUBLIC_PATH__logo.png);
+"🤪"; url(__PUBLIC_PATH__logo.png);
+"👨‍👩‍👧‍👧"; url(__PUBLIC_PATH__logo.png);
+"#;
+    let mut source =
+      ReplaceSource::new(OriginalSource::new(content, "file.css").boxed());
+    for mat in regex::Regex::new("__PUBLIC_PATH__")
+      .unwrap()
+      .find_iter(content)
+    {
+      source.replace(mat.start() as u32, mat.end() as u32, "../", None);
+    }
+    assert_eq!(
+      source.source(),
+      r#"
+"abc"; url(../logo.png);
+"ヒラギノ角ゴ"; url(../logo.png);
+"游ゴシック体"; url(../logo.png);
+"🤪"; url(../logo.png);
+"👨‍👩‍👧‍👧"; url(../logo.png);
+"#
+    );
+    assert_eq!(
+      source
+        .map(&MapOptions::default())
+        .unwrap()
+        .to_json()
+        .unwrap(),
+      r#"{"version":3,"sources":["file.css"],"sourcesContent":["\n\"abc\"; url(__PUBLIC_PATH__logo.png);\n\"ヒラギノ角ゴ\"; url(__PUBLIC_PATH__logo.png);\n\"游ゴシック体\"; url(__PUBLIC_PATH__logo.png);\n\"🤪\"; url(__PUBLIC_PATH__logo.png);\n\"👨‍👩‍👧‍👧\"; url(__PUBLIC_PATH__logo.png);\n"],"names":[],"mappings":";AACA,OAAO,IAAI,GAAe;AAC1B,sBAAsB;AACtB,sBAAsB;AACtB,QAAQ;AACR,6BAA6B"}"#,
+    );
   }
 }

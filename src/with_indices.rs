@@ -1,12 +1,12 @@
 #[derive(Debug, Clone)]
-pub struct LineWithIndicesArray<T: AsRef<str>> {
+pub struct WithIndices<T: AsRef<str>> {
   /// line is a string reference
   pub line: T,
   /// the byte position of each `char` in `line` string slice .
   pub indices_indexes: Box<[u32]>,
 }
 
-impl<T: AsRef<str>> LineWithIndicesArray<T> {
+impl<T: AsRef<str>> WithIndices<T> {
   pub fn new(line: T) -> Self {
     Self {
       indices_indexes: line
@@ -44,33 +44,30 @@ impl<T: AsRef<str>> LineWithIndicesArray<T> {
 /// tests are just copy from `substring` crate
 #[cfg(test)]
 mod tests {
-  use super::LineWithIndicesArray;
+  use super::WithIndices;
   #[test]
   fn test_substring() {
-    assert_eq!(LineWithIndicesArray::new("foobar").substring(0, 3), "foo");
+    assert_eq!(WithIndices::new("foobar").substring(0, 3), "foo");
   }
 
   #[test]
   fn test_out_of_bounds() {
-    assert_eq!(
-      LineWithIndicesArray::new("foobar").substring(0, 10),
-      "foobar"
-    );
-    assert_eq!(LineWithIndicesArray::new("foobar").substring(6, 10), "");
+    assert_eq!(WithIndices::new("foobar").substring(0, 10), "foobar");
+    assert_eq!(WithIndices::new("foobar").substring(6, 10), "");
   }
 
   #[test]
   fn test_start_less_than_end() {
-    assert_eq!(LineWithIndicesArray::new("foobar").substring(3, 2), "");
+    assert_eq!(WithIndices::new("foobar").substring(3, 2), "");
   }
 
   #[test]
   fn test_start_and_end_equal() {
-    assert_eq!(LineWithIndicesArray::new("foobar").substring(3, 3), "");
+    assert_eq!(WithIndices::new("foobar").substring(3, 3), "");
   }
 
   #[test]
   fn test_multiple_byte_characters() {
-    assert_eq!(LineWithIndicesArray::new("fõøbα®").substring(2, 5), "øbα");
+    assert_eq!(WithIndices::new("fõøbα®").substring(2, 5), "øbα");
   }
 }
