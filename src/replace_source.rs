@@ -340,7 +340,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
             let chunk_slice = chunk_with_indices.substring(chunk_pos as usize, (chunk_pos + offset) as usize);
             on_chunk(Some(chunk_slice), Mapping {
               generated_line: line as u32,
-              generated_column: mapping.generated_column + if line == generated_column_offset_line {generated_column_offset} else {0} as u32,
+              generated_column: ((mapping.generated_column as i64) + if line == generated_column_offset_line { generated_column_offset } else { 0 }) as u32,
               original: mapping.original.as_ref().map(|original| OriginalLocation {
                 source_index: original.source_index,
                 original_line: original.original_line,
