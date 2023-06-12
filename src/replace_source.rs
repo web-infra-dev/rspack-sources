@@ -963,7 +963,7 @@ return <div>{data.foo}</div>
     assert_eq!(source.map(&MapOptions::default()), None);
     let mut hasher = twox_hash::XxHash64::default();
     source.hash(&mut hasher);
-    assert_eq!(format!("{:x}", hasher.finish()), "ab891b4c45dc95b4");
+    assert_eq!(format!("{:x}", hasher.finish()), "e9877250d7449bc5");
   }
 
   #[test]
