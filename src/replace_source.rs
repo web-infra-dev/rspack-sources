@@ -547,8 +547,9 @@ impl<T: Hash> Hash for ReplaceSource<T> {
     self.sort_replacement();
     "ReplaceSource".hash(state);
     for repl in self.replacements.lock().iter() {
-      repl.hash(state)
+      repl.hash(state);
     }
+    self.inner.hash(state);
   }
 }
 
