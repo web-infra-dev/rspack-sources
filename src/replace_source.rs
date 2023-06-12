@@ -547,8 +547,9 @@ impl<T: Hash> Hash for ReplaceSource<T> {
     self.sort_replacement();
     "ReplaceSource".hash(state);
     for repl in self.replacements.lock().iter() {
-      repl.hash(state)
+      repl.hash(state);
     }
+    self.inner.hash(state);
   }
 }
 
@@ -962,7 +963,7 @@ return <div>{data.foo}</div>
     assert_eq!(source.map(&MapOptions::default()), None);
     let mut hasher = twox_hash::XxHash64::default();
     source.hash(&mut hasher);
-    assert_eq!(format!("{:x}", hasher.finish()), "ab891b4c45dc95b4");
+    assert_eq!(format!("{:x}", hasher.finish()), "e9877250d7449bc5");
   }
 
   #[test]
