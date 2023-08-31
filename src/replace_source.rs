@@ -45,8 +45,6 @@ pub struct ReplaceSource<T> {
 struct Replacement {
   start: u32,
   end: u32,
-  char_start: OnceCell<u32>,
-  char_end: OnceCell<u32>,
   content: String,
   name: Option<String>,
 }
@@ -79,25 +77,9 @@ impl Replacement {
     Self {
       start,
       end,
-      char_start: OnceCell::new(),
-      char_end: OnceCell::new(),
       content,
       name,
     }
-  }
-
-  pub fn char_start(&self, inner_source_code: &str) -> u32 {
-    *self.char_start.get_or_init(|| {
-      str_indices::chars::from_byte_idx(inner_source_code, self.start as usize)
-        as u32
-    })
-  }
-
-  pub fn char_end(&self, inner_source_code: &str) -> u32 {
-    *self.char_end.get_or_init(|| {
-      str_indices::chars::from_byte_idx(inner_source_code, self.end as usize)
-        as u32
-    })
   }
 }
 
@@ -158,30 +140,26 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for ReplaceSource<T> {
     self.sort_replacement();
 
     let inner_source_code = self.get_inner_source_code();
-    let inner_source_code_with_indices = WithIndices::new(inner_source_code);
 
     // mut_string_push_str is faster that vec join
     // concatenate strings benchmark, see https://github.com/hoodie/concatenation_benchmarks-rs
     let mut source_code = String::new();
     let mut inner_pos = 0;
     for replacement in self.replacements.lock().iter() {
-      if inner_pos < replacement.char_start(inner_source_code) {
-        let end_pos = (replacement.char_start(inner_source_code) as usize)
-          .min(inner_source_code.len());
-        source_code.push_str(
-          inner_source_code_with_indices.substring(inner_pos as usize, end_pos),
-        );
+      if inner_pos < replacement.start {
+        let end_pos = (replacement.start as usize).min(inner_source_code.len());
+        source_code.push_str(&inner_source_code[inner_pos as usize..end_pos]);
       }
       source_code.push_str(&replacement.content);
       #[allow(clippy::manual_clamp)]
       {
         inner_pos = inner_pos
-          .max(replacement.char_end(inner_source_code))
+          .max(replacement.end)
           .min(inner_source_code.len() as u32);
       }
     }
     source_code.push_str(
-      inner_source_code_with_indices.substring(inner_pos as usize, usize::MAX),
+      &inner_source_code[inner_pos as usize..inner_source_code.len()],
     );
 
     source_code.into()
