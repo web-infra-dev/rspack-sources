@@ -34,10 +34,8 @@ impl<T: AsRef<str>> WithIndices<T> {
     });
 
     let str_len = self.line.as_ref().len() as u32;
-    let start =
-      indices_indexes.get(start_index).unwrap_or(&str_len).clone() as usize;
-    let end =
-      indices_indexes.get(end_index).unwrap_or(&str_len).clone() as usize;
+    let start = *indices_indexes.get(start_index).unwrap_or(&str_len) as usize;
+    let end = *indices_indexes.get(end_index).unwrap_or(&str_len) as usize;
     unsafe {
       // SAFETY: Since `indices` iterates over the `CharIndices` of `self`, we can guarantee
       // that the indices obtained from it will always be within the bounds of `self` and they

@@ -175,9 +175,9 @@ impl MapOptions {
 pub struct SourceMap {
   file: Option<String>,
   mappings: String,
-  sources: Vec<String>,
-  sources_content: Vec<String>,
-  names: Vec<String>,
+  sources: Vec<Cow<'static, str>>,
+  sources_content: Vec<Cow<'static, str>>,
+  names: Vec<Cow<'static, str>>,
 }
 
 impl SourceMap {
@@ -185,16 +185,16 @@ impl SourceMap {
   pub fn new(
     file: Option<String>,
     mappings: String,
-    sources: impl IntoIterator<Item = String>,
-    sources_content: impl IntoIterator<Item = String>,
-    names: impl IntoIterator<Item = String>,
+    sources: Vec<Cow<'static, str>>,
+    sources_content: Vec<Cow<'static, str>>,
+    names: Vec<Cow<'static, str>>,
   ) -> Self {
     Self {
       file,
       mappings,
-      sources: sources.into_iter().collect(),
-      sources_content: sources_content.into_iter().collect(),
-      names: names.into_iter().collect(),
+      sources,
+      sources_content,
+      names,
     }
   }
 
@@ -219,63 +219,72 @@ impl SourceMap {
   }
 
   /// Get the sources field in [SourceMap].
-  pub fn sources(&self) -> &[String] {
+  pub fn sources(&self) -> &[Cow<'static, str>] {
     &self.sources
   }
 
   /// Get the mutable sources field in [SourceMap].
-  pub fn sources_mut(&mut self) -> &mut [String] {
+  pub fn sources_mut(&mut self) -> &mut [Cow<'static, str>] {
     &mut self.sources
   }
 
   /// Get the source by index from sources field in [SourceMap].
   pub fn get_source(&self, index: usize) -> Option<&str> {
-    self.sources.get(index).map(|s| s.as_str())
+    self.sources.get(index).map(|s| s.as_ref())
   }
 
   /// Get the mutable source by index from sources field in [SourceMap].
-  pub fn get_source_mut(&mut self, index: usize) -> Option<&mut str> {
-    self.sources.get_mut(index).map(|s| s.as_mut_str())
+  pub fn get_source_mut(
+    &mut self,
+    index: usize,
+  ) -> Option<&mut Cow<'static, str>> {
+    self.sources.get_mut(index)
   }
 
   /// Get the sourcesContent field in [SourceMap].
-  pub fn sources_content(&self) -> &[String] {
+  pub fn sources_content(&self) -> &[Cow<'static, str>] {
     &self.sources_content
   }
 
   /// Get the mutable sourcesContent field in [SourceMap].
-  pub fn sources_content_mut(&mut self) -> &mut [String] {
+  pub fn sources_content_mut(&mut self) -> &mut [Cow<'static, str>] {
     &mut self.sources_content
   }
 
   /// Get the source content by index from sourcesContent field in [SourceMap].
   pub fn get_source_content(&self, index: usize) -> Option<&str> {
-    self.sources_content.get(index).map(|s| s.as_str())
+    self.sources_content.get(index).map(|s| s.as_ref())
   }
 
   /// Get the mutable source content by index from sourcesContent field in [SourceMap].
-  pub fn get_source_content_mut(&mut self, index: usize) -> Option<&mut str> {
-    self.sources_content.get_mut(index).map(|s| s.as_mut_str())
+  pub fn get_source_content_mut(
+    &mut self,
+    index: usize,
+  ) -> Option<&mut Cow<'static, str>> {
+    self.sources_content.get_mut(index)
   }
 
   /// Get the names field in [SourceMap].
-  pub fn names(&self) -> &[String] {
+  pub fn names(&self) -> &[Cow<'static, str>] {
     &self.names
   }
 
   /// Get the names field in [SourceMap].
-  pub fn names_mut(&mut self) -> &mut [String] {
+  pub fn names_mut(&mut self) -> &mut [Cow<'static, str>] {
     &mut self.names
   }
 
   /// Get the name by index from names field in [SourceMap].
   pub fn get_name(&self, index: usize) -> Option<&str> {
-    self.names.get(index).map(|s| s.as_str())
+    self.names.get(index).map(|s| s.as_ref())
   }
 
   /// Get the mutable name by index from names field in [SourceMap].
-  pub fn get_name_mut(&mut self, index: usize) -> Option<&mut str> {
-    self.names.get_mut(index).map(|s| s.as_mut_str())
+  pub fn get_name_mut(
+    &mut self,
+    index: usize,
+  ) -> Option<&mut Cow<'static, str>> {
+    self.names.get_mut(index)
   }
 }
 
@@ -284,13 +293,13 @@ struct RawSourceMap {
   pub version: Option<u8>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub file: Option<String>,
-  pub sources: Option<Vec<Option<String>>>,
+  pub sources: Option<Vec<Option<Cow<'static, str>>>>,
   #[serde(rename = "sourceRoot", skip_serializing_if = "Option::is_none")]
   pub source_root: Option<String>,
   #[serde(rename = "sourcesContent", skip_serializing_if = "Option::is_none")]
-  pub sources_content: Option<Vec<Option<String>>>,
+  pub sources_content: Option<Vec<Option<Cow<'static, str>>>>,
   #[serde(skip_serializing_if = "Option::is_none")]
-  pub names: Option<Vec<Option<String>>>,
+  pub names: Option<Vec<Option<Cow<'static, str>>>>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub mappings: Option<String>,
 }
@@ -370,24 +379,30 @@ impl TryFrom<RawSourceMap> for SourceMap {
             if is_valid {
               x
             } else {
-              format!("{source_root}/{x}")
+              format!("{source_root}/{x}").into()
             }
           })
           .collect()
       }
-      _ => sources.into_iter().map(Option::unwrap_or_default).collect(),
+      _ => sources
+        .into_iter()
+        .map(Option::unwrap_or_default)
+        .map(Cow::from)
+        .collect(),
     };
     let sources_content = raw
       .sources_content
       .unwrap_or_default()
       .into_iter()
       .map(|v| v.unwrap_or_default())
+      .map(Cow::from)
       .collect();
     let names = raw
       .names
       .unwrap_or_default()
       .into_iter()
       .map(|v| v.unwrap_or_default())
+      .map(Cow::from)
       .collect();
     Ok(Self {
       file: raw.file,
@@ -506,9 +521,9 @@ mod tests {
     let map = SourceMap::new(
       None,
       ";;".to_string(),
-      ["a.js".to_string()],
-      ["".to_string(), "".to_string(), "".to_string()],
-      ["".to_string(), "".to_string()],
+      vec!["a.js".into()],
+      vec!["".into(), "".into(), "".into()],
+      vec!["".into(), "".into()],
     )
     .to_json()
     .unwrap();

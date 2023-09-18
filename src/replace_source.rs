@@ -189,6 +189,10 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for ReplaceSource<T> {
 }
 
 impl<T: Source> StreamChunks for ReplaceSource<T> {
+  fn mappings_size_hint(&self) -> usize {
+    self.replacements.lock().len() * 2
+  }
+
   fn stream_chunks(
     &self,
     options: &crate::MapOptions,
