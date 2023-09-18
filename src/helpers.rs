@@ -1,5 +1,9 @@
 use rustc_hash::FxHashMap as HashMap;
-use std::{borrow::BorrowMut, cell::RefCell, sync::Arc};
+use std::{
+  borrow::{BorrowMut, Cow},
+  cell::RefCell,
+  sync::Arc,
+};
 
 use crate::{
   source::{Mapping, OriginalLocation},
@@ -17,37 +21,43 @@ pub fn get_map<S: StreamChunks>(
   stream: &S,
   options: &MapOptions,
 ) -> Option<SourceMap> {
-  let mut mappings = Vec::new();
-  let mut sources = Vec::new();
-  let mut sources_content = Vec::new();
-  let mut names = Vec::new();
+  let mut mappings = Vec::with_capacity(stream.mappings_size_hint());
+  let mut sources: Vec<Cow<'static, str>> = Vec::new();
+  let mut sources_content: Vec<Cow<'static, str>> = Vec::new();
+  let mut names: Vec<Cow<'static, str>> = Vec::new();
   stream.stream_chunks(
     &MapOptions {
       columns: options.columns,
       final_source: true,
     },
+    // on_chunk
     &mut |_, mapping| {
       mappings.push(mapping);
     },
+    // on_source
     &mut |source_index, source: &str, source_content: Option<&str>| {
       let source_index = source_index as usize;
+      sources.reserve(source_index - sources.len() + 1);
       while sources.len() <= source_index {
-        sources.push("".to_string());
+        sources.push("".into());
       }
-      sources[source_index] = source.to_owned();
+      sources[source_index] = source.to_string().into();
       if let Some(source_content) = source_content {
+        sources.reserve(source_index - sources_content.len() + 1);
         while sources_content.len() <= source_index {
-          sources_content.push("".to_string());
+          sources_content.push("".into());
         }
-        sources_content[source_index] = source_content.to_owned();
+        sources_content[source_index] = source_content.to_string().into();
       }
     },
+    // on_name
     &mut |name_index, name: &str| {
       let name_index = name_index as usize;
+      names.reserve(name_index - names.len() + 1);
       while names.len() <= name_index {
-        names.push("".to_string());
+        names.push("".into());
       }
-      names[name_index] = name.to_owned();
+      names[name_index] = name.to_string().into();
     },
   );
   let mappings = encode_mappings(&mappings, options);
@@ -57,6 +67,11 @@ pub fn get_map<S: StreamChunks>(
 
 /// [StreamChunks] abstraction, see [webpack-sources source.streamChunks](https://github.com/webpack/webpack-sources/blob/9f98066311d53a153fdc7c633422a1d086528027/lib/helpers/streamChunks.js#L13).
 pub trait StreamChunks {
+  /// Estimate the number of mappings in the chunk
+  fn mappings_size_hint(&self) -> usize {
+    0
+  }
+
   /// [StreamChunks] abstraction
   fn stream_chunks(
     &self,
@@ -1302,16 +1317,25 @@ pub fn stream_chunks_of_combined_source_map(
           &mut |chunk, mapping| {
             let mut inner_source_map_line_data =
               inner_source_map_line_data.borrow_mut();
-            while inner_source_map_line_data.len()
-              <= mapping.generated_line as usize
-            {
-              inner_source_map_line_data.push(SourceMapLineData {
-                mappings_data: Default::default(),
-                chunks: vec![],
-              });
+            let inner_source_map_line_data_len =
+              inner_source_map_line_data.len();
+            let mapping_generated_line_len = mapping.generated_line as usize;
+            if inner_source_map_line_data_len <= mapping_generated_line_len {
+              inner_source_map_line_data.reserve(
+                mapping_generated_line_len - inner_source_map_line_data_len + 1,
+              );
+              while inner_source_map_line_data.len()
+                <= mapping_generated_line_len
+              {
+                inner_source_map_line_data.push(SourceMapLineData {
+                  mappings_data: Default::default(),
+                  chunks: vec![],
+                });
+              }
             }
             let data = &mut inner_source_map_line_data
               [mapping.generated_line as usize - 1];
+            data.mappings_data.reserve(5);
             data.mappings_data.push(mapping.generated_column as i64);
             data.mappings_data.push(
               mapping

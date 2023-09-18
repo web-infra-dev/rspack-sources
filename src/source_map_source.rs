@@ -260,15 +260,21 @@ mod tests {
       source_map: SourceMap::new(
         None,
         "AAAA".to_string(),
-        ["".to_string()],
-        ["".to_string()],
-        [],
+        vec!["".into()],
+        vec!["".into()],
+        vec![],
       ),
     });
     let b = SourceMapSource::new(WithoutOriginalOptions {
       value: "hello world\n",
       name: "hello.txt",
-      source_map: SourceMap::new(None, "AAAA".to_string(), [], [], []),
+      source_map: SourceMap::new(
+        None,
+        "AAAA".to_string(),
+        vec![],
+        vec![],
+        vec![],
+      ),
     });
     let c = SourceMapSource::new(WithoutOriginalOptions {
       value: "hello world\n",
@@ -276,9 +282,9 @@ mod tests {
       source_map: SourceMap::new(
         None,
         "AAAA".to_string(),
-        ["hello-source.txt".to_string()],
-        ["hello world\n".to_string()],
-        [],
+        vec!["hello-source.txt".into()],
+        vec!["hello world\n".into()],
+        vec![],
       ),
     });
     let sources = [a, b, c].into_iter().map(|s| {
@@ -344,9 +350,9 @@ mod tests {
       source_map: SourceMap::new(
         None,
         "AAAA;AACA".to_string(),
-        ["hello1".to_string()],
-        [],
-        [],
+        vec!["hello1".into()],
+        vec![],
+        vec![],
       ),
     });
     let b = SourceMapSource::new(WithoutOriginalOptions {
@@ -355,9 +361,9 @@ mod tests {
       source_map: SourceMap::new(
         None,
         "AAAA,EAAE".to_string(),
-        ["hello2".to_string()],
-        [],
-        [],
+        vec!["hello2".into()],
+        vec![],
+        vec![],
       ),
     });
     let b2 = SourceMapSource::new(WithoutOriginalOptions {
@@ -366,9 +372,9 @@ mod tests {
       source_map: SourceMap::new(
         None,
         "AAAA,EAAE".to_string(),
-        ["hello3".to_string()],
-        [],
-        [],
+        vec!["hello3".into()],
+        vec![],
+        vec![],
       ),
     });
     let c = SourceMapSource::new(WithoutOriginalOptions {
@@ -377,9 +383,9 @@ mod tests {
       source_map: SourceMap::new(
         None,
         "AAAA".to_string(),
-        ["hello4".to_string()],
-        [],
-        [],
+        vec!["hello4".into()],
+        vec![],
+        vec![],
       ),
     });
     let source = ConcatSource::new([
