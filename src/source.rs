@@ -15,7 +15,7 @@ use crate::{
   Result,
 };
 
-/// An alias for [Box<dyn Source>].
+/// An alias for `Box<dyn Source>`.
 pub type BoxSource = Arc<dyn Source>;
 
 /// [Source] abstraction, [webpack-sources docs](https://github.com/webpack/webpack-sources/#source).
@@ -147,7 +147,7 @@ impl<T: Source + 'static> SourceExt for T {
 pub struct MapOptions {
   /// Whether have columns info in generated [SourceMap] mappings.
   pub columns: bool,
-  /// Whether the source will have changes, internal used for [ReplaceSource], etc.
+  /// Whether the source will have changes, internal used for `ReplaceSource`, etc.
   pub(crate) final_source: bool,
 }
 
