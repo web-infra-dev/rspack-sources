@@ -26,16 +26,16 @@ once_cell = "1"
 parking_lot = "0.12"
 dashmap = "5"
 substring = "1"
-smallvec = "1.10.0"
-memchr = "2.5.0"
-str_indices = "0.4.1"
+smallvec = "1.11.2"
+memchr = "2.6.4"
+str_indices = "0.4.3"
 
 codspeed-criterion-compat = { version = "2.3.3", default-features = false, optional = true }
 
 [dev-dependencies]
 twox-hash = "1"
 base64-simd = "0.7"
-regex = "1.8.1"
+regex = "1.10.2"
 criterion = { version = "0.5.1", default-features = false }
 
 [features]
