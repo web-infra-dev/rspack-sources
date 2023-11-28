@@ -284,16 +284,16 @@ fn encode_full_mappings(mappings: &[Mapping]) -> String {
     |acc, mapping| {
       if active_mapping && current_line == mapping.generated_line {
         // A mapping is still active
-        if let Some(original) = &mapping.original
-        && original.source_index == current_source_index
-        && original.original_line == current_original_line
-        && original.original_column == current_original_column
-        && !active_name
-        && original.name_index.is_none()
-      {
-        // avoid repeating the same original mapping
-        return acc;
-      }
+        if mapping.original.is_some_and(|original| {
+          original.source_index == current_source_index
+            && original.original_line == current_original_line
+            && original.original_column == current_original_column
+            && !active_name
+            && original.name_index.is_none()
+        }) {
+          // avoid repeating the same original mapping
+          return acc;
+        }
       } else {
         // No mapping is active
         if mapping.original.is_none() {
@@ -531,7 +531,9 @@ pub fn stream_chunks_of_raw_source(
     line += 1;
     last_line = Some(l);
   }
-  if let Some(last_line) = last_line && !last_line.ends_with('\n') {
+  if let Some(last_line) =
+    last_line.filter(|last_line| !last_line.ends_with('\n'))
+  {
     GeneratedInfo {
       generated_line: line,
       generated_column: last_line.len() as u32,
@@ -753,10 +755,11 @@ fn stream_chunks_of_source_map_full(
       }
       current_generated_column = mapping.generated_column;
     }
-    if let Some(original) = &mapping.original
-      && (mapping.generated_line < final_line
+    if let Some(original) = &mapping.original.filter(|_| {
+      mapping.generated_line < final_line
         || (mapping.generated_line == final_line
-        && mapping.generated_column < final_column)) {
+          && mapping.generated_column < final_column)
+    }) {
       mapping_active = true;
       active_mapping_original = Some(*original);
     }
@@ -801,19 +804,23 @@ fn stream_chunks_of_source_map_lines_final(
   let mut current_generated_line = 1;
 
   let mut on_mapping = |mapping: &Mapping| {
-    if let Some(original) = &mapping.original
-      && current_generated_line <= mapping.generated_line
-      && mapping.generated_line <= final_line {
-      on_chunk(None, Mapping {
-        generated_line: mapping.generated_line,
-        generated_column: 0,
-        original: Some(OriginalLocation {
-          source_index: original.source_index,
-          original_line: original.original_line,
-          original_column: original.original_column,
-          name_index: None,
-        }),
-      });
+    if let Some(original) = &mapping.original.filter(|_| {
+      current_generated_line <= mapping.generated_line
+        && mapping.generated_line <= final_line
+    }) {
+      on_chunk(
+        None,
+        Mapping {
+          generated_line: mapping.generated_line,
+          generated_column: 0,
+          original: Some(OriginalLocation {
+            source_index: original.source_index,
+            original_line: original.original_line,
+            original_column: original.original_column,
+            name_index: None,
+          }),
+        },
+      );
       current_generated_line = mapping.generated_line + 1;
     }
   };
@@ -861,17 +868,23 @@ fn stream_chunks_of_source_map_lines_full(
       }
       current_generated_line += 1;
     }
-    if let Some(original) = &mapping.original && mapping.generated_line as usize <= lines.len() {
-      on_chunk(Some(lines[mapping.generated_line as usize - 1]), Mapping {
-        generated_line: mapping.generated_line,
-        generated_column: 0,
-        original: Some(OriginalLocation {
-          source_index: original.source_index,
-          original_line: original.original_line,
-          original_column: original.original_column,
-          name_index: None,
-        }),
-      });
+    if let Some(original) = &mapping
+      .original
+      .filter(|_| mapping.generated_line as usize <= lines.len())
+    {
+      on_chunk(
+        Some(lines[mapping.generated_line as usize - 1]),
+        Mapping {
+          generated_line: mapping.generated_line,
+          generated_column: 0,
+          original: Some(OriginalLocation {
+            source_index: original.source_index,
+            original_line: original.original_line,
+            original_column: original.original_column,
+            name_index: None,
+          }),
+        },
+      );
       current_generated_line += 1;
     }
   };

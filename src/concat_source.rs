@@ -161,22 +161,27 @@ impl StreamChunks for ConcatSource {
           };
           if need_to_cloas_mapping {
             if mapping.generated_line != 1 || mapping.generated_column != 0 {
-              on_chunk(None, Mapping {
-                generated_line: current_line_offset + 1,
-                generated_column: current_column_offset,
-                original: None,
-              });
+              on_chunk(
+                None,
+                Mapping {
+                  generated_line: current_line_offset + 1,
+                  generated_column: current_column_offset,
+                  original: None,
+                },
+              );
             }
             need_to_cloas_mapping = false;
           }
-          let result_source_index = mapping.original.as_ref().and_then(|original| {
-            source_index_mapping
-              .borrow()
-              .get(&original.source_index)
-              .copied()
-          });
+          let result_source_index =
+            mapping.original.as_ref().and_then(|original| {
+              source_index_mapping
+                .borrow()
+                .get(&original.source_index)
+                .copied()
+            });
           let result_name_index = mapping
-            .original.as_ref()
+            .original
+            .as_ref()
             .and_then(|original| original.name_index)
             .and_then(|name_index| {
               name_index_mapping.borrow().get(&name_index).copied()
@@ -187,8 +192,29 @@ impl StreamChunks for ConcatSource {
             mapping.generated_line
           };
           if options.final_source {
-            if let Some(result_source_index) = result_source_index && let Some(original) = &mapping.original {
-              on_chunk(None, Mapping {
+            if let (Some(result_source_index), Some(original)) =
+              (result_source_index, &mapping.original)
+            {
+              on_chunk(
+                None,
+                Mapping {
+                  generated_line: line,
+                  generated_column: column,
+                  original: Some(OriginalLocation {
+                    source_index: result_source_index,
+                    original_line: original.original_line,
+                    original_column: original.original_column,
+                    name_index: result_name_index,
+                  }),
+                },
+              );
+            }
+          } else if let (Some(result_source_index), Some(original)) =
+            (result_source_index, &mapping.original)
+          {
+            on_chunk(
+              chunk,
+              Mapping {
                 generated_line: line,
                 generated_column: column,
                 original: Some(OriginalLocation {
@@ -197,25 +223,17 @@ impl StreamChunks for ConcatSource {
                   original_column: original.original_column,
                   name_index: result_name_index,
                 }),
-              });
-            }
-          } else if let Some(result_source_index) = result_source_index && let Some(original) = &mapping.original {
-            on_chunk(chunk, Mapping {
-              generated_line: line,
-              generated_column: column,
-              original: Some(OriginalLocation {
-                  source_index: result_source_index,
-                  original_line: original.original_line,
-                  original_column: original.original_column,
-                  name_index: result_name_index,
-              }),
-            });
+              },
+            );
           } else {
-            on_chunk(chunk, Mapping {
-              generated_line: line,
-              generated_column: column,
-              original: None,
-            });
+            on_chunk(
+              chunk,
+              Mapping {
+                generated_line: line,
+                generated_column: column,
+                original: None,
+              },
+            );
           }
         },
         &mut |i, source, source_content| {

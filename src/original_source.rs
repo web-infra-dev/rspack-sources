@@ -198,7 +198,9 @@ impl StreamChunks for OriginalSource {
         line += 1;
         last_line = Some(l);
       }
-      if let Some(last_line) = last_line && !last_line.ends_with('\n') {
+      if let Some(last_line) =
+        last_line.filter(|last_line| !last_line.ends_with('\n'))
+      {
         GeneratedInfo {
           generated_line: line,
           generated_column: last_line.len() as u32,

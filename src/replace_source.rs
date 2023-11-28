@@ -272,15 +272,17 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
         let mut chunk_pos = 0;
         let end_pos = pos + chunk.len() as u32;
         // Skip over when it has been replaced
-        if let Some(replacment_end) = replacement_end && replacment_end > pos {
-					// Skip over the whole chunk
+        if let Some(replacment_end) =
+          replacement_end.filter(|replacment_end| *replacment_end > pos)
+        {
+          // Skip over the whole chunk
           if replacment_end >= end_pos {
             let line = mapping.generated_line as i64 + generated_line_offset;
             if chunk.ends_with('\n') {
               generated_line_offset -= 1;
               if generated_column_offset_line == line {
-								// undo exiting corrections form the current line
-								generated_column_offset += mapping.generated_column as i64;
+                // undo exiting corrections form the current line
+                generated_column_offset += mapping.generated_column as i64;
               }
             } else if generated_column_offset_line == line {
               generated_column_offset -= chunk.len() as i64;
@@ -289,17 +291,18 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
               generated_column_offset_line = line;
             }
             pos = end_pos;
-            return ;
+            return;
           }
           // Partially skip over chunk
           chunk_pos = replacment_end - pos;
-          if let Some(original) = &mut mapping.original
-            && check_original_content(
+          if let Some(original) = mapping.original.as_mut().filter(|original| {
+            check_original_content(
               original.source_index,
               original.original_line,
               original.original_column,
               chunk_with_indices.substring(0, chunk_pos as usize),
-            ) {
+            )
+          }) {
             original.original_column += chunk_pos;
           }
           pos += chunk_pos;
@@ -313,36 +316,64 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
           mapping.generated_column += chunk_pos;
         }
 
-				// Is a replacement in the chunk?
-        while let Some(next_replacement_pos) = next_replacement && next_replacement_pos < end_pos {
+        // Is a replacement in the chunk?
+        while let Some(next_replacement_pos) = next_replacement
+          .filter(|next_replacement_pos| *next_replacement_pos < end_pos)
+        {
           let mut line = mapping.generated_line as i64 + generated_line_offset;
           if next_replacement_pos > pos {
             // Emit chunk until replacement
             let offset = next_replacement_pos - pos;
-            let chunk_slice = chunk_with_indices.substring(chunk_pos as usize, (chunk_pos + offset) as usize);
-            on_chunk(Some(chunk_slice), Mapping {
-              generated_line: line as u32,
-              generated_column: ((mapping.generated_column as i64) + if line == generated_column_offset_line { generated_column_offset } else { 0 }) as u32,
-              original: mapping.original.as_ref().map(|original| OriginalLocation {
-                source_index: original.source_index,
-                original_line: original.original_line,
-                original_column: original.original_column,
-                name_index: original.name_index.and_then(|name_index| name_index_mapping.borrow().get(&name_index).copied()),
-              }),
-            });
+            let chunk_slice = chunk_with_indices
+              .substring(chunk_pos as usize, (chunk_pos + offset) as usize);
+            on_chunk(
+              Some(chunk_slice),
+              Mapping {
+                generated_line: line as u32,
+                generated_column: ((mapping.generated_column as i64)
+                  + if line == generated_column_offset_line {
+                    generated_column_offset
+                  } else {
+                    0
+                  }) as u32,
+                original: mapping.original.as_ref().map(|original| {
+                  OriginalLocation {
+                    source_index: original.source_index,
+                    original_line: original.original_line,
+                    original_column: original.original_column,
+                    name_index: original.name_index.and_then(|name_index| {
+                      name_index_mapping.borrow().get(&name_index).copied()
+                    }),
+                  }
+                }),
+              },
+            );
             mapping.generated_column += offset;
             chunk_pos += offset;
             pos = next_replacement_pos;
-            if let Some(original) = &mut mapping.original
-              && check_original_content(original.source_index, original.original_line, original.original_column, chunk_slice) {
+            if let Some(original) =
+              mapping.original.as_mut().filter(|original| {
+                check_original_content(
+                  original.source_index,
+                  original.original_line,
+                  original.original_column,
+                  chunk_slice,
+                )
+              })
+            {
               original.original_column += chunk_slice.len() as u32;
             }
           }
           // Insert replacement content splitted into chunks by lines
           let repl = &repls[i];
           let lines: Vec<&str> = split_into_lines(&repl.content);
-          let mut replacement_name_index = mapping.original.as_ref().and_then(|original| original.name_index);
-          if mapping.original.is_some() && let Some(name) = &repl.name {
+          let mut replacement_name_index = mapping
+            .original
+            .as_ref()
+            .and_then(|original| original.name_index);
+          if let Some(name) =
+            repl.name.as_ref().filter(|_| mapping.original.is_some())
+          {
             let mut name_mapping = name_mapping.borrow_mut();
             let mut global_index = name_mapping.get(name).copied();
             if global_index.is_none() {
@@ -354,11 +385,26 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
             replacement_name_index = global_index;
           }
           for (m, content_line) in lines.iter().enumerate() {
-            on_chunk(Some(content_line), Mapping {
-              generated_line: line as u32,
-              generated_column: ((mapping.generated_column as i64) + if line == generated_column_offset_line { generated_column_offset } else { 0 }) as u32,
-              original: mapping.original.as_ref().map(|original| OriginalLocation { source_index: original.source_index, original_line: original.original_line, original_column: original.original_column, name_index: replacement_name_index }),
-            });
+            on_chunk(
+              Some(content_line),
+              Mapping {
+                generated_line: line as u32,
+                generated_column: ((mapping.generated_column as i64)
+                  + if line == generated_column_offset_line {
+                    generated_column_offset
+                  } else {
+                    0
+                  }) as u32,
+                original: mapping.original.as_ref().map(|original| {
+                  OriginalLocation {
+                    source_index: original.source_index,
+                    original_line: original.original_line,
+                    original_column: original.original_column,
+                    name_index: replacement_name_index,
+                  }
+                }),
+              },
+            );
             // Only the first chunk has name assigned
             replacement_name_index = None;
 
@@ -386,13 +432,21 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
 
           // Move to next replacment
           i += 1;
-          next_replacement = if i < repls.len() { Some(repls[i].start) } else { None };
+          next_replacement = if i < repls.len() {
+            Some(repls[i].start)
+          } else {
+            None
+          };
 
           // Skip over when it has been replaced
-          let offset = chunk.len() as i64 - end_pos as i64 + replacement_end.unwrap() as i64 - chunk_pos as i64;
+          let offset = chunk.len() as i64 - end_pos as i64
+            + replacement_end.unwrap() as i64
+            - chunk_pos as i64;
           if offset > 0 {
             // Skip over whole chunk
-            if let Some(replacement_end) = replacement_end && replacement_end >= end_pos {
+            if replacement_end
+              .is_some_and(|replacement_end| replacement_end >= end_pos)
+            {
               let line = mapping.generated_line as i64 + generated_line_offset;
               if chunk.ends_with('\n') {
                 generated_line_offset -= 1;
@@ -401,18 +455,31 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
                   generated_column_offset += mapping.generated_column as i64;
                 }
               } else if generated_column_offset_line == line {
-                generated_column_offset -= chunk.len() as i64 - chunk_pos as i64;
+                generated_column_offset -=
+                  chunk.len() as i64 - chunk_pos as i64;
               } else {
                 generated_column_offset = chunk_pos as i64 - chunk.len() as i64;
                 generated_column_offset_line = line;
               }
               pos = end_pos;
-              return ;
+              return;
             }
 
             // Partially skip over chunk
             let line = mapping.generated_line as i64 + generated_line_offset;
-            if let Some(original) = &mut mapping.original && check_original_content(original.source_index, original.original_line, original.original_column, chunk_with_indices.substring(chunk_pos as usize, (chunk_pos + offset as u32) as usize)) {
+            if let Some(original) =
+              mapping.original.as_mut().filter(|original| {
+                check_original_content(
+                  original.source_index,
+                  original.original_line,
+                  original.original_column,
+                  chunk_with_indices.substring(
+                    chunk_pos as usize,
+                    (chunk_pos + offset as u32) as usize,
+                  ),
+                )
+              })
+            {
               original.original_column += offset as u32;
             }
             chunk_pos += offset as u32;
@@ -427,26 +494,51 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
           }
         }
 
-				// Emit remaining chunk
+        // Emit remaining chunk
         if (chunk_pos as usize) < chunk.len() {
-          let chunk_slice = if chunk_pos == 0 {chunk} else {chunk_with_indices.substring(chunk_pos as usize, usize::MAX)};
+          let chunk_slice = if chunk_pos == 0 {
+            chunk
+          } else {
+            chunk_with_indices.substring(chunk_pos as usize, usize::MAX)
+          };
           let line = mapping.generated_line as i64 + generated_line_offset;
-          on_chunk(Some(chunk_slice), Mapping {
-            generated_line: line as u32,
-            generated_column: ((mapping.generated_column as i64) + if line == generated_column_offset_line { generated_column_offset } else { 0 }) as u32,
-            original: mapping.original.as_ref().map(|original| OriginalLocation { source_index: original.source_index, original_line: original.original_line, original_column: original.original_column, name_index: original.name_index.and_then(|name_index| name_index_mapping.borrow().get(&name_index).copied()) }),
-          });
+          on_chunk(
+            Some(chunk_slice),
+            Mapping {
+              generated_line: line as u32,
+              generated_column: ((mapping.generated_column as i64)
+                + if line == generated_column_offset_line {
+                  generated_column_offset
+                } else {
+                  0
+                }) as u32,
+              original: mapping.original.as_ref().map(|original| {
+                OriginalLocation {
+                  source_index: original.source_index,
+                  original_line: original.original_line,
+                  original_column: original.original_column,
+                  name_index: original.name_index.and_then(|name_index| {
+                    name_index_mapping.borrow().get(&name_index).copied()
+                  }),
+                }
+              }),
+            },
+          );
         }
-				pos = end_pos;
+        pos = end_pos;
       },
       &mut |source_index, source, source_content| {
         let mut source_content_lines = source_content_lines.borrow_mut();
         while source_content_lines.len() <= source_index as usize {
           source_content_lines.push(None);
         }
-        source_content_lines[source_index as usize] = source_content.map(|source_content| {
-          split_into_lines(source_content).into_iter().map(|line| WithIndices::new(line.into())).collect()
-        });
+        source_content_lines[source_index as usize] =
+          source_content.map(|source_content| {
+            split_into_lines(source_content)
+              .into_iter()
+              .map(|line| WithIndices::new(line.into()))
+              .collect()
+          });
         on_source(source_index, source, source_content);
       },
       &mut |name_index, name| {
@@ -458,7 +550,9 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
           on_name.borrow_mut()(len, name);
           global_index = Some(len);
         }
-        name_index_mapping.borrow_mut().insert(name_index, global_index.unwrap());
+        name_index_mapping
+          .borrow_mut()
+          .insert(name_index, global_index.unwrap());
       },
     );
 
