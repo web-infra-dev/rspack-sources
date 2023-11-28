@@ -43,7 +43,6 @@ use crate::{helpers::StreamChunks, MapOptions, Source, SourceMap};
 ///   "Hello World\nconsole.log('test');\nconsole.log('test2');\nHello2\n"
 /// );
 /// ```
-#[derive(Debug)]
 pub struct CachedSource<T> {
   inner: Arc<T>,
   cached_buffer: OnceCell<Vec<u8>>,
@@ -158,6 +157,20 @@ impl<T: PartialEq> PartialEq for CachedSource<T> {
 }
 
 impl<T: Eq> Eq for CachedSource<T> {}
+
+impl<T: std::fmt::Debug> std::fmt::Debug for CachedSource<T> {
+  fn fmt(
+    &self,
+    f: &mut std::fmt::Formatter<'_>,
+  ) -> Result<(), std::fmt::Error> {
+    f.debug_struct("CachedSource")
+      .field("inner", self.inner.as_ref())
+      .field("cached_buffer", &self.cached_buffer.get().is_some())
+      .field("cached_source", &self.cached_source.get().is_some())
+      .field("cached_maps", &(!self.cached_maps.is_empty()))
+      .finish()
+  }
+}
 
 #[cfg(test)]
 mod tests {

@@ -57,7 +57,7 @@ impl<V, N> From<WithoutOriginalOptions<V, N>> for SourceMapSourceOptions<V, N> {
 /// source map for the original source.
 ///
 /// - [webpack-sources docs](https://github.com/webpack/webpack-sources/#sourcemapsource).
-#[derive(Debug, Clone, Eq)]
+#[derive(Clone, Eq)]
 pub struct SourceMapSource {
   value: String,
   name: String,
@@ -131,6 +131,18 @@ impl PartialEq for SourceMapSource {
       && self.original_source == other.original_source
       && self.inner_source_map == other.inner_source_map
       && self.remove_original_source == other.remove_original_source
+  }
+}
+
+impl std::fmt::Debug for SourceMapSource {
+  fn fmt(
+    &self,
+    f: &mut std::fmt::Formatter<'_>,
+  ) -> Result<(), std::fmt::Error> {
+    f.debug_struct("SourceMapSource")
+      .field("name", &self.name)
+      .field("value", &self.value.chars().take(50).collect::<String>())
+      .finish()
   }
 }
 
