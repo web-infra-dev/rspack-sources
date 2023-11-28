@@ -1,7 +1,6 @@
 # rspack-sources
 
-Rusty [`webpack-sources`](https://github.com/webpack/webpack-sources) port.
+[![Test](https://github.com/web-infra-dev/rspack-sources/actions/workflows/Test.yaml/badge.svg?branch=main)](https://github.com/web-infra-dev/rspack-sources/actions/workflows/Test.yaml)
+[![CodSpeed Badge](https://img.shields.io/endpoint?url=https://codspeed.io/badge.json)](https://codspeed.io/web-infra-dev/rspack-sources)
 
-## Benchmark
-
-you could check benchmark history and trending here: https://web-infra-dev.github.io/rspack-sources/dev/bench/
+Rust port of [`webpack-sources`](https://github.com/webpack/webpack-sources).
