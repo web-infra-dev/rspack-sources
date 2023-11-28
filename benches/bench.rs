@@ -1,8 +1,8 @@
-#![feature(test)]
-#![allow(soft_unstable)]
+#[cfg(not(codspeed))]
+pub use criterion::*;
 
-extern crate test;
-use test::Bencher;
+#[cfg(codspeed)]
+pub use codspeed_criterion_compat::*;
 
 use rspack_sources::{
   CachedSource, ConcatSource, MapOptions, Source, SourceMap, SourceMapSource,
@@ -34,7 +34,6 @@ const BUNDLE_JS_MAP: &str = include_str!(concat!(
   "/benches/fixtures/transpile-rollup/files/bundle.js.map"
 ));
 
-#[bench]
 fn benchmark_concat_generate_string(b: &mut Bencher) {
   let sms_minify = SourceMapSource::new(SourceMapSourceOptions {
     value: HELLOWORLD_MIN_JS,
@@ -44,6 +43,7 @@ fn benchmark_concat_generate_string(b: &mut Bencher) {
     inner_source_map: Some(SourceMap::from_json(HELLOWORLD_JS_MAP).unwrap()),
     remove_original_source: false,
   });
+
   let sms_rollup = SourceMapSource::new(SourceMapSourceOptions {
     value: BUNDLE_JS,
     name: "bundle.js",
@@ -52,6 +52,7 @@ fn benchmark_concat_generate_string(b: &mut Bencher) {
     inner_source_map: None,
     remove_original_source: false,
   });
+
   let concat = ConcatSource::new([sms_minify, sms_rollup]);
 
   b.iter(|| {
@@ -63,7 +64,6 @@ fn benchmark_concat_generate_string(b: &mut Bencher) {
   })
 }
 
-#[bench]
 fn benchmark_concat_generate_string_with_cache(b: &mut Bencher) {
   let sms_minify = SourceMapSource::new(SourceMapSourceOptions {
     value: HELLOWORLD_MIN_JS,
@@ -93,7 +93,6 @@ fn benchmark_concat_generate_string_with_cache(b: &mut Bencher) {
   })
 }
 
-#[bench]
 fn benchmark_concat_generate_base64(b: &mut Bencher) {
   let sms_minify = SourceMapSource::new(SourceMapSourceOptions {
     value: HELLOWORLD_MIN_JS,
@@ -123,7 +122,6 @@ fn benchmark_concat_generate_base64(b: &mut Bencher) {
   })
 }
 
-#[bench]
 fn benchmark_concat_generate_base64_with_cache(b: &mut Bencher) {
   let sms_minify = SourceMapSource::new(SourceMapSourceOptions {
     value: HELLOWORLD_MIN_JS,
@@ -153,3 +151,23 @@ fn benchmark_concat_generate_base64_with_cache(b: &mut Bencher) {
     base64_simd::Base64::STANDARD.encode_to_boxed_str(json.as_bytes());
   })
 }
+
+fn bench_rspack_sources(criterion: &mut Criterion) {
+  let mut group = criterion.benchmark_group("rspack_sources");
+  group.bench_function(
+    "concat_generate_base64_with_cache",
+    benchmark_concat_generate_base64_with_cache,
+  );
+  group
+    .bench_function("concat_generate_base64", benchmark_concat_generate_base64);
+  group.bench_function(
+    "concat_generate_string_with_cache",
+    benchmark_concat_generate_string_with_cache,
+  );
+  group
+    .bench_function("concat_generate_string", benchmark_concat_generate_string);
+  group.finish();
+}
+
+criterion_group!(rspack_sources, bench_rspack_sources);
+criterion_main!(rspack_sources);
