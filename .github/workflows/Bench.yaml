@@ -1,13 +1,6 @@
 name: Benchmark
 
-env:
-  DEBUG: 'napi:*'
-  APP_NAME: 'rspack-sources'
-  MACOSX_DEPLOYMENT_TARGET: '10.13'
-  # https://github.com/SchrodingerZhu/snmalloc-rs
-  CACHE_FRIENDLY_OFFSET: 64
-
-'on':
+on:
   push:
     branches:
       - main
@@ -15,11 +8,15 @@ env:
       - '**'
     paths-ignore:
       - '**/*.md'
-      - LICENSE
-      - '**/*.gitignore'
-      - .editorconfig
-      - docs/**
-  pull_request: null
+  pull_request:
+    types: [opened, synchronize]
+    paths-ignore:
+      - '**/*.md'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.ref_name != 'main' }}
+
 jobs:
   benchmark:
     runs-on: ubuntu-latest
