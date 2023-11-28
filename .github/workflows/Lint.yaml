@@ -29,6 +29,9 @@ jobs:
         with:
           components: rustfmt,clippy,rust-docs
 
+      - name: Cargo check
+        run: cargo check
+
       - name: Cargo fmt
         run: cargo fmt -- --check
 
