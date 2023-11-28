@@ -24,7 +24,7 @@ use crate::{
 /// assert_eq!(s.map(&MapOptions::default()), None);
 /// assert_eq!(s.size(), 16);
 /// ```
-#[derive(Debug, Clone, Eq)]
+#[derive(Clone, Eq)]
 pub enum RawSource {
   /// Represent buffer.
   Buffer(Vec<u8>),
@@ -111,6 +111,27 @@ impl PartialEq for RawSource {
       (Self::Source(l0), Self::Source(r0)) => l0 == r0,
       _ => false,
     }
+  }
+}
+
+impl std::fmt::Debug for RawSource {
+  fn fmt(
+    &self,
+    f: &mut std::fmt::Formatter<'_>,
+  ) -> Result<(), std::fmt::Error> {
+    let mut d = f.debug_struct("RawSource");
+    match self {
+      Self::Buffer(buffer) => {
+        d.field(
+          "buffer",
+          &buffer.iter().take(50).copied().collect::<Vec<u8>>(),
+        );
+      }
+      Self::Source(string) => {
+        d.field("source", &string.chars().take(50).collect::<String>());
+      }
+    }
+    d.finish()
   }
 }
 

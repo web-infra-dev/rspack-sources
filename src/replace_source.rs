@@ -34,7 +34,6 @@ use crate::{
 ///
 /// assert_eq!(source.source(), "start1\nstart2\nreplaced!\nend1\nend2");
 /// ```
-#[derive(Debug)]
 pub struct ReplaceSource<T> {
   inner: Arc<T>,
   inner_source_code: OnceCell<Box<str>>,
@@ -185,6 +184,28 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for ReplaceSource<T> {
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
     writer.write_all(self.source().as_bytes())
+  }
+}
+
+impl<T: std::fmt::Debug> std::fmt::Debug for ReplaceSource<T> {
+  fn fmt(
+    &self,
+    f: &mut std::fmt::Formatter<'_>,
+  ) -> Result<(), std::fmt::Error> {
+    f.debug_struct("ReplaceSource")
+      .field("inner", self.inner.as_ref())
+      .field(
+        "inner_source_code",
+        &self
+          .inner_source_code
+          .get()
+          .map(|s| s.chars().take(50).collect::<String>()),
+      )
+      .field(
+        "replacements",
+        &self.replacements.lock().iter().take(3).collect::<Vec<_>>(),
+      )
+      .finish()
   }
 }
 
