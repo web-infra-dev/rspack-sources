@@ -119,7 +119,7 @@ pub fn stream_chunks_default<S: Source>(
   }
 }
 
-/// [GeneratedSourceInfo] abstraction, see [webpack-sources GeneratedSourceInfo](https://github.com/webpack/webpack-sources/blob/9f98066311d53a153fdc7c633422a1d086528027/lib/helpers/getGeneratedSourceInfo.js)
+/// `GeneratedSourceInfo` abstraction, see [webpack-sources GeneratedSourceInfo](https://github.com/webpack/webpack-sources/blob/9f98066311d53a153fdc7c633422a1d086528027/lib/helpers/getGeneratedSourceInfo.js)
 #[derive(Debug)]
 pub struct GeneratedInfo {
   /// Generated line

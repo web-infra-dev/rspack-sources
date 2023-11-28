@@ -29,7 +29,7 @@ pub use source_map_source::{
   SourceMapSource, SourceMapSourceOptions, WithoutOriginalOptions,
 };
 
-/// Reexport [StreamChunks] related types.
+/// Reexport `StreamChunks` related types.
 pub mod stream_chunks {
   pub use super::helpers::{
     stream_chunks_default, GeneratedInfo, OnChunk, OnName, OnSource,
