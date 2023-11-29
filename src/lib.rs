@@ -1,8 +1,5 @@
 //! Rusty [`webpack-sources`](https://github.com/webpack/webpack-sources) port.
 
-#![warn(unsafe_code)]
-#![deny(missing_docs)]
-
 mod cached_source;
 mod concat_source;
 mod error;
