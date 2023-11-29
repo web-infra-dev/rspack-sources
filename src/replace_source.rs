@@ -16,7 +16,7 @@ use crate::{
 };
 
 /// Decorates a Source with replacements and insertions of source code,
-/// usally used in dependencies
+/// usually used in dependencies
 ///
 /// - [webpack-sources docs](https://github.com/webpack/webpack-sources/#replacesource).
 ///
@@ -293,11 +293,11 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
         let mut chunk_pos = 0;
         let end_pos = pos + chunk.len() as u32;
         // Skip over when it has been replaced
-        if let Some(replacment_end) =
-          replacement_end.filter(|replacment_end| *replacment_end > pos)
+        if let Some(replacement_end) =
+          replacement_end.filter(|replacement_end| *replacement_end > pos)
         {
           // Skip over the whole chunk
-          if replacment_end >= end_pos {
+          if replacement_end >= end_pos {
             let line = mapping.generated_line as i64 + generated_line_offset;
             if chunk.ends_with('\n') {
               generated_line_offset -= 1;
@@ -315,7 +315,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
             return;
           }
           // Partially skip over chunk
-          chunk_pos = replacment_end - pos;
+          chunk_pos = replacement_end - pos;
           if let Some(original) = mapping.original.as_mut().filter(|original| {
             check_original_content(
               original.source_index,
@@ -385,7 +385,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
               original.original_column += chunk_slice.len() as u32;
             }
           }
-          // Insert replacement content splitted into chunks by lines
+          // Insert replacement content split into chunks by lines
           let repl = &repls[i];
           let lines: Vec<&str> = split_into_lines(&repl.content);
           let mut replacement_name_index = mapping
@@ -451,7 +451,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
             Some(repl.end)
           };
 
-          // Move to next replacment
+          // Move to next replacement
           i += 1;
           next_replacement = if i < repls.len() {
             Some(repls[i].start)
@@ -578,15 +578,15 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
     );
 
     // Handle remaining replacements
-    let mut remainer = String::new();
+    let mut remainder = String::new();
     while i < repls.len() {
-      remainer += &repls[i].content;
+      remainder += &repls[i].content;
       i += 1;
     }
 
-    // Insert remaining replacements content splitted into chunks by lines
+    // Insert remaining replacements content split into chunks by lines
     let mut line = result.generated_line as i64 + generated_line_offset;
-    let matches = split_into_lines(&remainer);
+    let matches = split_into_lines(&remainder);
     for (m, content_line) in matches.iter().enumerate() {
       on_chunk(
         Some(content_line),
@@ -1001,7 +1001,7 @@ return <div>{data.foo}</div>
   }
 
   #[test]
-  fn should_not_generate_invalid_mappings_when_replacing_mulitple_lines_of_code(
+  fn should_not_generate_invalid_mappings_when_replacing_multiple_lines_of_code(
   ) {
     let mut source = ReplaceSource::new(OriginalSource::new(
       r#"if (a;b;c) {

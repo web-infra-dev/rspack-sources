@@ -11,7 +11,7 @@ use rustc_hash::FxHasher;
 use crate::{helpers::StreamChunks, MapOptions, Source, SourceMap};
 
 /// It tries to reused cached results from other methods to avoid calculations,
-/// usally used after modify is finished.
+/// usually used after modify is finished.
 ///
 /// - [webpack-sources docs](https://github.com/webpack/webpack-sources/#cachedsource).
 ///
