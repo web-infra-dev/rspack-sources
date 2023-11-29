@@ -447,7 +447,6 @@ dependencies = [
  "dashmap",
  "dyn-clone",
  "memchr",
- "once_cell",
  "regex",
  "rustc-hash",
  "serde",

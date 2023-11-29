@@ -1,7 +1,8 @@
 use rustc_hash::FxHashMap as HashMap;
 use std::{
   borrow::{BorrowMut, Cow},
-  cell::RefCell,
+  cell::{OnceCell, RefCell},
+  rc::Rc,
   sync::Arc,
 };
 
@@ -15,7 +16,7 @@ use crate::{
 type ArcStr = Arc<str>;
 // Adding this type because sourceContentLine not happy
 type InnerSourceContentLine =
-  RefCell<HashMap<i64, Option<Arc<Vec<WithIndices<ArcStr>>>>>>;
+  RefCell<HashMap<i64, Option<Rc<Vec<WithIndices<ArcStr>>>>>>;
 
 pub fn get_map<S: StreamChunks>(
   stream: &S,
@@ -925,14 +926,14 @@ struct SourceMapLineData {
 #[derive(Debug)]
 struct SourceMapLineChunk {
   content: ArcStr,
-  cached: once_cell::sync::OnceCell<WithIndices<ArcStr>>,
+  cached: OnceCell<WithIndices<ArcStr>>,
 }
 
 impl SourceMapLineChunk {
   pub fn new(content: ArcStr) -> Self {
     Self {
       content,
-      cached: once_cell::sync::OnceCell::new(),
+      cached: OnceCell::new(),
     }
   }
 
@@ -1062,7 +1063,7 @@ pub fn stream_chunks_of_combined_source_map(
                 original_source_lines = if let Some(Some(original_source)) =
                   inner_source_contents.get(&inner_source_index)
                 {
-                  Some(Arc::new(
+                  Some(Rc::new(
                     split_into_lines(original_source)
                       .into_iter()
                       .map(|s| WithIndices::new(s.into()))
@@ -1165,7 +1166,7 @@ pub fn stream_chunks_of_combined_source_map(
                   .and_then(|original_source| {
                     original_source.as_ref().map(|s| {
                       let lines = split_into_lines(s);
-                      Arc::new(
+                      Rc::new(
                         lines
                           .into_iter()
                           .map(|s| WithIndices::new(s.into()))

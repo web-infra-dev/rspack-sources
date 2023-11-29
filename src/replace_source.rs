@@ -4,11 +4,10 @@ use std::{
   hash::{Hash, Hasher},
   sync::{
     atomic::{AtomicBool, Ordering},
-    Arc, Mutex, MutexGuard,
+    Arc, Mutex, MutexGuard, OnceLock,
   },
 };
 
-use once_cell::sync::OnceCell;
 use rustc_hash::FxHashMap as HashMap;
 
 use crate::{
@@ -38,7 +37,7 @@ use crate::{
 /// ```
 pub struct ReplaceSource<T> {
   inner: Arc<T>,
-  inner_source_code: OnceCell<Box<str>>,
+  inner_source_code: OnceLock<Box<str>>,
   replacements: Mutex<Vec<Replacement>>,
   /// Whether `replacements` is sorted.
   is_sorted: AtomicBool,
@@ -91,7 +90,7 @@ impl<T> ReplaceSource<T> {
   pub fn new(source: T) -> Self {
     Self {
       inner: Arc::new(source),
-      inner_source_code: OnceCell::new(),
+      inner_source_code: OnceLock::new(),
       replacements: Mutex::new(Vec::new()),
       is_sorted: AtomicBool::new(true),
     }
