@@ -1,4 +1,4 @@
-use once_cell::sync::OnceCell;
+use std::cell::OnceCell;
 
 #[derive(Debug, Clone)]
 pub struct WithIndices<T: AsRef<str>> {

@@ -1,11 +1,10 @@
 use std::{
   borrow::Cow,
   hash::{BuildHasherDefault, Hash},
-  sync::Arc,
+  sync::{Arc, OnceLock},
 };
 
 use dashmap::DashMap;
-use once_cell::sync::OnceCell;
 use rustc_hash::FxHasher;
 
 use crate::{helpers::StreamChunks, MapOptions, Source, SourceMap};
@@ -45,8 +44,8 @@ use crate::{helpers::StreamChunks, MapOptions, Source, SourceMap};
 /// ```
 pub struct CachedSource<T> {
   inner: Arc<T>,
-  cached_buffer: OnceCell<Vec<u8>>,
-  cached_source: OnceCell<Arc<str>>,
+  cached_buffer: OnceLock<Vec<u8>>,
+  cached_source: OnceLock<Arc<str>>,
   cached_maps:
     DashMap<MapOptions, Option<SourceMap>, BuildHasherDefault<FxHasher>>,
 }
