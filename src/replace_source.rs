@@ -2,7 +2,10 @@ use std::{
   borrow::Cow,
   cell::RefCell,
   hash::{Hash, Hasher},
-  sync::Arc,
+  sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+  },
 };
 
 use once_cell::sync::OnceCell;
@@ -38,6 +41,8 @@ pub struct ReplaceSource<T> {
   inner: Arc<T>,
   inner_source_code: OnceCell<Box<str>>,
   replacements: Mutex<Vec<Replacement>>,
+  /// Whether `replacements` is sorted.
+  is_sorted: AtomicBool,
 }
 
 #[derive(Debug, Clone, Eq)]
@@ -89,6 +94,7 @@ impl<T> ReplaceSource<T> {
       inner: Arc::new(source),
       inner_source_code: OnceCell::new(),
       replacements: Mutex::new(Vec::new()),
+      is_sorted: AtomicBool::new(true),
     }
   }
 
@@ -98,10 +104,14 @@ impl<T> ReplaceSource<T> {
   }
 
   fn sort_replacement(&self) {
+    if self.is_sorted.load(Ordering::SeqCst) {
+      return;
+    }
     self
       .replacements
       .lock()
       .sort_by(|a, b| (a.start, a.end).cmp(&(b.start, b.end)));
+    self.is_sorted.store(true, Ordering::SeqCst)
   }
 }
 
@@ -131,6 +141,7 @@ impl<T: Source> ReplaceSource<T> {
       content.into(),
       name.map(|s| s.into()),
     ));
+    self.is_sorted.store(false, Ordering::SeqCst);
   }
 }
 
@@ -205,6 +216,7 @@ impl<T: std::fmt::Debug> std::fmt::Debug for ReplaceSource<T> {
         "replacements",
         &self.replacements.lock().iter().take(3).collect::<Vec<_>>(),
       )
+      .field("is_sorted", &self.is_sorted.load(Ordering::SeqCst))
       .finish()
   }
 }
@@ -635,6 +647,7 @@ impl<T: Source> Clone for ReplaceSource<T> {
       inner: self.inner.clone(),
       inner_source_code: self.inner_source_code.clone(),
       replacements: Mutex::new(self.replacements.lock().clone()),
+      is_sorted: AtomicBool::new(true),
     }
   }
 }
