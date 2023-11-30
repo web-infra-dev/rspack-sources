@@ -1,15 +1,22 @@
 use std::{
+  any::Any,
   borrow::Cow,
   cell::RefCell,
   hash::{Hash, Hasher},
+  mem,
+  sync::{
+    atomic::{AtomicBool, Ordering},
+    Mutex, MutexGuard,
+  },
 };
 
 use rustc_hash::FxHashMap as HashMap;
+use rustc_hash::FxHashSet as HashSet;
 
 use crate::{
   helpers::{get_map, GeneratedInfo, OnChunk, OnName, OnSource, StreamChunks},
   source::{Mapping, OriginalLocation},
-  BoxSource, MapOptions, Source, SourceExt, SourceMap,
+  BoxSource, MapOptions, RawSource, Source, SourceExt, SourceMap,
 };
 
 /// Concatenate multiple [Source]s to a single [Source].
@@ -54,9 +61,27 @@ use crate::{
 ///   .unwrap()
 /// );
 /// ```
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default)]
 pub struct ConcatSource {
-  children: Vec<BoxSource>,
+  children: Mutex<Vec<BoxSource>>,
+  is_optimized: AtomicBool,
+}
+
+impl Clone for ConcatSource {
+  fn clone(&self) -> Self {
+    Self {
+      children: Mutex::new(self.children.lock().unwrap().clone()),
+      is_optimized: AtomicBool::new(self.is_optimized()),
+    }
+  }
+}
+
+fn downcast_ref<R: 'static>(source: &dyn Any) -> Option<&R> {
+  if let Some(source) = source.downcast_ref::<BoxSource>() {
+    source.as_any().downcast_ref::<R>()
+  } else {
+    source.downcast_ref::<R>()
+  }
 }
 
 impl ConcatSource {
@@ -69,31 +94,59 @@ impl ConcatSource {
     // Flatten the children
     let children = sources
       .into_iter()
-      .flat_map(
-        |source| match source.as_any().downcast_ref::<ConcatSource>() {
-          // This clone is cheap because `BoxSource` is `Arc`ed for each child.
-          Some(concat_source) => concat_source.children.clone(),
-          None => {
-            vec![SourceExt::boxed(source)]
-          }
-        },
-      )
-      .collect();
-    Self { children }
-  }
-
-  fn children(&self) -> &Vec<BoxSource> {
-    &self.children
+      .flat_map(|source| {
+        if let Some(concat_source) =
+          downcast_ref::<ConcatSource>(source.as_any())
+        {
+          concat_source.children().clone()
+        } else {
+          vec![source.boxed()]
+        }
+      })
+      .collect::<Vec<_>>();
+    let is_optimized = AtomicBool::new(children.is_empty());
+    Self {
+      children: Mutex::new(children),
+      is_optimized,
+    }
   }
 
   /// Add a [Source] to concat.
   pub fn add<S: Source + 'static>(&mut self, source: S) {
     if let Some(concat_source) = source.as_any().downcast_ref::<ConcatSource>()
     {
-      self.children.extend(concat_source.children.clone());
+      self
+        .children
+        .lock()
+        .unwrap()
+        .extend(concat_source.children().clone());
     } else {
-      self.children.push(SourceExt::boxed(source));
+      self.children.lock().unwrap().push(source.boxed());
     }
+    self.optimize_off();
+  }
+
+  fn children(&self) -> MutexGuard<Vec<BoxSource>> {
+    self.optimize();
+    self.children.lock().unwrap()
+  }
+
+  fn is_optimized(&self) -> bool {
+    self.is_optimized.load(Ordering::SeqCst)
+  }
+
+  fn optimize_off(&self) {
+    self.is_optimized.store(false, Ordering::SeqCst);
+  }
+
+  fn optimize(&self) {
+    if self.is_optimized() {
+      return;
+    }
+    let mut children = self.children.lock().unwrap();
+    let new_children = ConcatSourceOptimizer::default().optimize(&children);
+    *children = new_children;
+    self.is_optimized.store(true, Ordering::SeqCst);
   }
 }
 
@@ -122,7 +175,7 @@ impl Source for ConcatSource {
   }
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
-    for child in self.children() {
+    for child in self.children().iter() {
       child.to_writer(writer)?;
     }
     Ok(())
@@ -140,7 +193,7 @@ impl Hash for ConcatSource {
 
 impl PartialEq for ConcatSource {
   fn eq(&self, other: &Self) -> bool {
-    self.children() == other.children()
+    *self.children() == *other.children()
   }
 }
 impl Eq for ConcatSource {}
@@ -153,16 +206,16 @@ impl StreamChunks for ConcatSource {
     on_source: OnSource,
     on_name: OnName,
   ) -> crate::helpers::GeneratedInfo {
-    if self.children().len() == 1 {
-      return self.children()[0]
-        .stream_chunks(options, on_chunk, on_source, on_name);
+    let children = self.children();
+    if children.len() == 1 {
+      return children[0].stream_chunks(options, on_chunk, on_source, on_name);
     }
     let mut current_line_offset = 0;
     let mut current_column_offset = 0;
     let mut source_mapping: HashMap<String, u32> = HashMap::default();
     let mut name_mapping: HashMap<String, u32> = HashMap::default();
     let mut need_to_cloas_mapping = false;
-    for item in self.children() {
+    for item in children.iter() {
       let source_index_mapping: RefCell<HashMap<u32, u32>> =
         RefCell::new(HashMap::default());
       let name_index_mapping: RefCell<HashMap<u32, u32>> =
@@ -307,6 +360,108 @@ impl StreamChunks for ConcatSource {
       generated_line: current_line_offset + 1,
       generated_column: current_column_offset,
     }
+  }
+}
+
+#[derive(Debug, Default)]
+struct ConcatSourceOptimizer {
+  new_children: Vec<BoxSource>,
+  current_string: Option<String>,
+  current_raw_sources: CurrentRawSources,
+  strings_as_raw_sources: HashSet<BoxSource>,
+}
+
+#[derive(Debug, Default, PartialEq)]
+enum CurrentRawSources {
+  #[default]
+  None,
+  String(String),
+  Array(Vec<String>),
+}
+
+impl ConcatSourceOptimizer {
+  #[must_use]
+  fn optimize(mut self, children: &[BoxSource]) -> Vec<BoxSource> {
+    for child in children.iter() {
+      if let Some(raw_source) =
+        downcast_ref::<RawSource>(child.as_any()).filter(|s| s.is_string())
+      {
+        if let Some(current_string) = &mut self.current_string {
+          current_string.push_str(raw_source.source().as_ref());
+        } else {
+          self.current_string.replace(raw_source.source().to_string());
+        }
+      } else {
+        if let Some(current_string) = self.current_string.take() {
+          self.add_string_to_raw_sources(current_string);
+        }
+        if self.strings_as_raw_sources.contains(child) {
+          // self.add_source_to_raw_sources(child);
+        } else {
+          if self.current_raw_sources != CurrentRawSources::None {
+            self.merge_raw_sources();
+            self.current_raw_sources = CurrentRawSources::None;
+          }
+          self.new_children.push(child.clone());
+        }
+      }
+    }
+    if let Some(current_string) = self.current_string.take() {
+      self.add_string_to_raw_sources(current_string);
+    }
+    if self.current_raw_sources != CurrentRawSources::None {
+      self.merge_raw_sources();
+    }
+    self.new_children
+  }
+
+  fn add_string_to_raw_sources(&mut self, string: String) {
+    self.current_raw_sources = match mem::take(&mut self.current_raw_sources) {
+      CurrentRawSources::None => CurrentRawSources::String(string),
+      CurrentRawSources::Array(array) => {
+        let mut array = array;
+        array.push(string);
+        CurrentRawSources::Array(array)
+      }
+      CurrentRawSources::String(existing_string) => {
+        CurrentRawSources::Array(vec![existing_string, string])
+      }
+    };
+  }
+
+  // fn add_source_to_raw_sources(&mut self, source: &BoxSource) {
+  // self.current_raw_sources = match mem::take(&mut self.current_raw_sources) {
+  // CurrentRawSources::None => {
+  // CurrentRawSources::String(source)
+
+  // }
+  // CurrentRawSources::Array(array) => {
+  // let raw_source = RawSource::from(array.into_iter().collect::<String>());
+  // // stringsAsRawSources.add(rawSource);
+  // self.new_children.push(raw_source.boxed());
+  // }
+  // CurrentRawSources::String(existing_string) => {
+  // let raw_source = RawSource::from(existing_string);
+  // // stringsAsRawSources.add(rawSource);
+  // self.new_children.push(raw_source.boxed());
+  // }
+  // };
+  // }
+
+  fn merge_raw_sources(&mut self) {
+    match mem::take(&mut self.current_raw_sources) {
+      CurrentRawSources::Array(array) => {
+        let raw_source = RawSource::from(array.into_iter().collect::<String>());
+        // stringsAsRawSources.add(rawSource);
+        self.new_children.push(raw_source.boxed());
+      }
+      CurrentRawSources::String(existing_string) => {
+        let raw_source = RawSource::from(existing_string);
+        // stringsAsRawSources.add(rawSource);
+        self.new_children.push(raw_source.boxed());
+      }
+      CurrentRawSources::None => {}
+    };
   }
 }
 
@@ -462,5 +617,22 @@ mod tests {
     ]);
     assert_eq!(source.source(), "abc");
     assert!(source.map(&MapOptions::default()).is_none());
+  }
+
+  #[test]
+  fn optimize() {
+    let source = ConcatSource::new([
+      RawSource::from("a").boxed(),
+      ConcatSource::new([
+        RawSource::from("b"),
+        RawSource::from("c"),
+        RawSource::from("d"),
+      ])
+      .boxed(),
+      RawSource::from("e").boxed(),
+    ]);
+    assert_eq!(source.source(), "abcde");
+    assert_eq!(source.children.lock().unwrap().len(), 1);
+    assert!(source.is_optimized());
   }
 }

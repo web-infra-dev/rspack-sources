@@ -37,6 +37,11 @@ impl RawSource {
   pub fn is_buffer(&self) -> bool {
     matches!(self, Self::Buffer(_))
   }
+
+  /// Whether the [RawSource] is a string.
+  pub fn is_string(&self) -> bool {
+    matches!(self, Self::Source(_))
+  }
 }
 
 impl From<String> for RawSource {
