@@ -26,6 +26,7 @@ print_stderr  = "warn"
 
 [[bench]]
 name    = "bench"
+path = "benches/bench.rs"
 harness = false
 
 [dependencies]
