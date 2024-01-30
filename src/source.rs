@@ -189,7 +189,6 @@ impl SourceMap {
     sources: Vec<Cow<'static, str>>,
     sources_content: Vec<Cow<'static, str>>,
     names: Vec<Cow<'static, str>>,
-    source_root: Option<String>,
   ) -> Self {
     Self {
       file,
@@ -197,7 +196,7 @@ impl SourceMap {
       sources,
       sources_content,
       names,
-      source_root,
+      source_root: None,
     }
   }
 
@@ -538,7 +537,6 @@ mod tests {
       vec!["a.js".into()],
       vec!["".into(), "".into(), "".into()],
       vec!["".into(), "".into()],
-      None,
     )
     .to_json()
     .unwrap();

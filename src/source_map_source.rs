@@ -275,7 +275,6 @@ mod tests {
         vec!["".into()],
         vec!["".into()],
         vec![],
-        None,
       ),
     });
     let b = SourceMapSource::new(WithoutOriginalOptions {
@@ -287,7 +286,6 @@ mod tests {
         vec![],
         vec![],
         vec![],
-        None,
       ),
     });
     let c = SourceMapSource::new(WithoutOriginalOptions {
@@ -299,7 +297,6 @@ mod tests {
         vec!["hello-source.txt".into()],
         vec!["hello world\n".into()],
         vec![],
-        None,
       ),
     });
     let sources = [a, b, c].into_iter().map(|s| {
@@ -368,7 +365,6 @@ mod tests {
         vec!["hello1".into()],
         vec![],
         vec![],
-        None,
       ),
     });
     let b = SourceMapSource::new(WithoutOriginalOptions {
@@ -380,7 +376,6 @@ mod tests {
         vec!["hello2".into()],
         vec![],
         vec![],
-        None,
       ),
     });
     let b2 = SourceMapSource::new(WithoutOriginalOptions {
@@ -392,7 +387,6 @@ mod tests {
         vec!["hello3".into()],
         vec![],
         vec![],
-        None,
       ),
     });
     let c = SourceMapSource::new(WithoutOriginalOptions {
@@ -404,7 +398,6 @@ mod tests {
         vec!["hello4".into()],
         vec![],
         vec![],
-        None,
       ),
     });
     let source = ConcatSource::new([
@@ -584,5 +577,58 @@ mod tests {
     ]);
     let map = source.map(&MapOptions::new(false)).unwrap();
     assert_eq!(map.mappings(), ";;;AAAA");
+  }
+
+  #[test]
+  fn source_root_is_correctly_applied_to_mappings() {
+    let inner_source_code = "Hello World\nis a test string\n";
+    let inner_source = ConcatSource::new([
+      OriginalSource::new(inner_source_code, "hello-world.txt").boxed(),
+      OriginalSource::new("Translate: ", "header.txt").boxed(),
+      RawSource::from("Other text").boxed(),
+    ]);
+    let source_r_code =
+      "Translated: Hallo Welt\nist ein test Text\nAnderer Text";
+    let source_r_map = SourceMap::from_json(
+      r#"{
+        "version": 3,
+        "sources": [ "text" ],
+        "names": [ "Hello", "World", "nope" ],
+        "mappings": "YAAAA,K,CAAMC;AACNC,O,MAAU;AACC,O,CAAM",
+        "file": "translated.txt",
+        "sourcesContent": [ "Hello World\nis a test string\n" ]
+      }"#,
+    )
+    .unwrap();
+    let inner_source_map = inner_source
+      .map(&MapOptions::default())
+      .map(|mut map| {
+        map.set_source_root(Some("/path/to/folder/".to_string()));
+        map
+      });
+    let sms = SourceMapSource::new(SourceMapSourceOptions {
+      value: source_r_code,
+      name: "text",
+      source_map: source_r_map.clone(),
+      original_source: Some(inner_source.source().to_string()),
+      inner_source_map,
+      remove_original_source: false,
+    });
+    assert_eq!(
+      sms.map(&MapOptions::default()).unwrap(),
+      SourceMap::from_json(
+        r#"{
+          "mappings": "YAAAA,K,CAAMC;AACN,O,MAAU;ACCC,O,CAAM",
+          "names": ["Hello", "World"],
+          "sources": ["/path/to/folder/hello-world.txt", "text"],
+          "sourcesContent": [
+            "Hello World\nis a test string\n",
+            "Hello World\nis a test string\nTranslate: Other text"
+          ],
+          "version": 3
+        }"#
+      )
+      .unwrap(),
+    );
   }
 }

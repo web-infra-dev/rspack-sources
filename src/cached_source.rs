@@ -192,7 +192,6 @@ mod tests {
           vec!["index.js".into()],
           vec!["// DELETE IT\nconsole.log(1)".into()],
           vec![],
-          None,
         ),
       })
       .boxed(),
