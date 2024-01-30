@@ -595,6 +595,15 @@ pub fn stream_chunks_of_source_map(
   }
 }
 
+fn get_source(source_map: &SourceMap, source: &str) -> String {
+  let source_root = source_map.source_root();
+  match source_root {
+    Some(root) if root.ends_with('/') => format!("{}{}", root, source),
+    Some(root) => format!("{}/{}", root, source),
+    None => source.to_string(),
+  }
+}
+
 fn stream_chunks_of_source_map_final(
   source: &str,
   source_map: &SourceMap,
@@ -607,7 +616,7 @@ fn stream_chunks_of_source_map_final(
     return result;
   }
   for (i, source) in source_map.sources().iter().enumerate() {
-    on_source(i as u32, source, source_map.get_source_content(i))
+    on_source(i as u32, &get_source(source_map, source), source_map.get_source_content(i))
   }
   for (i, name) in source_map.names().iter().enumerate() {
     on_name(i as u32, name);
@@ -665,7 +674,7 @@ fn stream_chunks_of_source_map_full(
     };
   }
   for (i, source) in source_map.sources().iter().enumerate() {
-    on_source(i as u32, source, source_map.get_source_content(i))
+    on_source(i as u32, &get_source(source_map, source), source_map.get_source_content(i))
   }
   for (i, name) in source_map.names().iter().enumerate() {
     on_name(i as u32, name);
@@ -807,7 +816,7 @@ fn stream_chunks_of_source_map_lines_final(
     };
   }
   for (i, source) in source_map.sources().iter().enumerate() {
-    on_source(i as u32, source, source_map.get_source_content(i))
+    on_source(i as u32, &get_source(source_map, source), source_map.get_source_content(i))
   }
   let final_line = if result.generated_column == 0 {
     result.generated_line - 1
@@ -858,7 +867,7 @@ fn stream_chunks_of_source_map_lines_full(
     };
   }
   for (i, source) in source_map.sources().iter().enumerate() {
-    on_source(i as u32, source, source_map.get_source_content(i))
+    on_source(i as u32, &get_source(source_map, source), source_map.get_source_content(i))
   }
   let mut current_generated_line = 1;
   let mut on_mapping = |mapping: &Mapping| {
