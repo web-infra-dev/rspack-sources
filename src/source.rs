@@ -178,6 +178,7 @@ pub struct SourceMap {
   sources: Vec<Cow<'static, str>>,
   sources_content: Vec<Cow<'static, str>>,
   names: Vec<Cow<'static, str>>,
+  source_root: Option<String>,
 }
 
 impl SourceMap {
@@ -195,6 +196,7 @@ impl SourceMap {
       sources,
       sources_content,
       names,
+      source_root: None,
     }
   }
 
@@ -286,6 +288,16 @@ impl SourceMap {
   ) -> Option<&mut Cow<'static, str>> {
     self.names.get_mut(index)
   }
+
+  /// Get the source_root field in [SourceMap].
+  pub fn source_root(&self) -> Option<&str> {
+    self.source_root.as_deref()
+  }
+
+  /// Set the source_root field in [SourceMap].
+  pub fn set_source_root(&mut self, source_root: Option<String>) {
+    self.source_root = source_root;
+  }
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -364,32 +376,13 @@ impl TryFrom<RawSourceMap> for SourceMap {
   type Error = crate::Error;
 
   fn try_from(raw: RawSourceMap) -> Result<Self> {
-    let sources = raw.sources.unwrap_or_default();
-    let sources = match raw.source_root {
-      Some(ref source_root) if !source_root.is_empty() => {
-        let source_root = source_root.trim_end_matches('/');
-        sources
-          .into_iter()
-          .map(|x| {
-            let x = x.unwrap_or_default();
-            let is_valid = !x.is_empty()
-              && (x.starts_with('/')
-                || x.starts_with("http:")
-                || x.starts_with("https:"));
-            if is_valid {
-              x
-            } else {
-              format!("{source_root}/{x}").into()
-            }
-          })
-          .collect()
-      }
-      _ => sources
-        .into_iter()
-        .map(Option::unwrap_or_default)
-        .map(Cow::from)
-        .collect(),
-    };
+    let sources = raw
+      .sources
+      .unwrap_or_default()
+      .into_iter()
+      .map(Option::unwrap_or_default)
+      .map(Cow::from)
+      .collect();
     let sources_content = raw
       .sources_content
       .unwrap_or_default()
@@ -410,6 +403,7 @@ impl TryFrom<RawSourceMap> for SourceMap {
       sources,
       sources_content,
       names,
+      source_root: raw.source_root,
     })
   }
 }
@@ -430,7 +424,7 @@ impl From<SourceMap> for RawSourceMap {
           .map(|s| (!s.is_empty()).then_some(s))
           .collect(),
       ),
-      source_root: None,
+      source_root: map.source_root,
       sources_content: sources_content
         .clone()
         .any(|s| s.is_some())
@@ -547,7 +541,7 @@ mod tests {
     RawSource::from("g").boxed().hash(&mut state);
     (&RawSource::from("h") as &dyn Source).hash(&mut state);
     ReplaceSource::new(RawSource::from("i").boxed()).hash(&mut state);
-    assert_eq!(format!("{:x}", state.finish()), "fb814b430ddd31e0");
+    assert_eq!(format!("{:x}", state.finish()), "8163b42b7cb1d8f0");
   }
 
   #[test]
