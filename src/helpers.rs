@@ -63,7 +63,7 @@ pub fn get_map<S: StreamChunks>(
   );
   let mappings = encode_mappings(&mappings, options);
   (!mappings.is_empty())
-    .then(|| SourceMap::new(None, mappings, sources, sources_content, names))
+    .then(|| SourceMap::new(None, mappings, sources, sources_content, names, None))
 }
 
 /// [StreamChunks] abstraction, see [webpack-sources source.streamChunks](https://github.com/webpack/webpack-sources/blob/9f98066311d53a153fdc7c633422a1d086528027/lib/helpers/streamChunks.js#L13).

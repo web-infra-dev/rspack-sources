@@ -178,6 +178,7 @@ pub struct SourceMap {
   sources: Vec<Cow<'static, str>>,
   sources_content: Vec<Cow<'static, str>>,
   names: Vec<Cow<'static, str>>,
+  source_root: Option<String>,
 }
 
 impl SourceMap {
@@ -188,6 +189,7 @@ impl SourceMap {
     sources: Vec<Cow<'static, str>>,
     sources_content: Vec<Cow<'static, str>>,
     names: Vec<Cow<'static, str>>,
+    source_root: Option<String>,
   ) -> Self {
     Self {
       file,
@@ -195,6 +197,7 @@ impl SourceMap {
       sources,
       sources_content,
       names,
+      source_root,
     }
   }
 
@@ -285,6 +288,16 @@ impl SourceMap {
     index: usize,
   ) -> Option<&mut Cow<'static, str>> {
     self.names.get_mut(index)
+  }
+
+  /// Get the source_root field in [SourceMap].
+  pub fn source_root(&self) -> Option<&str> {
+    self.source_root.as_deref()
+  }
+
+  /// Set the source_root field in [SourceMap].
+  pub fn set_source_root(&mut self, source_root: Option<String>) {
+    self.source_root = source_root;
   }
 }
 
@@ -410,6 +423,7 @@ impl TryFrom<RawSourceMap> for SourceMap {
       sources,
       sources_content,
       names,
+      source_root: raw.source_root,
     })
   }
 }
@@ -430,7 +444,7 @@ impl From<SourceMap> for RawSourceMap {
           .map(|s| (!s.is_empty()).then_some(s))
           .collect(),
       ),
-      source_root: None,
+      source_root: map.source_root,
       sources_content: sources_content
         .clone()
         .any(|s| s.is_some())
@@ -524,6 +538,7 @@ mod tests {
       vec!["a.js".into()],
       vec!["".into(), "".into(), "".into()],
       vec!["".into(), "".into()],
+      None,
     )
     .to_json()
     .unwrap();
@@ -547,7 +562,7 @@ mod tests {
     RawSource::from("g").boxed().hash(&mut state);
     (&RawSource::from("h") as &dyn Source).hash(&mut state);
     ReplaceSource::new(RawSource::from("i").boxed()).hash(&mut state);
-    assert_eq!(format!("{:x}", state.finish()), "fb814b430ddd31e0");
+    assert_eq!(format!("{:x}", state.finish()), "8163b42b7cb1d8f0");
   }
 
   #[test]

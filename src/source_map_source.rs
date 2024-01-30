@@ -261,7 +261,7 @@ mod tests {
 
     let mut hasher = twox_hash::XxHash64::default();
     sms1.hash(&mut hasher);
-    assert_eq!(format!("{:x}", hasher.finish()), "60180dd058e3cdd7");
+    assert_eq!(format!("{:x}", hasher.finish()), "d136621583d4618c");
   }
 
   #[test]
@@ -275,6 +275,7 @@ mod tests {
         vec!["".into()],
         vec!["".into()],
         vec![],
+        None,
       ),
     });
     let b = SourceMapSource::new(WithoutOriginalOptions {
@@ -286,6 +287,7 @@ mod tests {
         vec![],
         vec![],
         vec![],
+        None,
       ),
     });
     let c = SourceMapSource::new(WithoutOriginalOptions {
@@ -297,6 +299,7 @@ mod tests {
         vec!["hello-source.txt".into()],
         vec!["hello world\n".into()],
         vec![],
+        None,
       ),
     });
     let sources = [a, b, c].into_iter().map(|s| {
@@ -365,6 +368,7 @@ mod tests {
         vec!["hello1".into()],
         vec![],
         vec![],
+        None,
       ),
     });
     let b = SourceMapSource::new(WithoutOriginalOptions {
@@ -376,6 +380,7 @@ mod tests {
         vec!["hello2".into()],
         vec![],
         vec![],
+        None,
       ),
     });
     let b2 = SourceMapSource::new(WithoutOriginalOptions {
@@ -387,6 +392,7 @@ mod tests {
         vec!["hello3".into()],
         vec![],
         vec![],
+        None,
       ),
     });
     let c = SourceMapSource::new(WithoutOriginalOptions {
@@ -398,6 +404,7 @@ mod tests {
         vec!["hello4".into()],
         vec![],
         vec![],
+        None,
       ),
     });
     let source = ConcatSource::new([
