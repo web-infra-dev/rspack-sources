@@ -600,9 +600,8 @@ mod tests {
       }"#,
     )
     .unwrap();
-    let inner_source_map = inner_source
-      .map(&MapOptions::default())
-      .map(|mut map| {
+    let inner_source_map =
+      inner_source.map(&MapOptions::default()).map(|mut map| {
         map.set_source_root(Some("/path/to/folder/".to_string()));
         map
       });

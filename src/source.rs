@@ -376,7 +376,8 @@ impl TryFrom<RawSourceMap> for SourceMap {
   type Error = crate::Error;
 
   fn try_from(raw: RawSourceMap) -> Result<Self> {
-    let sources = raw.sources
+    let sources = raw
+      .sources
       .unwrap_or_default()
       .into_iter()
       .map(Option::unwrap_or_default)
