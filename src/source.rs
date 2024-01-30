@@ -376,32 +376,12 @@ impl TryFrom<RawSourceMap> for SourceMap {
   type Error = crate::Error;
 
   fn try_from(raw: RawSourceMap) -> Result<Self> {
-    let sources = raw.sources.unwrap_or_default();
-    let sources = match raw.source_root {
-      Some(ref source_root) if !source_root.is_empty() => {
-        let source_root = source_root.trim_end_matches('/');
-        sources
-          .into_iter()
-          .map(|x| {
-            let x = x.unwrap_or_default();
-            let is_valid = !x.is_empty()
-              && (x.starts_with('/')
-                || x.starts_with("http:")
-                || x.starts_with("https:"));
-            if is_valid {
-              x
-            } else {
-              format!("{source_root}/{x}").into()
-            }
-          })
-          .collect()
-      }
-      _ => sources
-        .into_iter()
-        .map(Option::unwrap_or_default)
-        .map(Cow::from)
-        .collect(),
-    };
+    let sources = raw.sources
+      .unwrap_or_default()
+      .into_iter()
+      .map(Option::unwrap_or_default)
+      .map(Cow::from)
+      .collect();
     let sources_content = raw
       .sources_content
       .unwrap_or_default()
