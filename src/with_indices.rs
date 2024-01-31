@@ -5,7 +5,7 @@ pub struct WithIndices<T: AsRef<str>> {
   /// line is a string reference
   pub line: T,
   /// the byte position of each `char` in `line` string slice .
-  pub indices_indexes: OnceCell<Box<[u32]>>,
+  pub indices_indexes: OnceCell<Vec<usize>>,
 }
 
 impl<T: AsRef<str>> WithIndices<T> {
@@ -23,24 +23,22 @@ impl<T: AsRef<str>> WithIndices<T> {
       return "";
     }
 
+    let line = self.line.as_ref();
     let indices_indexes = self.indices_indexes.get_or_init(|| {
-      self
-        .line
-        .as_ref()
+      line
         .char_indices()
-        .map(|(i, _)| i as u32)
+        .map(|(i, _)| i)
         .collect::<Vec<_>>()
-        .into_boxed_slice()
     });
 
-    let str_len = self.line.as_ref().len() as u32;
-    let start = *indices_indexes.get(start_index).unwrap_or(&str_len) as usize;
-    let end = *indices_indexes.get(end_index).unwrap_or(&str_len) as usize;
+    let str_len = line.len();
+    let start = *indices_indexes.get(start_index).unwrap_or(&str_len);
+    let end = *indices_indexes.get(end_index).unwrap_or(&str_len);
     unsafe {
       // SAFETY: Since `indices` iterates over the `CharIndices` of `self`, we can guarantee
       // that the indices obtained from it will always be within the bounds of `self` and they
       // will always lie on UTF-8 sequence boundaries.
-      self.line.as_ref().get_unchecked(start..end)
+      line.get_unchecked(start..end)
     }
   }
 }
