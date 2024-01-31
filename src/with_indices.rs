@@ -24,12 +24,9 @@ impl<T: AsRef<str>> WithIndices<T> {
     }
 
     let line = self.line.as_ref();
-    let indices_indexes = self.indices_indexes.get_or_init(|| {
-      line
-        .char_indices()
-        .map(|(i, _)| i)
-        .collect::<Vec<_>>()
-    });
+    let indices_indexes = self
+      .indices_indexes
+      .get_or_init(|| line.char_indices().map(|(i, _)| i).collect::<Vec<_>>());
 
     let str_len = line.len();
     let start = *indices_indexes.get(start_index).unwrap_or(&str_len);
