@@ -648,7 +648,7 @@ impl<T: Source> Clone for ReplaceSource<T> {
       inner: self.inner.clone(),
       inner_source_code: self.inner_source_code.clone(),
       replacements: Mutex::new(self.replacements().clone()),
-      is_sorted: AtomicBool::new(true),
+      is_sorted: AtomicBool::new(self.is_sorted.load(Ordering::SeqCst)),
     }
   }
 }
