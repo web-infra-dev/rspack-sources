@@ -2,7 +2,6 @@ use std::{
   borrow::Cow,
   cell::RefCell,
   hash::{Hash, Hasher},
-  sync::{Arc, Mutex},
 };
 
 use rayon::prelude::*;
@@ -254,7 +253,7 @@ impl StreamChunks for ConcatSource {
               (result_source_index, &mapping.original)
             {
               on_chunk(
-                chunk.as_ref().map(|c| c.as_str()),
+                chunk.as_deref(),
                 Mapping {
                   generated_line: line,
                   generated_column: column,
@@ -268,7 +267,7 @@ impl StreamChunks for ConcatSource {
               );
             } else {
               on_chunk(
-                chunk.as_ref().map(|c| c.as_str()),
+                chunk.as_deref(),
                 Mapping {
                   generated_line: line,
                   generated_column: column,
@@ -282,11 +281,7 @@ impl StreamChunks for ConcatSource {
             if global_index.is_none() {
               let len = source_mapping.len() as u32;
               source_mapping.insert(source.to_owned(), len);
-              on_source(
-                len,
-                &source,
-                source_content.as_ref().map(|c| c.as_str()),
-              );
+              on_source(len, &source, source_content.as_deref());
               global_index = Some(len);
             }
             source_index_mapping
