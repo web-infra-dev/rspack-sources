@@ -1,5 +1,5 @@
 use std::{
-  any::Any,
+  any::{Any, TypeId},
   borrow::Cow,
   convert::{TryFrom, TryInto},
   fmt,
@@ -110,6 +110,7 @@ impl<T: Any> AsAny for T {
 
 pub trait DynEq {
   fn dyn_eq(&self, other: &dyn Any) -> bool;
+  fn type_id(&self) -> TypeId;
 }
 
 impl<E: Eq + Any> DynEq for E {
@@ -120,10 +121,17 @@ impl<E: Eq + Any> DynEq for E {
       false
     }
   }
+
+  fn type_id(&self) -> TypeId {
+    TypeId::of::<E>()
+  }
 }
 
 impl PartialEq for dyn Source {
   fn eq(&self, other: &Self) -> bool {
+    if self.as_any().type_id() != other.as_any().type_id() {
+      return false;
+    }
     self.dyn_eq(other.as_any())
   }
 }
