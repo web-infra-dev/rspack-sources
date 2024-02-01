@@ -38,6 +38,7 @@ substring = "1"
 smallvec = "1.11.2"
 memchr = "2.6.4"
 str_indices = "0.4.3"
+rayon = "1.8.1"
 
 codspeed-criterion-compat = { version = "2.3.3", default-features = false, optional = true }
 
