@@ -1,7 +1,5 @@
 use std::{
-  borrow::Cow,
-  cell::RefCell,
-  hash::{Hash, Hasher},
+  borrow::Cow, cell::RefCell, hash::{Hash, Hasher}, sync::Arc
 };
 
 use rayon::prelude::*;
@@ -149,34 +147,44 @@ impl StreamChunks for ConcatSource {
     let mut name_mapping: HashMap<String, u32> = HashMap::default();
     let mut need_to_close_mapping = false;
 
-    let result = self
+    let map_op = |item: &Arc<dyn Source>| {
+      let callbacks = RefCell::new(vec![]);
+      let generated_info = item.stream_chunks(
+        options,
+        &mut |chunk, mapping| {
+          callbacks
+            .borrow_mut()
+            .push(Callback::Chunk(chunk.map(|c| c.to_string()), mapping));
+        },
+        &mut |i, source, source_content| {
+          callbacks.borrow_mut().push(Callback::Source(
+            i,
+            source.to_string(),
+            source_content.map(|c| c.to_string()),
+          ));
+        },
+        &mut |i, name| {
+          callbacks
+            .borrow_mut()
+            .push(Callback::Name(i, name.to_string()));
+        },
+      );
+      (generated_info, callbacks.take())
+    };
+
+    let result = if self.children.len() > 3 {
+      self
       .children
       .par_iter()
-      .map(|item| {
-        let callbacks = RefCell::new(vec![]);
-        let generated_info = item.stream_chunks(
-          options,
-          &mut |chunk, mapping| {
-            callbacks
-              .borrow_mut()
-              .push(Callback::Chunk(chunk.map(|c| c.to_string()), mapping));
-          },
-          &mut |i, source, source_content| {
-            callbacks.borrow_mut().push(Callback::Source(
-              i,
-              source.to_string(),
-              source_content.map(|c| c.to_string()),
-            ));
-          },
-          &mut |i, name| {
-            callbacks
-              .borrow_mut()
-              .push(Callback::Name(i, name.to_string()));
-          },
-        );
-        (generated_info, callbacks.take())
-      })
-      .collect::<Vec<_>>();
+      .map(map_op)
+      .collect::<Vec<_>>()
+    } else {
+      self
+      .children
+      .iter()
+      .map(map_op)
+      .collect::<Vec<_>>()
+    };
 
     for (generated_info, callbacks) in result {
       let GeneratedInfo {
