@@ -1,9 +1,12 @@
 use std::{
-  borrow::Cow, cell::RefCell, hash::{Hash, Hasher}, sync::{Arc, Mutex}
+  borrow::Cow,
+  cell::RefCell,
+  hash::{Hash, Hasher},
+  sync::{Arc, Mutex},
 };
 
-use rustc_hash::FxHashMap as HashMap;
 use rayon::prelude::*;
+use rustc_hash::FxHashMap as HashMap;
 
 use crate::{
   helpers::{get_map, GeneratedInfo, OnChunk, OnName, OnSource, StreamChunks},
@@ -147,22 +150,34 @@ impl StreamChunks for ConcatSource {
     let mut name_mapping: HashMap<String, u32> = HashMap::default();
     let mut need_to_close_mapping = false;
 
-    let result = self.children.par_iter().map(|item| {
-      let callbacks = RefCell::new(vec![]);
-      let generated_info = item.stream_chunks(
-        options,
-        &mut |chunk, mapping| {
-          callbacks.borrow_mut().push(Callback::Chunk(chunk.map(|c| c.to_string()), mapping));
-        },
-        &mut |i, source, source_content| {
-          callbacks.borrow_mut().push(Callback::Source(i, source.to_string(), source_content.map(|c| c.to_string())));
-        },
-        &mut |i, name| {
-          callbacks.borrow_mut().push(Callback::Name(i, name.to_string()));
-        },
-      );
-      (generated_info, callbacks.take())
-    }).collect::<Vec<_>>();
+    let result = self
+      .children
+      .par_iter()
+      .map(|item| {
+        let callbacks = RefCell::new(vec![]);
+        let generated_info = item.stream_chunks(
+          options,
+          &mut |chunk, mapping| {
+            callbacks
+              .borrow_mut()
+              .push(Callback::Chunk(chunk.map(|c| c.to_string()), mapping));
+          },
+          &mut |i, source, source_content| {
+            callbacks.borrow_mut().push(Callback::Source(
+              i,
+              source.to_string(),
+              source_content.map(|c| c.to_string()),
+            ));
+          },
+          &mut |i, name| {
+            callbacks
+              .borrow_mut()
+              .push(Callback::Name(i, name.to_string()));
+          },
+        );
+        (generated_info, callbacks.take())
+      })
+      .collect::<Vec<_>>();
 
     for (generated_info, callbacks) in result {
       let GeneratedInfo {
@@ -171,7 +186,7 @@ impl StreamChunks for ConcatSource {
       } = generated_info;
 
       let source_index_mapping: RefCell<HashMap<u32, u32>> =
-      RefCell::new(HashMap::default());
+        RefCell::new(HashMap::default());
       let name_index_mapping: RefCell<HashMap<u32, u32>> =
         RefCell::new(HashMap::default());
       let mut last_mapping_line = 0;
@@ -180,49 +195,66 @@ impl StreamChunks for ConcatSource {
         match callback {
           Callback::Chunk(chunk, mapping) => {
             let line = mapping.generated_line + current_line_offset;
-          let column = if mapping.generated_line == 1 {
-            mapping.generated_column + current_column_offset
-          } else {
-            mapping.generated_column
-          };
-          if need_to_close_mapping {
-            if mapping.generated_line != 1 || mapping.generated_column != 0 {
-              on_chunk(
-                None,
-                Mapping {
-                  generated_line: current_line_offset + 1,
-                  generated_column: current_column_offset,
-                  original: None,
-                },
-              );
+            let column = if mapping.generated_line == 1 {
+              mapping.generated_column + current_column_offset
+            } else {
+              mapping.generated_column
+            };
+            if need_to_close_mapping {
+              if mapping.generated_line != 1 || mapping.generated_column != 0 {
+                on_chunk(
+                  None,
+                  Mapping {
+                    generated_line: current_line_offset + 1,
+                    generated_column: current_column_offset,
+                    original: None,
+                  },
+                );
+              }
+              need_to_close_mapping = false;
             }
-            need_to_close_mapping = false;
-          }
-          let result_source_index =
-            mapping.original.as_ref().and_then(|original| {
-              source_index_mapping
-                .borrow()
-                .get(&original.source_index)
-                .copied()
-            });
-          let result_name_index = mapping
-            .original
-            .as_ref()
-            .and_then(|original| original.name_index)
-            .and_then(|name_index| {
-              name_index_mapping.borrow().get(&name_index).copied()
-            });
-          last_mapping_line = if result_source_index.is_none() {
-            0
-          } else {
-            mapping.generated_line
-          };
-          if options.final_source {
-            if let (Some(result_source_index), Some(original)) =
+            let result_source_index =
+              mapping.original.as_ref().and_then(|original| {
+                source_index_mapping
+                  .borrow()
+                  .get(&original.source_index)
+                  .copied()
+              });
+            let result_name_index = mapping
+              .original
+              .as_ref()
+              .and_then(|original| original.name_index)
+              .and_then(|name_index| {
+                name_index_mapping.borrow().get(&name_index).copied()
+              });
+            last_mapping_line = if result_source_index.is_none() {
+              0
+            } else {
+              mapping.generated_line
+            };
+            if options.final_source {
+              if let (Some(result_source_index), Some(original)) =
+                (result_source_index, &mapping.original)
+              {
+                on_chunk(
+                  None,
+                  Mapping {
+                    generated_line: line,
+                    generated_column: column,
+                    original: Some(OriginalLocation {
+                      source_index: result_source_index,
+                      original_line: original.original_line,
+                      original_column: original.original_column,
+                      name_index: result_name_index,
+                    }),
+                  },
+                );
+              }
+            } else if let (Some(result_source_index), Some(original)) =
               (result_source_index, &mapping.original)
             {
               on_chunk(
-                None,
+                chunk.as_ref().map(|c| c.as_str()),
                 Mapping {
                   generated_line: line,
                   generated_column: column,
@@ -234,46 +266,33 @@ impl StreamChunks for ConcatSource {
                   }),
                 },
               );
+            } else {
+              on_chunk(
+                chunk.as_ref().map(|c| c.as_str()),
+                Mapping {
+                  generated_line: line,
+                  generated_column: column,
+                  original: None,
+                },
+              );
             }
-          } else if let (Some(result_source_index), Some(original)) =
-            (result_source_index, &mapping.original)
-          {
-            on_chunk(
-              chunk.as_ref().map(|c| c.as_str()),
-              Mapping {
-                generated_line: line,
-                generated_column: column,
-                original: Some(OriginalLocation {
-                  source_index: result_source_index,
-                  original_line: original.original_line,
-                  original_column: original.original_column,
-                  name_index: result_name_index,
-                }),
-              },
-            );
-          } else {
-            on_chunk(
-              chunk.as_ref().map(|c| c.as_str()),
-              Mapping {
-                generated_line: line,
-                generated_column: column,
-                original: None,
-              },
-            );
           }
-          },
           Callback::Source(i, source, source_content) => {
             let mut global_index = source_mapping.get(&source).copied();
             if global_index.is_none() {
               let len = source_mapping.len() as u32;
               source_mapping.insert(source.to_owned(), len);
-              on_source(len, &source, source_content.as_ref().map(|c| c.as_str()));
+              on_source(
+                len,
+                &source,
+                source_content.as_ref().map(|c| c.as_str()),
+              );
               global_index = Some(len);
             }
             source_index_mapping
               .borrow_mut()
               .insert(i, global_index.unwrap());
-          },
+          }
           Callback::Name(i, name) => {
             let mut global_index = name_mapping.get(&name).copied();
             if global_index.is_none() {
