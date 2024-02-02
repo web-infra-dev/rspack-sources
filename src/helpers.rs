@@ -598,6 +598,7 @@ pub fn stream_chunks_of_source_map(
 fn get_source(source_map: &SourceMap, source: &str) -> String {
   let source_root = source_map.source_root();
   match source_root {
+    Some(root) if root.is_empty() => source.to_string(),
     Some(root) if root.ends_with('/') => format!("{}{}", root, source),
     Some(root) => format!("{}/{}", root, source),
     None => source.to_string(),
