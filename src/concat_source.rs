@@ -228,7 +228,7 @@ impl StreamChunks for ConcatSource {
       {
         let mut on_chunk = on_chunk.borrow_mut();
         on_chunk(
-          chunk.as_deref(),
+          chunk,
           Mapping {
             generated_line: line,
             generated_column: column,
@@ -243,7 +243,7 @@ impl StreamChunks for ConcatSource {
       } else {
         let mut on_chunk = on_chunk.borrow_mut();
         on_chunk(
-          chunk.as_deref(),
+          chunk,
           Mapping {
             generated_line: line,
             generated_column: column,
@@ -259,7 +259,7 @@ impl StreamChunks for ConcatSource {
         if global_index.is_none() {
           let len = source_mapping.borrow().len() as u32;
           source_mapping.borrow_mut().insert(source.to_owned(), len);
-          on_source(len, &source, source_content.as_deref());
+          on_source(len, source, source_content);
           global_index = Some(len);
         }
         source_index_mapping
@@ -273,7 +273,7 @@ impl StreamChunks for ConcatSource {
       if global_index.is_none() {
         let len = name_mapping.borrow().len() as u32;
         name_mapping.borrow_mut().insert(name.to_owned(), len);
-        on_name(len, &name);
+        on_name(len, name);
         global_index = Some(len);
       }
       name_index_mapping.insert(i, global_index.unwrap());
