@@ -1,5 +1,8 @@
 use std::{
-  borrow::Cow, cell::RefCell, hash::{Hash, Hasher}, sync::Arc
+  borrow::Cow,
+  cell::RefCell,
+  hash::{Hash, Hasher},
+  sync::Arc,
 };
 
 use rayon::prelude::*;
@@ -169,21 +172,13 @@ impl StreamChunks for ConcatSource {
             .push(Callback::Name(i, name.to_string()));
         },
       );
-      (generated_info, callbacks.take())
+      (generated_info, callbacks.into_inner())
     };
 
     let result = if self.children.len() > 3 {
-      self
-      .children
-      .par_iter()
-      .map(map_op)
-      .collect::<Vec<_>>()
+      self.children.par_iter().map(map_op).collect::<Vec<_>>()
     } else {
-      self
-      .children
-      .iter()
-      .map(map_op)
-      .collect::<Vec<_>>()
+      self.children.iter().map(map_op).collect::<Vec<_>>()
     };
 
     for (generated_info, callbacks) in result {
@@ -192,13 +187,11 @@ impl StreamChunks for ConcatSource {
         generated_column,
       } = generated_info;
 
-      let source_index_mapping: RefCell<HashMap<u32, u32>> =
-        RefCell::new(HashMap::default());
-      let name_index_mapping: RefCell<HashMap<u32, u32>> =
-        RefCell::new(HashMap::default());
+      let mut source_index_mapping: HashMap<u32, u32> = HashMap::default();
+      let mut name_index_mapping: HashMap<u32, u32> = HashMap::default();
       let mut last_mapping_line = 0;
 
-      for callback in callbacks.into_iter() {
+      for callback in callbacks {
         match callback {
           Callback::Chunk(chunk, mapping) => {
             let line = mapping.generated_line + current_line_offset;
@@ -222,17 +215,14 @@ impl StreamChunks for ConcatSource {
             }
             let result_source_index =
               mapping.original.as_ref().and_then(|original| {
-                source_index_mapping
-                  .borrow()
-                  .get(&original.source_index)
-                  .copied()
+                source_index_mapping.get(&original.source_index).copied()
               });
             let result_name_index = mapping
               .original
               .as_ref()
               .and_then(|original| original.name_index)
               .and_then(|name_index| {
-                name_index_mapping.borrow().get(&name_index).copied()
+                name_index_mapping.get(&name_index).copied()
               });
             last_mapping_line = if result_source_index.is_none() {
               0
@@ -292,9 +282,7 @@ impl StreamChunks for ConcatSource {
               on_source(len, &source, source_content.as_deref());
               global_index = Some(len);
             }
-            source_index_mapping
-              .borrow_mut()
-              .insert(i, global_index.unwrap());
+            source_index_mapping.insert(i, global_index.unwrap());
           }
           Callback::Name(i, name) => {
             let mut global_index = name_mapping.get(&name).copied();
@@ -304,9 +292,7 @@ impl StreamChunks for ConcatSource {
               on_name(len, &name);
               global_index = Some(len);
             }
-            name_index_mapping
-              .borrow_mut()
-              .insert(i, global_index.unwrap());
+            name_index_mapping.insert(i, global_index.unwrap());
           }
         }
       }
