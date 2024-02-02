@@ -1,8 +1,7 @@
 use std::{
   borrow::Cow,
-  cell::RefCell,
+  cell::{Cell, RefCell},
   hash::{Hash, Hasher},
-  sync::Arc,
 };
 
 use rayon::prelude::*;
@@ -77,6 +76,10 @@ impl ConcatSource {
   pub fn add<S: Source + 'static>(&mut self, item: S) {
     self.children.push(SourceExt::boxed(item));
   }
+
+  fn is_concurrency_beneficial(&self) -> bool {
+    self.children.len() > 3
+  }
 }
 
 impl Source for ConcatSource {
@@ -144,182 +147,266 @@ impl StreamChunks for ConcatSource {
       return self.children[0]
         .stream_chunks(options, on_chunk, on_source, on_name);
     }
-    let mut current_line_offset = 0;
-    let mut current_column_offset = 0;
-    let mut source_mapping: HashMap<String, u32> = HashMap::default();
-    let mut name_mapping: HashMap<String, u32> = HashMap::default();
-    let mut need_to_close_mapping = false;
 
-    let map_op = |item: &Arc<dyn Source>| {
-      let callbacks = RefCell::new(vec![]);
-      let generated_info = item.stream_chunks(
-        options,
-        &mut |chunk, mapping| {
-          callbacks
-            .borrow_mut()
-            .push(Callback::Chunk(chunk.map(|c| c.to_string()), mapping));
-        },
-        &mut |i, source, source_content| {
-          callbacks.borrow_mut().push(Callback::Source(
-            i,
-            source.to_string(),
-            source_content.map(|c| c.to_string()),
-          ));
-        },
-        &mut |i, name| {
-          callbacks
-            .borrow_mut()
-            .push(Callback::Name(i, name.to_string()));
-        },
-      );
-      (generated_info, callbacks.into_inner())
-    };
+    let on_chunk = RefCell::new(on_chunk);
 
-    let result = if self.children.len() > 3 {
-      self.children.par_iter().map(map_op).collect::<Vec<_>>()
-    } else {
-      self.children.iter().map(map_op).collect::<Vec<_>>()
-    };
+    let current_line_offset = Cell::new(0);
+    let current_column_offset = Cell::new(0);
+    let source_mapping: RefCell<HashMap<String, u32>> =
+      RefCell::new(HashMap::default());
+    let name_mapping: RefCell<HashMap<String, u32>> =
+      RefCell::new(HashMap::default());
+    let need_to_close_mapping = Cell::new(false);
 
-    for (generated_info, callbacks) in result {
-      let GeneratedInfo {
-        generated_line,
-        generated_column,
-      } = generated_info;
+    let source_index_mapping: RefCell<HashMap<u32, u32>> =
+      RefCell::new(HashMap::default());
+    let name_index_mapping: RefCell<HashMap<u32, u32>> =
+      RefCell::new(HashMap::default());
+    let last_mapping_line = Cell::new(0);
 
-      let mut source_index_mapping: HashMap<u32, u32> = HashMap::default();
-      let mut name_index_mapping: HashMap<u32, u32> = HashMap::default();
-      let mut last_mapping_line = 0;
-
-      for callback in callbacks {
-        match callback {
-          Callback::Chunk(chunk, mapping) => {
-            let line = mapping.generated_line + current_line_offset;
-            let column = if mapping.generated_line == 1 {
-              mapping.generated_column + current_column_offset
-            } else {
-              mapping.generated_column
-            };
-            if need_to_close_mapping {
-              if mapping.generated_line != 1 || mapping.generated_column != 0 {
-                on_chunk(
-                  None,
-                  Mapping {
-                    generated_line: current_line_offset + 1,
-                    generated_column: current_column_offset,
-                    original: None,
-                  },
-                );
-              }
-              need_to_close_mapping = false;
-            }
-            let result_source_index =
-              mapping.original.as_ref().and_then(|original| {
-                source_index_mapping.get(&original.source_index).copied()
-              });
-            let result_name_index = mapping
-              .original
-              .as_ref()
-              .and_then(|original| original.name_index)
-              .and_then(|name_index| {
-                name_index_mapping.get(&name_index).copied()
-              });
-            last_mapping_line = if result_source_index.is_none() {
-              0
-            } else {
-              mapping.generated_line
-            };
-            if options.final_source {
-              if let (Some(result_source_index), Some(original)) =
-                (result_source_index, &mapping.original)
-              {
-                on_chunk(
-                  None,
-                  Mapping {
-                    generated_line: line,
-                    generated_column: column,
-                    original: Some(OriginalLocation {
-                      source_index: result_source_index,
-                      original_line: original.original_line,
-                      original_column: original.original_column,
-                      name_index: result_name_index,
-                    }),
-                  },
-                );
-              }
-            } else if let (Some(result_source_index), Some(original)) =
-              (result_source_index, &mapping.original)
-            {
-              on_chunk(
-                chunk.as_deref(),
-                Mapping {
-                  generated_line: line,
-                  generated_column: column,
-                  original: Some(OriginalLocation {
-                    source_index: result_source_index,
-                    original_line: original.original_line,
-                    original_column: original.original_column,
-                    name_index: result_name_index,
-                  }),
-                },
-              );
-            } else {
-              on_chunk(
-                chunk.as_deref(),
-                Mapping {
-                  generated_line: line,
-                  generated_column: column,
-                  original: None,
-                },
-              );
-            }
-          }
-          Callback::Source(i, source, source_content) => {
-            let mut global_index = source_mapping.get(&source).copied();
-            if global_index.is_none() {
-              let len = source_mapping.len() as u32;
-              source_mapping.insert(source.to_owned(), len);
-              on_source(len, &source, source_content.as_deref());
-              global_index = Some(len);
-            }
-            source_index_mapping.insert(i, global_index.unwrap());
-          }
-          Callback::Name(i, name) => {
-            let mut global_index = name_mapping.get(&name).copied();
-            if global_index.is_none() {
-              let len = name_mapping.len() as u32;
-              name_mapping.insert(name.to_owned(), len);
-              on_name(len, &name);
-              global_index = Some(len);
-            }
-            name_index_mapping.insert(i, global_index.unwrap());
-          }
+    let mut concat_source_on_chunk = |chunk: Option<&str>, mapping: Mapping| {
+      let line = mapping.generated_line + current_line_offset.get();
+      let column = if mapping.generated_line == 1 {
+        mapping.generated_column + current_column_offset.get()
+      } else {
+        mapping.generated_column
+      };
+      if need_to_close_mapping.get() {
+        if mapping.generated_line != 1 || mapping.generated_column != 0 {
+          let mut on_chunk = on_chunk.borrow_mut();
+          on_chunk(
+            None,
+            Mapping {
+              generated_line: current_line_offset.get() + 1,
+              generated_column: current_column_offset.get(),
+              original: None,
+            },
+          );
         }
+        need_to_close_mapping.set(false);
       }
-      if need_to_close_mapping && (generated_line != 1 || generated_column != 0)
+      let result_source_index =
+        mapping.original.as_ref().and_then(|original| {
+          source_index_mapping
+            .borrow()
+            .get(&original.source_index)
+            .copied()
+        });
+      let result_name_index = mapping
+        .original
+        .as_ref()
+        .and_then(|original| original.name_index)
+        .and_then(|name_index| {
+          name_index_mapping.borrow().get(&name_index).copied()
+        });
+      last_mapping_line.set(if result_source_index.is_none() {
+        0
+      } else {
+        mapping.generated_line
+      });
+      if options.final_source {
+        if let (Some(result_source_index), Some(original)) =
+          (result_source_index, &mapping.original)
+        {
+          let mut on_chunk = on_chunk.borrow_mut();
+          on_chunk(
+            None,
+            Mapping {
+              generated_line: line,
+              generated_column: column,
+              original: Some(OriginalLocation {
+                source_index: result_source_index,
+                original_line: original.original_line,
+                original_column: original.original_column,
+                name_index: result_name_index,
+              }),
+            },
+          );
+        }
+      } else if let (Some(result_source_index), Some(original)) =
+        (result_source_index, &mapping.original)
       {
+        let mut on_chunk = on_chunk.borrow_mut();
         on_chunk(
-          None,
+          chunk.as_deref(),
           Mapping {
-            generated_line: current_line_offset + 1,
-            generated_column: current_column_offset,
+            generated_line: line,
+            generated_column: column,
+            original: Some(OriginalLocation {
+              source_index: result_source_index,
+              original_line: original.original_line,
+              original_column: original.original_column,
+              name_index: result_name_index,
+            }),
+          },
+        );
+      } else {
+        let mut on_chunk = on_chunk.borrow_mut();
+        on_chunk(
+          chunk.as_deref(),
+          Mapping {
+            generated_line: line,
+            generated_column: column,
             original: None,
           },
         );
-        need_to_close_mapping = false;
       }
-      if generated_line > 1 {
-        current_column_offset = generated_column;
-      } else {
-        current_column_offset += generated_column;
+    };
+
+    let mut concat_source_on_source = |i: u32, source: &str, source_content: Option<&str>| {
+      let mut global_index = source_mapping.borrow().get(source).copied();
+      if global_index.is_none() {
+        let len = source_mapping.borrow().len() as u32;
+        source_mapping.borrow_mut().insert(source.to_owned(), len);
+        on_source(len, &source, source_content.as_deref());
+        global_index = Some(len);
       }
-      need_to_close_mapping = need_to_close_mapping
-        || (options.final_source && last_mapping_line == generated_line);
-      current_line_offset += generated_line - 1;
-    }
+      source_index_mapping
+        .borrow_mut()
+        .insert(i, global_index.unwrap());
+    };
+
+    let mut concat_source_on_name = |i: u32, name: &str| {
+      let mut name_index_mapping = name_index_mapping.borrow_mut();
+      let mut global_index = name_mapping.borrow().get(name).copied();
+      if global_index.is_none() {
+        let len = name_mapping.borrow().len() as u32;
+        name_mapping.borrow_mut().insert(name.to_owned(), len);
+        on_name(len, &name);
+        global_index = Some(len);
+      }
+      name_index_mapping.insert(i, global_index.unwrap());
+    };
+
+    if self.is_concurrency_beneficial() {
+      let result = self
+        .children
+        .par_iter()
+        .map(|item| {
+          let callbacks = RefCell::new(vec![]);
+          let generated_info = item.stream_chunks(
+            options,
+            &mut |chunk, mapping| {
+              callbacks
+                .borrow_mut()
+                .push(Callback::Chunk(chunk.map(|c| c.to_string()), mapping));
+            },
+            &mut |i, source, source_content| {
+              callbacks.borrow_mut().push(Callback::Source(
+                i,
+                source.to_string(),
+                source_content.map(|c| c.to_string()),
+              ));
+            },
+            &mut |i, name| {
+              callbacks
+                .borrow_mut()
+                .push(Callback::Name(i, name.to_string()));
+            },
+          );
+          (generated_info, callbacks.into_inner())
+        })
+        .collect::<Vec<_>>();
+
+      for (generated_info, callbacks) in result {
+        source_index_mapping.borrow_mut().clear();
+        name_index_mapping.borrow_mut().clear();
+        last_mapping_line.set(0);
+
+        let GeneratedInfo {
+          generated_line,
+          generated_column,
+        } = generated_info;
+
+        for callback in callbacks {
+          match callback {
+            Callback::Chunk(chunk, mapping) => {
+              concat_source_on_chunk(chunk.as_deref(), mapping);
+            }
+            Callback::Source(i, source, source_content) => {
+              concat_source_on_source(i, &source, source_content.as_deref());
+            }
+            Callback::Name(i, name) => {
+              concat_source_on_name(i, &name);
+            }
+          }
+        }
+
+        if need_to_close_mapping.get()
+          && (generated_line != 1 || generated_column != 0)
+        {
+          let mut on_chunk = on_chunk.borrow_mut();
+          on_chunk(
+            None,
+            Mapping {
+              generated_line: current_line_offset.get() + 1,
+              generated_column: current_column_offset.get(),
+              original: None,
+            },
+          );
+          need_to_close_mapping.set(false);
+        }
+        if generated_line > 1 {
+          current_column_offset.set(generated_column);
+        } else {
+          current_column_offset
+            .set(current_column_offset.get() + generated_column);
+        }
+        need_to_close_mapping.set(
+          need_to_close_mapping.get()
+            || (options.final_source
+              && last_mapping_line.get() == generated_line),
+        );
+        current_line_offset.set(current_line_offset.get() + generated_line - 1);
+      }
+    } else {
+      for item in &self.children {
+        source_index_mapping.borrow_mut().clear();
+        name_index_mapping.borrow_mut().clear();
+        last_mapping_line.set(0);
+
+        let GeneratedInfo {
+          generated_line,
+          generated_column,
+        } = item.stream_chunks(
+          options,
+          &mut concat_source_on_chunk,
+          &mut concat_source_on_source,
+          &mut concat_source_on_name,
+        );
+
+        if need_to_close_mapping.get()
+          && (generated_line != 1 || generated_column != 0)
+        {
+          let mut on_chunk = on_chunk.borrow_mut();
+          on_chunk(
+            None,
+            Mapping {
+              generated_line: current_line_offset.get() + 1,
+              generated_column: current_column_offset.get(),
+              original: None,
+            },
+          );
+          need_to_close_mapping.set(false);
+        }
+        if generated_line > 1 {
+          current_column_offset.set(generated_column);
+        } else {
+          current_column_offset
+            .set(current_column_offset.get() + generated_column);
+        }
+        need_to_close_mapping.set(
+          need_to_close_mapping.get()
+            || (options.final_source
+              && last_mapping_line.get() == generated_line),
+        );
+        current_line_offset.set(current_line_offset.get() + generated_line - 1);
+      }
+    };
+
     GeneratedInfo {
-      generated_line: current_line_offset + 1,
-      generated_column: current_column_offset,
+      generated_line: current_line_offset.get() + 1,
+      generated_column: current_column_offset.get(),
     }
   }
 }
