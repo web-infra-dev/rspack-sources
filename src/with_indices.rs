@@ -33,11 +33,9 @@ impl<T: AsRef<str>> WithIndices<T> {
       let end = min(end_index, line_len);
       (start, end)
     } else {
-      let indices_indexes = self
-        .indices_indexes
-        .get_or_init(|| {
-          line.char_indices().map(|(i, _)| i).collect::<Vec<_>>()
-        });
+      let indices_indexes = self.indices_indexes.get_or_init(|| {
+        line.char_indices().map(|(i, _)| i).collect::<Vec<_>>()
+      });
       let start = *indices_indexes.get(start_index).unwrap_or(&line_len);
       let end = *indices_indexes.get(end_index).unwrap_or(&line_len);
       (start, end)
