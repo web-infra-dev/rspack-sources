@@ -1,18 +1,21 @@
-use std::cell::OnceCell;
+use std::{cell::OnceCell, cmp::min};
 
 #[derive(Debug, Clone)]
 pub struct WithIndices<T: AsRef<str>> {
   /// line is a string reference
   pub line: T,
+  pub is_ascii: bool,
   /// the byte position of each `char` in `line` string slice .
   pub indices_indexes: OnceCell<Vec<usize>>,
 }
 
 impl<T: AsRef<str>> WithIndices<T> {
   pub fn new(line: T) -> Self {
+    let is_ascii = line.as_ref().is_ascii();
     Self {
-      indices_indexes: OnceCell::new(),
       line,
+      is_ascii,
+      indices_indexes: OnceCell::new(),
     }
   }
 
@@ -24,13 +27,22 @@ impl<T: AsRef<str>> WithIndices<T> {
     }
 
     let line = self.line.as_ref();
-    let indices_indexes = self
-      .indices_indexes
-      .get_or_init(|| line.char_indices().map(|(i, _)| i).collect::<Vec<_>>());
+    let line_len = line.len();
+    let (start, end) = if self.is_ascii {
+      let start = min(start_index, line_len);
+      let end = min(end_index, line_len);
+      (start, end)
+    } else {
+      let indices_indexes = self
+        .indices_indexes
+        .get_or_init(|| {
+          line.char_indices().map(|(i, _)| i).collect::<Vec<_>>()
+        });
+      let start = *indices_indexes.get(start_index).unwrap_or(&line_len);
+      let end = *indices_indexes.get(end_index).unwrap_or(&line_len);
+      (start, end)
+    };
 
-    let str_len = line.len();
-    let start = *indices_indexes.get(start_index).unwrap_or(&str_len);
-    let end = *indices_indexes.get(end_index).unwrap_or(&str_len);
     unsafe {
       // SAFETY: Since `indices` iterates over the `CharIndices` of `self`, we can guarantee
       // that the indices obtained from it will always be within the bounds of `self` and they
