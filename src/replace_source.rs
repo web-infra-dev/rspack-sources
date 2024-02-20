@@ -4,12 +4,10 @@ use std::{
   hash::{Hash, Hasher},
   sync::{
     atomic::{AtomicBool, Ordering},
-    Arc,
+    Arc, Mutex, MutexGuard, OnceLock,
   },
 };
 
-use once_cell::sync::OnceCell;
-use parking_lot::Mutex;
 use rustc_hash::FxHashMap as HashMap;
 
 use crate::{
@@ -39,7 +37,7 @@ use crate::{
 /// ```
 pub struct ReplaceSource<T> {
   inner: Arc<T>,
-  inner_source_code: OnceCell<Box<str>>,
+  inner_source_code: OnceLock<Box<str>>,
   replacements: Mutex<Vec<Replacement>>,
   /// Whether `replacements` is sorted.
   is_sorted: AtomicBool,
@@ -92,7 +90,7 @@ impl<T> ReplaceSource<T> {
   pub fn new(source: T) -> Self {
     Self {
       inner: Arc::new(source),
-      inner_source_code: OnceCell::new(),
+      inner_source_code: OnceLock::new(),
       replacements: Mutex::new(Vec::new()),
       is_sorted: AtomicBool::new(true),
     }
@@ -103,13 +101,16 @@ impl<T> ReplaceSource<T> {
     &self.inner
   }
 
+  fn replacements(&self) -> MutexGuard<Vec<Replacement>> {
+    self.replacements.lock().unwrap()
+  }
+
   fn sort_replacement(&self) {
     if self.is_sorted.load(Ordering::SeqCst) {
       return;
     }
     self
-      .replacements
-      .lock()
+      .replacements()
       .sort_by(|a, b| (a.start, a.end).cmp(&(b.start, b.end)));
     self.is_sorted.store(true, Ordering::SeqCst)
   }
@@ -135,7 +136,7 @@ impl<T: Source> ReplaceSource<T> {
     content: &str,
     name: Option<&str>,
   ) {
-    self.replacements.lock().push(Replacement::new(
+    self.replacements().push(Replacement::new(
       start,
       end,
       content.into(),
@@ -155,7 +156,7 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for ReplaceSource<T> {
     // concatenate strings benchmark, see https://github.com/hoodie/concatenation_benchmarks-rs
     let mut source_code = String::new();
     let mut inner_pos = 0;
-    for replacement in self.replacements.lock().iter() {
+    for replacement in self.replacements.lock().unwrap().iter() {
       if inner_pos < replacement.start {
         let end_pos = (replacement.start as usize).min(inner_source_code.len());
         source_code.push_str(&inner_source_code[inner_pos as usize..end_pos]);
@@ -185,7 +186,7 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for ReplaceSource<T> {
   }
 
   fn map(&self, options: &crate::MapOptions) -> Option<SourceMap> {
-    let replacements = self.replacements.lock();
+    let replacements = self.replacements.lock().unwrap();
     if replacements.is_empty() {
       return self.inner.map(options);
     }
@@ -223,7 +224,7 @@ impl<T: std::fmt::Debug> std::fmt::Debug for ReplaceSource<T> {
 
 impl<T: Source> StreamChunks for ReplaceSource<T> {
   fn mappings_size_hint(&self) -> usize {
-    self.replacements.lock().len() * 2
+    self.replacements.lock().unwrap().len() * 2
   }
 
   fn stream_chunks(
@@ -235,7 +236,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
   ) -> crate::helpers::GeneratedInfo {
     self.sort_replacement();
     let on_name = RefCell::new(on_name);
-    let repls = self.replacements.lock();
+    let repls = self.replacements();
     let mut pos: u32 = 0;
     let mut i: usize = 0;
     let mut replacement_end: Option<u32> = None;
@@ -646,8 +647,8 @@ impl<T: Source> Clone for ReplaceSource<T> {
     Self {
       inner: self.inner.clone(),
       inner_source_code: self.inner_source_code.clone(),
-      replacements: Mutex::new(self.replacements.lock().clone()),
-      is_sorted: AtomicBool::new(true),
+      replacements: Mutex::new(self.replacements().clone()),
+      is_sorted: AtomicBool::new(self.is_sorted.load(Ordering::SeqCst)),
     }
   }
 }
@@ -656,7 +657,7 @@ impl<T: Hash> Hash for ReplaceSource<T> {
   fn hash<H: Hasher>(&self, state: &mut H) {
     self.sort_replacement();
     "ReplaceSource".hash(state);
-    for repl in self.replacements.lock().iter() {
+    for repl in self.replacements().iter() {
       repl.hash(state);
     }
     self.inner.hash(state);
@@ -665,8 +666,7 @@ impl<T: Hash> Hash for ReplaceSource<T> {
 
 impl<T: PartialEq> PartialEq for ReplaceSource<T> {
   fn eq(&self, other: &Self) -> bool {
-    self.inner == other.inner
-      && *self.replacements.lock() == *other.replacements.lock()
+    self.inner == other.inner && *self.replacements() == *other.replacements()
   }
 }
 

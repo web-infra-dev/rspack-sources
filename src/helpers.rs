@@ -1,7 +1,8 @@
 use rustc_hash::FxHashMap as HashMap;
 use std::{
   borrow::{BorrowMut, Cow},
-  cell::RefCell,
+  cell::{OnceCell, RefCell},
+  rc::Rc,
   sync::Arc,
 };
 
@@ -15,7 +16,7 @@ use crate::{
 type ArcStr = Arc<str>;
 // Adding this type because sourceContentLine not happy
 type InnerSourceContentLine =
-  RefCell<HashMap<i64, Option<Arc<Vec<WithIndices<ArcStr>>>>>>;
+  RefCell<HashMap<i64, Option<Rc<Vec<WithIndices<ArcStr>>>>>>;
 
 pub fn get_map<S: StreamChunks>(
   stream: &S,
@@ -468,26 +469,38 @@ pub fn split_into_potential_tokens(source: &str) -> PotentialTokens {
   }
 }
 
-// /[^\n]+\n?|\n/g
-pub fn split_into_lines(source: &str) -> Vec<&str> {
-  let mut results = Vec::new();
-  let mut i = 0;
-  let bytes = source.as_bytes();
-  while i < bytes.len() {
-    let cc = bytes[i];
-    if cc == 10 {
-      results.push("\n");
-      i += 1;
-    } else {
-      let mut j = i + 1;
-      while j < bytes.len() && bytes[j] != 10 {
-        j += 1;
+/// Split the string with a needle, each string will contain the needle.
+///
+/// Copied and modified from https://github.com/rust-lang/cargo/blob/30efe860c0e4adc1a6d7057ad223dc6e47d34edf/src/cargo/sources/registry/index.rs#L1048-L1072
+fn split(haystack: &str, needle: u8) -> impl Iterator<Item = &str> {
+  struct Split<'a> {
+    haystack: &'a str,
+    needle: u8,
+  }
+
+  impl<'a> Iterator for Split<'a> {
+    type Item = &'a str;
+
+    fn next(&mut self) -> Option<&'a str> {
+      if self.haystack.is_empty() {
+        return None;
       }
-      results.push(&source[i..(j + 1).min(bytes.len())]);
-      i = j + 1;
+      let (ret, remaining) =
+        match memchr::memchr(self.needle, self.haystack.as_bytes()) {
+          Some(pos) => (&self.haystack[..=pos], &self.haystack[pos + 1..]),
+          None => (self.haystack, ""),
+        };
+      self.haystack = remaining;
+      Some(ret)
     }
   }
-  results
+
+  Split { haystack, needle }
+}
+
+// /[^\n]+\n?|\n/g
+pub fn split_into_lines(source: &str) -> Vec<&str> {
+  split(source, b'\n').collect()
 }
 
 pub fn get_generated_source_info(source: &str) -> GeneratedInfo {
@@ -582,6 +595,16 @@ pub fn stream_chunks_of_source_map(
   }
 }
 
+fn get_source(source_map: &SourceMap, source: &str) -> String {
+  let source_root = source_map.source_root();
+  match source_root {
+    Some(root) if root.is_empty() => source.to_string(),
+    Some(root) if root.ends_with('/') => format!("{}{}", root, source),
+    Some(root) => format!("{}/{}", root, source),
+    None => source.to_string(),
+  }
+}
+
 fn stream_chunks_of_source_map_final(
   source: &str,
   source_map: &SourceMap,
@@ -594,7 +617,11 @@ fn stream_chunks_of_source_map_final(
     return result;
   }
   for (i, source) in source_map.sources().iter().enumerate() {
-    on_source(i as u32, source, source_map.get_source_content(i))
+    on_source(
+      i as u32,
+      &get_source(source_map, source),
+      source_map.get_source_content(i),
+    )
   }
   for (i, name) in source_map.names().iter().enumerate() {
     on_name(i as u32, name);
@@ -652,7 +679,11 @@ fn stream_chunks_of_source_map_full(
     };
   }
   for (i, source) in source_map.sources().iter().enumerate() {
-    on_source(i as u32, source, source_map.get_source_content(i))
+    on_source(
+      i as u32,
+      &get_source(source_map, source),
+      source_map.get_source_content(i),
+    )
   }
   for (i, name) in source_map.names().iter().enumerate() {
     on_name(i as u32, name);
@@ -794,7 +825,11 @@ fn stream_chunks_of_source_map_lines_final(
     };
   }
   for (i, source) in source_map.sources().iter().enumerate() {
-    on_source(i as u32, source, source_map.get_source_content(i))
+    on_source(
+      i as u32,
+      &get_source(source_map, source),
+      source_map.get_source_content(i),
+    )
   }
   let final_line = if result.generated_column == 0 {
     result.generated_line - 1
@@ -845,7 +880,11 @@ fn stream_chunks_of_source_map_lines_full(
     };
   }
   for (i, source) in source_map.sources().iter().enumerate() {
-    on_source(i as u32, source, source_map.get_source_content(i))
+    on_source(
+      i as u32,
+      &get_source(source_map, source),
+      source_map.get_source_content(i),
+    )
   }
   let mut current_generated_line = 1;
   let mut on_mapping = |mapping: &Mapping| {
@@ -925,14 +964,14 @@ struct SourceMapLineData {
 #[derive(Debug)]
 struct SourceMapLineChunk {
   content: ArcStr,
-  cached: once_cell::sync::OnceCell<WithIndices<ArcStr>>,
+  cached: OnceCell<WithIndices<ArcStr>>,
 }
 
 impl SourceMapLineChunk {
   pub fn new(content: ArcStr) -> Self {
     Self {
       content,
-      cached: once_cell::sync::OnceCell::new(),
+      cached: OnceCell::new(),
     }
   }
 
@@ -1062,7 +1101,7 @@ pub fn stream_chunks_of_combined_source_map(
                 original_source_lines = if let Some(Some(original_source)) =
                   inner_source_contents.get(&inner_source_index)
                 {
-                  Some(Arc::new(
+                  Some(Rc::new(
                     split_into_lines(original_source)
                       .into_iter()
                       .map(|s| WithIndices::new(s.into()))
@@ -1165,7 +1204,7 @@ pub fn stream_chunks_of_combined_source_map(
                   .and_then(|original_source| {
                     original_source.as_ref().map(|s| {
                       let lines = split_into_lines(s);
-                      Arc::new(
+                      Rc::new(
                         lines
                           .into_iter()
                           .map(|s| WithIndices::new(s.into()))

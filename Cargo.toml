@@ -1,6 +1,6 @@
 [package]
 name = "rspack_sources"
-version = "0.2.7"
+version = "0.2.10"
 edition = "2021"
 authors = ["h-a-n-a <andywangsy@gmail.com>", "ahabhgk <ahabhgk@gmail.com>"]
 resolver = "2"
@@ -26,6 +26,7 @@ print_stderr  = "warn"
 
 [[bench]]
 name    = "bench"
+path = "benches/bench.rs"
 harness = false
 
 [dependencies]
@@ -33,8 +34,6 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 dyn-clone = "1"
 rustc-hash = "1"
-once_cell = "1"
-parking_lot = "0.12"
 dashmap = "5"
 substring = "1"
 smallvec = "1.11.2"
