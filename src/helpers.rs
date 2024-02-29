@@ -1506,6 +1506,16 @@ pub fn stream_and_get_source_and_map<S: StreamChunks>(
   );
 
   let mappings = encode_mappings(&mappings, options);
-  let map = if mappings.is_empty() { None } else { Some(SourceMap::new(None, mappings, sources, sources_content, names)) };
+  let map = if mappings.is_empty() {
+    None
+  } else {
+    Some(SourceMap::new(
+      None,
+      mappings,
+      sources,
+      sources_content,
+      names,
+    ))
+  };
   (generated_info, map)
 }

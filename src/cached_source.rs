@@ -7,7 +7,13 @@ use std::{
 use dashmap::DashMap;
 use rustc_hash::FxHasher;
 
-use crate::{helpers::{stream_and_get_source_and_map, stream_chunks_of_raw_source, stream_chunks_of_source_map, StreamChunks}, MapOptions, Source, SourceMap};
+use crate::{
+  helpers::{
+    stream_and_get_source_and_map, stream_chunks_of_raw_source,
+    stream_chunks_of_source_map, StreamChunks,
+  },
+  MapOptions, Source, SourceMap,
+};
 
 /// It tries to reused cached results from other methods to avoid calculations,
 /// usually used after modify is finished.
@@ -123,7 +129,13 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks
         );
       }
     }
-    let (generated_info, map) = stream_and_get_source_and_map(self.original(), options, on_chunk, on_source, on_name);
+    let (generated_info, map) = stream_and_get_source_and_map(
+      self.original(),
+      options,
+      on_chunk,
+      on_source,
+      on_name,
+    );
     self.cached_maps.insert(options.clone(), map);
     generated_info
   }
