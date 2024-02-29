@@ -7,7 +7,7 @@ use std::{
 use dashmap::DashMap;
 use rustc_hash::FxHasher;
 
-use crate::{helpers::StreamChunks, MapOptions, Source, SourceMap};
+use crate::{helpers::{stream_and_get_source_and_map, stream_chunks_of_raw_source, stream_chunks_of_source_map, StreamChunks}, MapOptions, Source, SourceMap};
 
 /// It tries to reused cached results from other methods to avoid calculations,
 /// usually used after modify is finished.
@@ -44,10 +44,10 @@ use crate::{helpers::StreamChunks, MapOptions, Source, SourceMap};
 /// ```
 pub struct CachedSource<T> {
   inner: Arc<T>,
-  cached_buffer: OnceLock<Vec<u8>>,
+  cached_buffer: OnceLock<Arc<Vec<u8>>>,
   cached_source: OnceLock<Arc<str>>,
   cached_maps:
-    DashMap<MapOptions, Option<SourceMap>, BuildHasherDefault<FxHasher>>,
+    Arc<DashMap<MapOptions, Option<SourceMap>, BuildHasherDefault<FxHasher>>>,
 }
 
 impl<T> CachedSource<T> {
@@ -78,7 +78,7 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
   fn buffer(&self) -> Cow<[u8]> {
     let cached = self
       .cached_buffer
-      .get_or_init(|| self.inner.buffer().to_vec());
+      .get_or_init(|| self.inner.buffer().to_vec().into());
     Cow::Borrowed(cached)
   }
 
@@ -91,7 +91,7 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
       map.clone()
     } else {
       let map = self.inner.map(options);
-      self.cached_maps.insert(options.to_owned(), map.clone());
+      self.cached_maps.insert(options.clone(), map.clone());
       map
     }
   }
@@ -111,24 +111,21 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks
     on_source: crate::helpers::OnSource,
     on_name: crate::helpers::OnName,
   ) -> crate::helpers::GeneratedInfo {
-    // if self.cached_maps.contains_key(options)
-    //   && (self.cached_buffer.get().is_some()
-    //     || self.cached_source.get().is_some())
-    // {
-    //   let source = self.source();
-    //   if let Some(map) = &self.map(options) {
-    //     return stream_chunks_of_source_map(
-    //       &source, map, on_chunk, on_source, on_name, options,
-    //     );
-    //   } else {
-    //     return stream_chunks_of_raw_source(
-    //       &source, options, on_chunk, on_source, on_name,
-    //     );
-    //   }
-    // }
-    self
-      .inner
-      .stream_chunks(options, on_chunk, on_source, on_name)
+    if self.cached_maps.contains_key(options) {
+      let source = self.source();
+      if let Some(map) = &self.map(options) {
+        return stream_chunks_of_source_map(
+          &source, map, on_chunk, on_source, on_name, options,
+        );
+      } else {
+        return stream_chunks_of_raw_source(
+          &source, options, on_chunk, on_source, on_name,
+        );
+      }
+    }
+    let (generated_info, map) = stream_and_get_source_and_map(self.original(), options, on_chunk, on_source, on_name);
+    self.cached_maps.insert(options.clone(), map);
+    generated_info
   }
 }
 
