@@ -1464,45 +1464,58 @@ pub fn stream_chunks_of_combined_source_map(
   )
 }
 
-// pub fn stream_and_get_source_and_map<S: StreamChunks>(
-//   input_source: &S,
-//   options: &MapOptions,
-//   on_chunk: OnChunk,
-//   on_source: OnSource,
-//   on_name: OnName,
-// ) -> () {
-//   let mappings = vec![];
-//   let sources = vec![];
-//   let sources_content = vec![];
-//   let names = vec![];
-//   let info = input_source.stream_chunks(
-//     options,
-//     &mut |chunk, mapping| {
-//       mappings.push(mapping.clone());
-//       return on_chunk(chunk, mapping);
-//     },
-//     &mut |source_index, source, source_content| {
-//       let source_index2 = source_index as usize;
-//       while sources.len() <= source_index2 {
-//         sources.push("".to_string());
-//       }
-//       sources[source_index2] = source.to_owned();
-//       if let Some(source_content) = source_content {
-//         while sources_content.len() <= source_index2 {
-//           sources_content.push("".to_string());
-//         }
-//         sources_content[source_index2] = source_content.to_owned();
-//       }
-//       return on_source(source_index, source, source_content);
-//     },
-//     &mut |name_index, name| {
-//       let name_index2 = name_index as usize;
-//       while names.len() <= name_index2 {
-//         names.push("".to_string());
-//       }
-//       names[name_index2] = name.to_owned();
-//       return on_name(name_index, name);
-//     },
-//   );
-//   (info, map)
-// }
+pub fn stream_and_get_source_and_map<S: StreamChunks>(
+  input_source: &S,
+  options: &MapOptions,
+  on_chunk: OnChunk,
+  on_source: OnSource,
+  on_name: OnName,
+) -> (GeneratedInfo, Option<SourceMap>) {
+  let mut mappings = vec![];
+  let mut sources: Vec<Cow<'static, str>> = Vec::new();
+  let mut sources_content: Vec<Cow<'static, str>> = Vec::new();
+  let mut names: Vec<Cow<'static, str>> = Vec::new();
+  let generated_info = input_source.stream_chunks(
+    options,
+    &mut |chunk, mapping| {
+      mappings.push(mapping.clone());
+      on_chunk(chunk, mapping);
+    },
+    &mut |source_index, source, source_content| {
+      let source_index2 = source_index as usize;
+      while sources.len() <= source_index2 {
+        sources.push("".into());
+      }
+      sources[source_index2] = source.to_string().into();
+      if let Some(source_content) = source_content {
+        while sources_content.len() <= source_index2 {
+          sources_content.push("".into());
+        }
+        sources_content[source_index2] = source_content.to_string().into();
+      }
+      on_source(source_index, source, source_content);
+    },
+    &mut |name_index, name| {
+      let name_index2 = name_index as usize;
+      while names.len() <= name_index2 {
+        names.push("".into());
+      }
+      names[name_index2] = name.to_string().into();
+      on_name(name_index, name);
+    },
+  );
+
+  let mappings = encode_mappings(&mappings, options);
+  let map = if mappings.is_empty() {
+    None
+  } else {
+    Some(SourceMap::new(
+      None,
+      mappings,
+      sources,
+      sources_content,
+      names,
+    ))
+  };
+  (generated_info, map)
+}
