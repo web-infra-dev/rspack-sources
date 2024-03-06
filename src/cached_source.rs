@@ -82,9 +82,13 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
   }
 
   fn buffer(&self) -> Cow<[u8]> {
-    let cached = self
-      .cached_buffer
-      .get_or_init(|| self.inner.buffer().to_vec().into());
+    let cached = self.cached_buffer.get_or_init(|| {
+      let source = self.cached_source.get();
+      match source {
+        Some(source) => source.as_bytes().to_vec().into(),
+        None => self.inner.buffer().to_vec().into(),
+      }
+    });
     Cow::Borrowed(cached)
   }
 
