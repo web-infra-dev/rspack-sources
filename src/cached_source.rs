@@ -50,8 +50,9 @@ use crate::{
 /// ```
 pub struct CachedSource<T> {
   inner: Arc<T>,
-  cached_buffer: OnceLock<Arc<Vec<u8>>>,
-  cached_source: OnceLock<Arc<str>>,
+  cached_buffer: Arc<OnceLock<Vec<u8>>>,
+  cached_source: Arc<OnceLock<Arc<str>>>,
+  cached_size: Arc<OnceLock<usize>>,
   cached_maps:
     Arc<DashMap<MapOptions, Option<SourceMap>, BuildHasherDefault<FxHasher>>>,
 }
@@ -63,6 +64,7 @@ impl<T> CachedSource<T> {
       inner: Arc::new(inner),
       cached_buffer: Default::default(),
       cached_source: Default::default(),
+      cached_size: Default::default(),
       cached_maps: Default::default(),
     }
   }
@@ -82,14 +84,25 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
   }
 
   fn buffer(&self) -> Cow<[u8]> {
-    let cached = self
-      .cached_buffer
-      .get_or_init(|| self.inner.buffer().to_vec().into());
+    let cached = self.cached_buffer.get_or_init(|| {
+      let source = self.cached_source.get();
+      match source {
+        Some(source) => source.as_bytes().to_vec(),
+        None => self.inner.buffer().to_vec(),
+      }
+    });
     Cow::Borrowed(cached)
   }
 
   fn size(&self) -> usize {
-    self.inner.size()
+    let cached = self.cached_size.get_or_init(|| {
+      let source = self.cached_source.get();
+      match source {
+        Some(source) => source.len(),
+        None => self.inner.size(),
+      }
+    });
+    *cached
   }
 
   fn map(&self, options: &MapOptions) -> Option<SourceMap> {
@@ -147,6 +160,7 @@ impl<T: Source> Clone for CachedSource<T> {
       inner: self.inner.clone(),
       cached_buffer: self.cached_buffer.clone(),
       cached_source: self.cached_source.clone(),
+      cached_size: self.cached_size.clone(),
       cached_maps: self.cached_maps.clone(),
     }
   }
@@ -182,8 +196,11 @@ impl<T: std::fmt::Debug> std::fmt::Debug for CachedSource<T> {
 
 #[cfg(test)]
 mod tests {
+  use std::borrow::Borrow;
+
   use crate::{
-    ConcatSource, RawSource, SourceExt, SourceMapSource, WithoutOriginalOptions,
+    ConcatSource, OriginalSource, RawSource, SourceExt, SourceMapSource,
+    WithoutOriginalOptions,
   };
 
   use super::*;
@@ -207,5 +224,30 @@ mod tests {
     ]);
     let map = source.map(&Default::default()).unwrap();
     assert_eq!(map.mappings(), ";;AACA");
+  }
+
+  #[test]
+  fn should_allow_to_store_and_share_cached_data() {
+    let original = OriginalSource::new("Hello World", "test.txt");
+    let source = CachedSource::new(original);
+    let clone = source.clone();
+
+    // fill up cache
+    let map_options = MapOptions::default();
+    source.source();
+    source.buffer();
+    source.size();
+    source.map(&map_options);
+
+    assert_eq!(clone.cached_source.get().unwrap().borrow(), source.source());
+    assert_eq!(
+      *clone.cached_buffer.get().unwrap(),
+      source.buffer().to_vec()
+    );
+    assert_eq!(*clone.cached_size.get().unwrap(), source.size());
+    assert_eq!(
+      *clone.cached_maps.get(&map_options).unwrap().value(),
+      source.map(&map_options)
+    );
   }
 }
