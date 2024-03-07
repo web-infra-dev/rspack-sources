@@ -85,8 +85,8 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
     let cached = self.cached_buffer.get_or_init(|| {
       let source = self.cached_source.get();
       match source {
-        Some(source) => source.as_bytes().to_vec().into(),
-        None => self.inner.buffer().to_vec().into(),
+        Some(source) => source.as_bytes().to_vec(),
+        None => self.inner.buffer().to_vec(),
       }
     });
     Cow::Borrowed(cached)
