@@ -50,8 +50,8 @@ use crate::{
 /// ```
 pub struct CachedSource<T> {
   inner: Arc<T>,
-  cached_buffer: OnceLock<Arc<Vec<u8>>>,
-  cached_source: OnceLock<Arc<str>>,
+  cached_buffer: Arc<OnceLock<Vec<u8>>>,
+  cached_source: Arc<OnceLock<Arc<str>>>,
   cached_maps:
     Arc<DashMap<MapOptions, Option<SourceMap>, BuildHasherDefault<FxHasher>>>,
 }
@@ -93,6 +93,10 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
   }
 
   fn size(&self) -> usize {
+    let source = self.cached_source.get();
+    if let Some(source) = source {
+      return source.len();
+    }
     self.inner.size()
   }
 
@@ -133,13 +137,14 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks
         );
       }
     }
-    let (generated_info, map) = stream_and_get_source_and_map(
+    let (generated_info, source, map) = stream_and_get_source_and_map(
       self.original(),
       options,
       on_chunk,
       on_source,
       on_name,
     );
+    self.cached_source.get_or_init(|| source.into());
     self.cached_maps.insert(options.clone(), map);
     generated_info
   }
@@ -186,8 +191,11 @@ impl<T: std::fmt::Debug> std::fmt::Debug for CachedSource<T> {
 
 #[cfg(test)]
 mod tests {
+  use std::borrow::Borrow;
+
   use crate::{
-    ConcatSource, RawSource, SourceExt, SourceMapSource, WithoutOriginalOptions,
+    ConcatSource, OriginalSource, RawSource, SourceExt, SourceMapSource,
+    WithoutOriginalOptions,
   };
 
   use super::*;
@@ -211,5 +219,28 @@ mod tests {
     ]);
     let map = source.map(&Default::default()).unwrap();
     assert_eq!(map.mappings(), ";;AACA");
+  }
+
+  #[test]
+  fn should_allow_to_store_and_share_cached_data() {
+    let original = OriginalSource::new("Hello World", "test.txt");
+    let source = CachedSource::new(original);
+    let clone = source.clone();
+
+    // fill up cache
+    let map_options = MapOptions::default();
+    source.source();
+    source.buffer();
+    source.map(&map_options);
+
+    assert_eq!(clone.cached_source.get().unwrap().borrow(), source.source());
+    assert_eq!(
+      *clone.cached_buffer.get().unwrap(),
+      source.buffer().to_vec()
+    );
+    assert_eq!(
+      *clone.cached_maps.get(&map_options).unwrap().value(),
+      source.map(&map_options)
+    );
   }
 }
