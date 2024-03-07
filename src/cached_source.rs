@@ -97,10 +97,10 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
   fn size(&self) -> usize {
     let cached = self.cached_size.get_or_init(|| {
       let source = self.cached_source.get();
-      if let Some(source) = source {
-        return source.len();
+      match source {
+        Some(source) => source.len(),
+        None => self.inner.size(),
       }
-      self.inner.size()
     });
     *cached
   }
