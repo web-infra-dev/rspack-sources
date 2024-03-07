@@ -245,10 +245,7 @@ mod tests {
       *clone.cached_buffer.get().unwrap(),
       source.buffer().to_vec()
     );
-    assert_eq!(
-      *clone.cached_size.get().unwrap(),
-      source.size()
-    );
+    assert_eq!(*clone.cached_size.get().unwrap(), source.size());
     assert_eq!(
       *clone.cached_maps.get(&map_options).unwrap().value(),
       source.map(&map_options)
