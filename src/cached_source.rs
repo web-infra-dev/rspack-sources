@@ -1,6 +1,6 @@
 use std::{
   borrow::Cow,
-  hash::{BuildHasherDefault, Hash},
+  hash::{BuildHasherDefault, Hash, Hasher},
   sync::{Arc, OnceLock},
 };
 
@@ -55,6 +55,7 @@ pub struct CachedSource<T> {
   cached_size: Arc<OnceLock<usize>>,
   cached_maps:
     Arc<DashMap<MapOptions, Option<SourceMap>, BuildHasherDefault<FxHasher>>>,
+  cached_hash_update: Arc<OnceLock<Vec<u8>>>,
 }
 
 impl<T> CachedSource<T> {
@@ -66,6 +67,7 @@ impl<T> CachedSource<T> {
       cached_source: Default::default(),
       cached_size: Default::default(),
       cached_maps: Default::default(),
+      cached_hash_update: Default::default(),
     }
   }
 
@@ -163,13 +165,19 @@ impl<T: Source> Clone for CachedSource<T> {
       cached_source: self.cached_source.clone(),
       cached_size: self.cached_size.clone(),
       cached_maps: self.cached_maps.clone(),
+      cached_hash_update: self.cached_hash_update.clone(),
     }
   }
 }
 
 impl<T: Hash> Hash for CachedSource<T> {
-  fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-    self.inner.hash(state);
+  fn hash<H: Hasher>(&self, state: &mut H) {
+    let cached = self.cached_hash_update.get_or_init(|| {
+      let mut tracker = HashTracker::new();
+      self.inner.hash(&mut tracker);
+      tracker.hash_update
+    });
+    state.write(cached);
   }
 }
 
@@ -195,9 +203,31 @@ impl<T: std::fmt::Debug> std::fmt::Debug for CachedSource<T> {
   }
 }
 
+struct HashTracker {
+  hash_update: Vec<u8>
+}
+
+impl Hasher for HashTracker {
+  fn finish(&self) -> u64 {
+    unreachable!("hash tracker should never run finish")
+  }
+
+  fn write(&mut self, bytes: &[u8]) {
+    self.hash_update.extend(bytes)
+  }
+}
+
+impl HashTracker {
+  fn new() -> Self {
+    Self {
+      hash_update: Vec::new()
+    }
+  }
+}
+
 #[cfg(test)]
 mod tests {
-  use std::borrow::Borrow;
+  use std::{borrow::Borrow, collections::hash_map::DefaultHasher};
 
   use crate::{
     ConcatSource, OriginalSource, RawSource, SourceExt, SourceMapSource,
@@ -239,6 +269,11 @@ mod tests {
     source.buffer();
     source.size();
     source.map(&map_options);
+    {
+      let mut hasher = DefaultHasher::new();
+      source.hash(&mut hasher)
+    }
+   
 
     assert_eq!(clone.cached_source.get().unwrap().borrow(), source.source());
     assert_eq!(
@@ -249,6 +284,21 @@ mod tests {
     assert_eq!(
       *clone.cached_maps.get(&map_options).unwrap().value(),
       source.map(&map_options)
+    );
+    let hash = {
+      let mut hasher = DefaultHasher::new();
+      source.hash(&mut hasher);
+      hasher.finish()
+    };
+    let cached_hash = {
+      let mut hasher = DefaultHasher::new();
+      let cached_hash_update = clone.cached_hash_update.get().unwrap();
+      hasher.write(cached_hash_update);
+      hasher.finish()
+    };
+    assert_eq!(
+      hash,
+      cached_hash
     );
   }
 }
