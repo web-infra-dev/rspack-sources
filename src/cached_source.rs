@@ -144,14 +144,13 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks
         );
       }
     }
-    let (generated_info, source, map) = stream_and_get_source_and_map(
+    let (generated_info, map) = stream_and_get_source_and_map(
       self.original(),
       options,
       on_chunk,
       on_source,
       on_name,
     );
-    self.cached_source.get_or_init(|| source.into());
     self.cached_maps.insert(options.clone(), map);
     generated_info
   }

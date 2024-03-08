@@ -1470,8 +1470,7 @@ pub fn stream_and_get_source_and_map<S: StreamChunks>(
   on_chunk: OnChunk,
   on_source: OnSource,
   on_name: OnName,
-) -> (GeneratedInfo, String, Option<SourceMap>) {
-  let mut source = String::new();
+) -> (GeneratedInfo, Option<SourceMap>) {
   let mut mappings = vec![];
   let mut sources: Vec<Cow<'static, str>> = Vec::new();
   let mut sources_content: Vec<Cow<'static, str>> = Vec::new();
@@ -1479,9 +1478,6 @@ pub fn stream_and_get_source_and_map<S: StreamChunks>(
   let generated_info = input_source.stream_chunks(
     options,
     &mut |chunk, mapping| {
-      if let Some(chunk) = chunk {
-        source.push_str(chunk);
-      }
       mappings.push(mapping.clone());
       on_chunk(chunk, mapping);
     },
@@ -1521,5 +1517,5 @@ pub fn stream_and_get_source_and_map<S: StreamChunks>(
       names,
     ))
   };
-  (generated_info, source, map)
+  (generated_info, map)
 }
