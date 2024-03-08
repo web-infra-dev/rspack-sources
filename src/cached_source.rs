@@ -204,7 +204,7 @@ impl<T: std::fmt::Debug> std::fmt::Debug for CachedSource<T> {
 }
 
 struct HashTracker {
-  hash_update: Vec<u8>
+  hash_update: Vec<u8>,
 }
 
 impl Hasher for HashTracker {
@@ -220,7 +220,7 @@ impl Hasher for HashTracker {
 impl HashTracker {
   fn new() -> Self {
     Self {
-      hash_update: Vec::new()
+      hash_update: Vec::new(),
     }
   }
 }
@@ -273,7 +273,6 @@ mod tests {
       let mut hasher = DefaultHasher::new();
       source.hash(&mut hasher)
     }
-   
 
     assert_eq!(clone.cached_source.get().unwrap().borrow(), source.source());
     assert_eq!(
@@ -296,9 +295,6 @@ mod tests {
       hasher.write(cached_hash_update);
       hasher.finish()
     };
-    assert_eq!(
-      hash,
-      cached_hash
-    );
+    assert_eq!(hash, cached_hash);
   }
 }
