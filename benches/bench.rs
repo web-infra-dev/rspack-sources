@@ -1,8 +1,10 @@
+#![allow(missing_docs)]
+
 #[cfg(not(codspeed))]
-pub use criterion::*;
+use criterion::*;
 
 #[cfg(codspeed)]
-pub use codspeed_criterion_compat::*;
+use codspeed_criterion_compat::*;
 
 use rspack_sources::{
   CachedSource, ConcatSource, MapOptions, Source, SourceMap, SourceMapSource,
