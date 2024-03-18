@@ -1,3 +1,5 @@
+#![allow(missing_docs)]
+
 #[cfg(not(codspeed))]
 pub use criterion::*;
 
@@ -5,8 +7,8 @@ pub use criterion::*;
 pub use codspeed_criterion_compat::*;
 
 use rspack_sources::{
-  CachedSource, ConcatSource, MapOptions, Source, SourceMap, SourceMapSource,
-  SourceMapSourceOptions,
+  CachedSource, ConcatSource, MapOptions, ReplaceSource, Source, SourceMap,
+  SourceMapSource, SourceMapSourceOptions,
 };
 
 const HELLOWORLD_JS: &str = include_str!(concat!(
@@ -32,6 +34,14 @@ const BUNDLE_JS: &str = include_str!(concat!(
 const BUNDLE_JS_MAP: &str = include_str!(concat!(
   env!("CARGO_MANIFEST_DIR"),
   "/benches/fixtures/transpile-rollup/files/bundle.js.map"
+));
+const ANTD_MIN_JS: &str = include_str!(concat!(
+  env!("CARGO_MANIFEST_DIR"),
+  "/benches/fixtures/antd-mini/antd.min.js"
+));
+const ANTD_MIN_JS_MAP: &str = include_str!(concat!(
+  env!("CARGO_MANIFEST_DIR"),
+  "/benches/fixtures/antd-mini/antd.min.js.map"
 ));
 
 fn benchmark_concat_generate_string(b: &mut Bencher) {
@@ -152,6 +162,39 @@ fn benchmark_concat_generate_base64_with_cache(b: &mut Bencher) {
   })
 }
 
+fn benchmark_replace_large_minified_source(b: &mut Bencher) {
+  let antd_minify = SourceMapSource::new(SourceMapSourceOptions {
+    value: ANTD_MIN_JS,
+    name: "antd.min.js",
+    source_map: SourceMap::from_json(ANTD_MIN_JS_MAP).unwrap(),
+    original_source: None,
+    inner_source_map: None,
+    remove_original_source: false,
+  });
+  let mut replace_source = ReplaceSource::new(antd_minify);
+  replace_source.replace(107, 114, "exports", None);
+  replace_source.replace(130, 143, "'object'", None);
+  replace_source.replace(165, 172, "__webpack_require__", None);
+  replace_source.replace(173, 180, "/*! react */\"./node_modules/.pnpm/react@18.2.0/node_modules/react/index.js\"", None);
+  replace_source.replace(183, 190, "__webpack_require__", None);
+  replace_source.replace(191, 202, "/*! react-dom */\"./node_modules/.pnpm/react-dom@18.2.0_react@18.2.0/node_modules/react-dom/index.js\"", None);
+  replace_source.replace(205, 212, "__webpack_require__", None);
+  replace_source.replace(213, 220, "/*! dayjs */\"./node_modules/.pnpm/dayjs@1.11.10/node_modules/dayjs/dayjs.min.js\"", None);
+  replace_source.replace(363, 370, "exports", None);
+  replace_source.replace(373, 385, "exports.antd", None);
+  replace_source.replace(390, 397, "__webpack_require__", None);
+  replace_source.replace(398, 405, "/*! react */\"./node_modules/.pnpm/react@18.2.0/node_modules/react/index.js\"", None);
+  replace_source.replace(408, 415, "__webpack_require__", None);
+  replace_source.replace(416, 427, "/*! react-dom */\"./node_modules/.pnpm/react-dom@18.2.0_react@18.2.0/node_modules/react-dom/index.js\"", None);
+  replace_source.replace(430, 437, "__webpack_require__", None);
+  replace_source.replace(438, 445, "/*! dayjs */\"./node_modules/.pnpm/dayjs@1.11.10/node_modules/dayjs/dayjs.min.js\"", None);
+  replace_source.replace(494, 498, "this", None);
+
+  b.iter(|| {
+    replace_source.map(&MapOptions::default());
+  });
+}
+
 fn bench_rspack_sources(criterion: &mut Criterion) {
   let mut group = criterion.benchmark_group("rspack_sources");
   group.bench_function(
@@ -166,6 +209,10 @@ fn bench_rspack_sources(criterion: &mut Criterion) {
   );
   group
     .bench_function("concat_generate_string", benchmark_concat_generate_string);
+  group.bench_function(
+    "replace_large_minified_source",
+    benchmark_replace_large_minified_source,
+  );
   group.finish();
 }
 
