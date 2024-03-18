@@ -38,15 +38,13 @@ pub fn get_map<S: StreamChunks>(
     // on_source
     &mut |source_index, source: &str, source_content: Option<&str>| {
       let source_index = source_index as usize;
-      sources.reserve(source_index - sources.len() + 1);
-      while sources.len() <= source_index {
-        sources.push("".into());
+      if sources.len() <= source_index {
+        sources.resize(source_index + 1, Cow::Borrowed(""));
       }
       sources[source_index] = source.to_string().into();
       if let Some(source_content) = source_content {
-        sources.reserve(source_index - sources_content.len() + 1);
-        while sources_content.len() <= source_index {
-          sources_content.push("".into());
+        if sources_content.len() <= source_index {
+          sources_content.resize(source_index + 1, Cow::Borrowed(""));
         }
         sources_content[source_index] = source_content.to_string().into();
       }
@@ -54,9 +52,8 @@ pub fn get_map<S: StreamChunks>(
     // on_name
     &mut |name_index, name: &str| {
       let name_index = name_index as usize;
-      names.reserve(name_index - names.len() + 1);
-      while names.len() <= name_index {
-        names.push("".into());
+      if names.len() <= name_index {
+        names.resize(name_index + 1, Cow::Borrowed(""));
       }
       names[name_index] = name.to_string().into();
     },
