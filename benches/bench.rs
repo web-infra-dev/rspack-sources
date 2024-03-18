@@ -1,13 +1,14 @@
 #![allow(missing_docs)]
 
 #[cfg(not(codspeed))]
-use criterion::*;
+pub use criterion::*;
 
 #[cfg(codspeed)]
-use codspeed_criterion_compat::*;
+pub use codspeed_criterion_compat::*;
 
 use rspack_sources::{
-  CachedSource, ConcatSource, MapOptions, ReplaceSource, Source, SourceMap, SourceMapSource, SourceMapSourceOptions
+  CachedSource, ConcatSource, MapOptions, ReplaceSource, Source, SourceMap,
+  SourceMapSource, SourceMapSourceOptions,
 };
 
 const HELLOWORLD_JS: &str = include_str!(concat!(
@@ -206,8 +207,10 @@ fn bench_rspack_sources(criterion: &mut Criterion) {
   );
   group
     .bench_function("concat_generate_string", benchmark_concat_generate_string);
-  group
-    .bench_function("replace_large_minified_source", benchmark_replace_large_minified_source);
+  group.bench_function(
+    "replace_large_minified_source",
+    benchmark_replace_large_minified_source,
+  );
   group.finish();
 }
 
