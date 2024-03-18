@@ -248,8 +248,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
       RefCell::new(Vec::new());
     let name_mapping: RefCell<HashMap<String, u32>> =
       RefCell::new(HashMap::default());
-    let name_index_mapping: RefCell<HashMap<u32, u32>> =
-      RefCell::new(HashMap::default());
+    let name_index_mapping: RefCell<Vec<u32>> = RefCell::new(Vec::new());
 
     // check if source_content[line][col] is equal to expect
     // Why this is needed?
@@ -376,7 +375,10 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
                     original_line: original.original_line,
                     original_column: original.original_column,
                     name_index: original.name_index.and_then(|name_index| {
-                      name_index_mapping.borrow().get(&name_index).copied()
+                      name_index_mapping
+                        .borrow()
+                        .get(name_index as usize)
+                        .copied()
                     }),
                   }
                 }),
@@ -552,7 +554,10 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
                   original_line: original.original_line,
                   original_column: original.original_column,
                   name_index: original.name_index.and_then(|name_index| {
-                    name_index_mapping.borrow().get(&name_index).copied()
+                    name_index_mapping
+                      .borrow()
+                      .get(name_index as usize)
+                      .copied()
                   }),
                 }
               }),
@@ -586,7 +591,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
         }
         name_index_mapping
           .borrow_mut()
-          .insert(name_index, global_index.unwrap());
+          .insert(name_index as usize, global_index.unwrap());
       },
     );
 
