@@ -190,7 +190,9 @@ fn benchmark_replace_large_minified_source(b: &mut Bencher) {
   replace_source.replace(438, 445, "/*! dayjs */\"./node_modules/.pnpm/dayjs@1.11.10/node_modules/dayjs/dayjs.min.js\"", None);
   replace_source.replace(494, 498, "this", None);
 
-  replace_source.map(&MapOptions::default());
+  b.iter(|| {
+    replace_source.map(&MapOptions::default());
+  });
 }
 
 fn bench_rspack_sources(criterion: &mut Criterion) {
