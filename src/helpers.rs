@@ -134,7 +134,7 @@ pub fn decode_mappings<'b, 'a: 'b>(
     generated_line: 0,
     segment_cursor: 0,
     generated_column: 0,
-    nums: Vec::with_capacity(6),
+    nums: Vec::with_capacity(5),
   }
 }
 
