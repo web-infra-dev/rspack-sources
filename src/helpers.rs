@@ -124,34 +124,38 @@ pub struct GeneratedInfo {
 pub fn decode_mappings<'b, 'a: 'b>(
   source_map: &'a SourceMap,
 ) -> impl Iterator<Item = Mapping> + 'b {
-  SegmentIter {
-    line: "",
-    mapping_str: source_map.mappings(),
-    source_index: 0,
-    original_line: 1,
-    original_column: 0,
-    name_index: 0,
-    generated_line: 0,
-    segment_cursor: 0,
-    generated_column: 0,
-    nums: Vec::with_capacity(5),
-  }
+  SegmentIter::new(source_map.mappings())
 }
 
 pub struct SegmentIter<'a> {
-  pub mapping_str: &'a str,
-  pub generated_line: usize,
-  pub generated_column: u32,
-  pub source_index: u32,
-  pub original_line: u32,
-  pub original_column: u32,
-  pub name_index: u32,
-  pub line: &'a str,
-  pub nums: Vec<i64>,
-  pub segment_cursor: usize,
+  mapping_str: &'a str,
+  generated_line: usize,
+  generated_column: u32,
+  source_index: u32,
+  original_line: u32,
+  original_column: u32,
+  name_index: u32,
+  line: &'a str,
+  nums: Vec<i64>,
+  segment_cursor: usize,
 }
 
 impl<'a> SegmentIter<'a> {
+  pub fn new(mapping_str: &'a str) -> Self {
+    SegmentIter {
+      line: "",
+      mapping_str,
+      source_index: 0,
+      original_line: 1,
+      original_column: 0,
+      name_index: 0,
+      generated_line: 0,
+      segment_cursor: 0,
+      generated_column: 0,
+      nums: Vec::with_capacity(5),
+    }
+  }
+
   fn next_segment(&mut self) -> Option<&'a str> {
     if self.line.is_empty() {
       loop {
