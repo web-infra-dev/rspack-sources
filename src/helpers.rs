@@ -271,10 +271,9 @@ fn encode_full_mappings(mappings: &[Mapping]) -> String {
   let mut active_name = false;
   let mut initial = true;
 
-  let mut out = String::new();
   mappings.iter().fold(
-    String::with_capacity(mappings.len() * 4),
-    |acc, mapping| {
+    String::with_capacity(mappings.len() * 6),
+    |mut acc, mapping| {
       if active_mapping && current_line == mapping.generated_line {
         // A mapping is still active
         if mapping.original.is_some_and(|original| {
@@ -295,38 +294,37 @@ fn encode_full_mappings(mappings: &[Mapping]) -> String {
         }
       }
 
-      out.clear();
       if current_line < mapping.generated_line {
-        (0..mapping.generated_line - current_line).for_each(|_| out.push(';'));
+        (0..mapping.generated_line - current_line).for_each(|_| acc.push(';'));
         current_line = mapping.generated_line;
         current_column = 0;
         initial = false;
       } else if initial {
         initial = false;
       } else {
-        out.push(',');
+        acc.push(',');
       }
 
-      encode(&mut out, mapping.generated_column, current_column);
+      encode(&mut acc, mapping.generated_column, current_column);
       current_column = mapping.generated_column;
       if let Some(original) = &mapping.original {
         active_mapping = true;
         if original.source_index == current_source_index {
-          out.push('A');
+          acc.push('A');
         } else {
-          encode(&mut out, original.source_index, current_source_index);
+          encode(&mut acc, original.source_index, current_source_index);
           current_source_index = original.source_index;
         }
-        encode(&mut out, original.original_line, current_original_line);
+        encode(&mut acc, original.original_line, current_original_line);
         current_original_line = original.original_line;
         if original.original_column == current_original_column {
-          out.push('A');
+          acc.push('A');
         } else {
-          encode(&mut out, original.original_column, current_original_column);
+          encode(&mut acc, original.original_column, current_original_column);
           current_original_column = original.original_column;
         }
         if let Some(name_index) = original.name_index {
-          encode(&mut out, name_index, current_name_index);
+          encode(&mut acc, name_index, current_name_index);
           current_name_index = name_index;
           active_name = true;
         } else {
@@ -335,7 +333,7 @@ fn encode_full_mappings(mappings: &[Mapping]) -> String {
       } else {
         active_mapping = false;
       }
-      acc + &out
+      acc
     },
   )
 }
