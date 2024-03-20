@@ -1,11 +1,8 @@
 use std::{
-  borrow::Cow,
-  cell::RefCell,
-  hash::{Hash, Hasher},
-  sync::{
+  borrow::Cow, cell::RefCell, collections::hash_map::Entry, hash::{Hash, Hasher}, sync::{
     atomic::{AtomicBool, Ordering},
     Arc, Mutex, MutexGuard, OnceLock,
-  },
+  }
 };
 
 use rustc_hash::FxHashMap as HashMap;
@@ -409,14 +406,18 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
             repl.name.as_ref().filter(|_| mapping.original.is_some())
           {
             let mut name_mapping = name_mapping.borrow_mut();
-            let mut global_index = name_mapping.get(name).copied();
-            if global_index.is_none() {
-              let len = name_mapping.len() as u32;
-              name_mapping.insert(name.to_owned(), len);
-              on_name.borrow_mut()(len, name);
-              global_index = Some(len);
-            }
-            replacement_name_index = global_index;
+            let len = name_mapping.len() as u32;
+            let global_index = match name_mapping.entry(name.to_string()) {
+              Entry::Occupied(entry) => {
+                *entry.get()
+              },
+              Entry::Vacant(entry) => {
+                entry.insert(len);
+                on_name.borrow_mut()(len, name);
+                len
+              }
+            };
+            replacement_name_index = Some(global_index);
           }
           for (m, content_line) in lines.iter().enumerate() {
             on_chunk(
@@ -577,16 +578,20 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
       },
       &mut |name_index, name| {
         let mut name_mapping = name_mapping.borrow_mut();
-        let mut global_index = name_mapping.get(name).copied();
-        if global_index.is_none() {
-          let len = name_mapping.len() as u32;
-          name_mapping.insert(name.to_owned(), len);
-          on_name.borrow_mut()(len, name);
-          global_index = Some(len);
-        }
+        let len = name_mapping.len() as u32;
+        let global_index = match name_mapping.entry(name.to_string()) {
+          Entry::Occupied(entry) => {
+            *entry.get()
+          },
+          Entry::Vacant(entry) => {
+            entry.insert(len);
+            on_name.borrow_mut()(len, name);
+            len
+          }
+        };
         name_index_mapping
           .borrow_mut()
-          .insert(name_index, global_index.unwrap());
+          .insert(name_index, global_index);
       },
     );
 
