@@ -22,7 +22,7 @@ pub fn get_map<S: StreamChunks>(
   stream: &S,
   options: &MapOptions,
 ) -> Option<SourceMap> {
-  let mut mappings = Vec::with_capacity(stream.mappings_size_hint());
+  let mut mappings = Vec::new();
   let mut sources: Vec<Cow<'static, str>> = Vec::new();
   let mut sources_content: Vec<Cow<'static, str>> = Vec::new();
   let mut names: Vec<Cow<'static, str>> = Vec::new();
@@ -38,15 +38,13 @@ pub fn get_map<S: StreamChunks>(
     // on_source
     &mut |source_index, source: &str, source_content: Option<&str>| {
       let source_index = source_index as usize;
-      sources.reserve(source_index - sources.len() + 1);
-      while sources.len() <= source_index {
-        sources.push("".into());
+      if sources.len() <= source_index {
+        sources.resize(source_index + 1, Cow::Borrowed(""));
       }
       sources[source_index] = source.to_string().into();
       if let Some(source_content) = source_content {
-        sources.reserve(source_index - sources_content.len() + 1);
-        while sources_content.len() <= source_index {
-          sources_content.push("".into());
+        if sources_content.len() <= source_index {
+          sources_content.resize(source_index + 1, Cow::Borrowed(""));
         }
         sources_content[source_index] = source_content.to_string().into();
       }
@@ -54,9 +52,8 @@ pub fn get_map<S: StreamChunks>(
     // on_name
     &mut |name_index, name: &str| {
       let name_index = name_index as usize;
-      names.reserve(name_index - names.len() + 1);
-      while names.len() <= name_index {
-        names.push("".into());
+      if names.len() <= name_index {
+        names.resize(name_index + 1, Cow::Borrowed(""));
       }
       names[name_index] = name.to_string().into();
     },
@@ -68,11 +65,6 @@ pub fn get_map<S: StreamChunks>(
 
 /// [StreamChunks] abstraction, see [webpack-sources source.streamChunks](https://github.com/webpack/webpack-sources/blob/9f98066311d53a153fdc7c633422a1d086528027/lib/helpers/streamChunks.js#L13).
 pub trait StreamChunks {
-  /// Estimate the number of mappings in the chunk
-  fn mappings_size_hint(&self) -> usize {
-    0
-  }
-
   /// [StreamChunks] abstraction
   fn stream_chunks(
     &self,
@@ -132,34 +124,38 @@ pub struct GeneratedInfo {
 pub fn decode_mappings<'b, 'a: 'b>(
   source_map: &'a SourceMap,
 ) -> impl Iterator<Item = Mapping> + 'b {
-  SegmentIter {
-    line: "",
-    mapping_str: source_map.mappings(),
-    source_index: 0,
-    original_line: 1,
-    original_column: 0,
-    name_index: 0,
-    generated_line: 0,
-    segment_cursor: 0,
-    generated_column: 0,
-    nums: Vec::with_capacity(6),
-  }
+  SegmentIter::new(source_map.mappings())
 }
 
 pub struct SegmentIter<'a> {
-  pub mapping_str: &'a str,
-  pub generated_line: usize,
-  pub generated_column: u32,
-  pub source_index: u32,
-  pub original_line: u32,
-  pub original_column: u32,
-  pub name_index: u32,
-  pub line: &'a str,
-  pub nums: Vec<i64>,
-  pub segment_cursor: usize,
+  mapping_str: &'a str,
+  generated_line: usize,
+  generated_column: u32,
+  source_index: u32,
+  original_line: u32,
+  original_column: u32,
+  name_index: u32,
+  line: &'a str,
+  nums: Vec<i64>,
+  segment_cursor: usize,
 }
 
 impl<'a> SegmentIter<'a> {
+  pub fn new(mapping_str: &'a str) -> Self {
+    SegmentIter {
+      line: "",
+      mapping_str,
+      source_index: 0,
+      original_line: 1,
+      original_column: 0,
+      name_index: 0,
+      generated_line: 0,
+      segment_cursor: 0,
+      generated_column: 0,
+      nums: Vec::with_capacity(5),
+    }
+  }
+
   fn next_segment(&mut self) -> Option<&'a str> {
     if self.line.is_empty() {
       loop {
@@ -279,10 +275,9 @@ fn encode_full_mappings(mappings: &[Mapping]) -> String {
   let mut active_name = false;
   let mut initial = true;
 
-  let mut out = String::new();
   mappings.iter().fold(
-    String::with_capacity(mappings.len() * 4),
-    |acc, mapping| {
+    String::with_capacity(mappings.len() * 6),
+    |mut acc, mapping| {
       if active_mapping && current_line == mapping.generated_line {
         // A mapping is still active
         if mapping.original.is_some_and(|original| {
@@ -303,38 +298,37 @@ fn encode_full_mappings(mappings: &[Mapping]) -> String {
         }
       }
 
-      out.clear();
       if current_line < mapping.generated_line {
-        (0..mapping.generated_line - current_line).for_each(|_| out.push(';'));
+        (0..mapping.generated_line - current_line).for_each(|_| acc.push(';'));
         current_line = mapping.generated_line;
         current_column = 0;
         initial = false;
       } else if initial {
         initial = false;
       } else {
-        out.push(',');
+        acc.push(',');
       }
 
-      encode(&mut out, mapping.generated_column, current_column);
+      encode(&mut acc, mapping.generated_column, current_column);
       current_column = mapping.generated_column;
       if let Some(original) = &mapping.original {
         active_mapping = true;
         if original.source_index == current_source_index {
-          out.push('A');
+          acc.push('A');
         } else {
-          encode(&mut out, original.source_index, current_source_index);
+          encode(&mut acc, original.source_index, current_source_index);
           current_source_index = original.source_index;
         }
-        encode(&mut out, original.original_line, current_original_line);
+        encode(&mut acc, original.original_line, current_original_line);
         current_original_line = original.original_line;
         if original.original_column == current_original_column {
-          out.push('A');
+          acc.push('A');
         } else {
-          encode(&mut out, original.original_column, current_original_column);
+          encode(&mut acc, original.original_column, current_original_column);
           current_original_column = original.original_column;
         }
         if let Some(name_index) = original.name_index {
-          encode(&mut out, name_index, current_name_index);
+          encode(&mut acc, name_index, current_name_index);
           current_name_index = name_index;
           active_name = true;
         } else {
@@ -343,7 +337,7 @@ fn encode_full_mappings(mappings: &[Mapping]) -> String {
       } else {
         active_mapping = false;
       }
-      acc + &out
+      acc
     },
   )
 }

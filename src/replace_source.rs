@@ -220,10 +220,6 @@ impl<T: std::fmt::Debug> std::fmt::Debug for ReplaceSource<T> {
 }
 
 impl<T: Source> StreamChunks for ReplaceSource<T> {
-  fn mappings_size_hint(&self) -> usize {
-    self.replacements.lock().unwrap().len() * 2
-  }
-
   fn stream_chunks(
     &self,
     options: &crate::MapOptions,
@@ -241,12 +237,11 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
     let mut generated_line_offset: i64 = 0;
     let mut generated_column_offset: i64 = 0;
     let mut generated_column_offset_line = 0;
-    let source_content_lines: RefCell<Vec<Option<Vec<WithIndices<String>>>>> =
+    let source_content_lines: RefCell<Vec<Option<Vec<String>>>> =
       RefCell::new(Vec::new());
     let name_mapping: RefCell<HashMap<String, u32>> =
       RefCell::new(HashMap::default());
-    let name_index_mapping: RefCell<HashMap<u32, u32>> =
-      RefCell::new(HashMap::default());
+    let name_index_mapping: RefCell<Vec<u32>> = RefCell::new(Vec::new());
 
     // check if source_content[line][col] is equal to expect
     // Why this is needed?
@@ -280,7 +275,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
           source_content_lines.borrow().get(source_index as usize)
         {
           if let Some(content_line) = content_lines.get(line as usize - 1) {
-            content_line.substring(
+            WithIndices::new(content_line).substring(
               column as usize,
               column as usize + expected_chunk.len(),
             ) == expected_chunk
@@ -373,7 +368,10 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
                     original_line: original.original_line,
                     original_column: original.original_column,
                     name_index: original.name_index.and_then(|name_index| {
-                      name_index_mapping.borrow().get(&name_index).copied()
+                      name_index_mapping
+                        .borrow()
+                        .get(name_index as usize)
+                        .copied()
                     }),
                   }
                 }),
@@ -553,7 +551,10 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
                   original_line: original.original_line,
                   original_column: original.original_column,
                   name_index: original.name_index.and_then(|name_index| {
-                    name_index_mapping.borrow().get(&name_index).copied()
+                    name_index_mapping
+                      .borrow()
+                      .get(name_index as usize)
+                      .copied()
                   }),
                 }
               }),
@@ -571,7 +572,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
           source_content.map(|source_content| {
             split_into_lines(source_content)
               .into_iter()
-              .map(|line| WithIndices::new(line.into()))
+              .map(|line| line.to_string())
               .collect()
           });
         on_source(source_index, source, source_content);
