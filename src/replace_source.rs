@@ -592,7 +592,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
         };
         name_index_mapping
           .borrow_mut()
-          .insert(name_index, global_index);
+          .insert(name_index as usize, global_index);
       },
     );
 
