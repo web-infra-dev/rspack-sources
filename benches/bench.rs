@@ -63,7 +63,16 @@ fn benchmark_concat_generate_string(b: &mut Bencher) {
     remove_original_source: false,
   });
 
-  let concat = ConcatSource::new([sms_minify, sms_rollup]);
+  let antd_minify = SourceMapSource::new(SourceMapSourceOptions {
+    value: ANTD_MIN_JS,
+    name: "antd.min.js",
+    source_map: SourceMap::from_json(ANTD_MIN_JS_MAP).unwrap(),
+    original_source: None,
+    inner_source_map: None,
+    remove_original_source: false,
+  });
+
+  let concat = ConcatSource::new([sms_minify, sms_rollup, antd_minify]);
 
   b.iter(|| {
     concat
