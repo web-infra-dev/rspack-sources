@@ -1,8 +1,12 @@
 use std::{
-  borrow::Cow, cell::RefCell, collections::hash_map::Entry, hash::{Hash, Hasher}, sync::{
+  borrow::Cow,
+  cell::RefCell,
+  collections::hash_map::Entry,
+  hash::{Hash, Hasher},
+  sync::{
     atomic::{AtomicBool, Ordering},
     Arc, Mutex, MutexGuard, OnceLock,
-  }
+  },
 };
 
 use rustc_hash::FxHashMap as HashMap;
@@ -406,9 +410,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
             let mut name_mapping = name_mapping.borrow_mut();
             let len = name_mapping.len() as u32;
             let global_index = match name_mapping.entry(name.to_string()) {
-              Entry::Occupied(entry) => {
-                *entry.get()
-              },
+              Entry::Occupied(entry) => *entry.get(),
               Entry::Vacant(entry) => {
                 entry.insert(len);
                 on_name.borrow_mut()(len, name);
@@ -581,9 +583,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
         let mut name_mapping = name_mapping.borrow_mut();
         let len = name_mapping.len() as u32;
         let global_index = match name_mapping.entry(name.to_string()) {
-          Entry::Occupied(entry) => {
-            *entry.get()
-          },
+          Entry::Occupied(entry) => *entry.get(),
           Entry::Vacant(entry) => {
             entry.insert(len);
             on_name.borrow_mut()(len, name);
