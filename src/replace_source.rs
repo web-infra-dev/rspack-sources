@@ -223,10 +223,6 @@ impl<T: std::fmt::Debug> std::fmt::Debug for ReplaceSource<T> {
 }
 
 impl<T: Source> StreamChunks for ReplaceSource<T> {
-  fn mappings_size_hint(&self) -> usize {
-    self.replacements.lock().unwrap().len() * 2
-  }
-
   fn stream_chunks(
     &self,
     options: &crate::MapOptions,

@@ -22,7 +22,7 @@ pub fn get_map<S: StreamChunks>(
   stream: &S,
   options: &MapOptions,
 ) -> Option<SourceMap> {
-  let mut mappings = Vec::with_capacity(stream.mappings_size_hint());
+  let mut mappings = Vec::new();
   let mut sources: Vec<Cow<'static, str>> = Vec::new();
   let mut sources_content: Vec<Cow<'static, str>> = Vec::new();
   let mut names: Vec<Cow<'static, str>> = Vec::new();
@@ -68,11 +68,6 @@ pub fn get_map<S: StreamChunks>(
 
 /// [StreamChunks] abstraction, see [webpack-sources source.streamChunks](https://github.com/webpack/webpack-sources/blob/9f98066311d53a153fdc7c633422a1d086528027/lib/helpers/streamChunks.js#L13).
 pub trait StreamChunks {
-  /// Estimate the number of mappings in the chunk
-  fn mappings_size_hint(&self) -> usize {
-    0
-  }
-
   /// [StreamChunks] abstraction
   fn stream_chunks(
     &self,

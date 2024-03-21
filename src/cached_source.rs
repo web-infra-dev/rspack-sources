@@ -304,7 +304,7 @@ mod tests {
   fn should_produce_correct_output_for_cached_raw_source() {
     let map_options = MapOptions {
       columns: true,
-      final_source: true
+      final_source: true,
     };
 
     let source = RawSource::from("Test\nTest\nTest\n");
