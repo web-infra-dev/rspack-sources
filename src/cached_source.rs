@@ -4,7 +4,7 @@ use std::{
   sync::{Arc, OnceLock},
 };
 
-use dashmap::DashMap;
+use dashmap::{mapref::entry::Entry, DashMap};
 use rustc_hash::FxHasher;
 
 use crate::{
@@ -50,8 +50,9 @@ use crate::{
 /// ```
 pub struct CachedSource<T> {
   inner: Arc<T>,
-  cached_buffer: OnceLock<Arc<Vec<u8>>>,
-  cached_source: OnceLock<Arc<str>>,
+  cached_buffer: Arc<OnceLock<Vec<u8>>>,
+  cached_source: Arc<OnceLock<Arc<str>>>,
+  cached_size: Arc<OnceLock<usize>>,
   cached_maps:
     Arc<DashMap<MapOptions, Option<SourceMap>, BuildHasherDefault<FxHasher>>>,
 }
@@ -63,6 +64,7 @@ impl<T> CachedSource<T> {
       inner: Arc::new(inner),
       cached_buffer: Default::default(),
       cached_source: Default::default(),
+      cached_size: Default::default(),
       cached_maps: Default::default(),
     }
   }
@@ -82,14 +84,25 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
   }
 
   fn buffer(&self) -> Cow<[u8]> {
-    let cached = self
-      .cached_buffer
-      .get_or_init(|| self.inner.buffer().to_vec().into());
+    let cached = self.cached_buffer.get_or_init(|| {
+      let source = self.cached_source.get();
+      match source {
+        Some(source) => source.as_bytes().to_vec(),
+        None => self.inner.buffer().to_vec(),
+      }
+    });
     Cow::Borrowed(cached)
   }
 
   fn size(&self) -> usize {
-    self.inner.size()
+    let cached = self.cached_size.get_or_init(|| {
+      let source = self.cached_source.get();
+      match source {
+        Some(source) => source.len(),
+        None => self.inner.size(),
+      }
+    });
+    *cached
   }
 
   fn map(&self, options: &MapOptions) -> Option<SourceMap> {
@@ -117,27 +130,32 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks
     on_source: crate::helpers::OnSource,
     on_name: crate::helpers::OnName,
   ) -> crate::helpers::GeneratedInfo {
-    if self.cached_maps.contains_key(options) {
-      let source = self.source();
-      if let Some(map) = &self.map(options) {
-        return stream_chunks_of_source_map(
-          &source, map, on_chunk, on_source, on_name, options,
+    let cached_map = self.cached_maps.entry(options.clone());
+    match cached_map {
+      Entry::Occupied(entry) => {
+        let source = self.source();
+        if let Some(map) = entry.get() {
+          stream_chunks_of_source_map(
+            &source, map, on_chunk, on_source, on_name, options,
+          )
+        } else {
+          stream_chunks_of_raw_source(
+            &source, options, on_chunk, on_source, on_name,
+          )
+        }
+      }
+      Entry::Vacant(entry) => {
+        let (generated_info, map) = stream_and_get_source_and_map(
+          self.original(),
+          options,
+          on_chunk,
+          on_source,
+          on_name,
         );
-      } else {
-        return stream_chunks_of_raw_source(
-          &source, options, on_chunk, on_source, on_name,
-        );
+        entry.insert(map);
+        generated_info
       }
     }
-    let (generated_info, map) = stream_and_get_source_and_map(
-      self.original(),
-      options,
-      on_chunk,
-      on_source,
-      on_name,
-    );
-    self.cached_maps.insert(options.clone(), map);
-    generated_info
   }
 }
 
@@ -147,6 +165,7 @@ impl<T: Source> Clone for CachedSource<T> {
       inner: self.inner.clone(),
       cached_buffer: self.cached_buffer.clone(),
       cached_source: self.cached_source.clone(),
+      cached_size: self.cached_size.clone(),
       cached_maps: self.cached_maps.clone(),
     }
   }
@@ -182,8 +201,11 @@ impl<T: std::fmt::Debug> std::fmt::Debug for CachedSource<T> {
 
 #[cfg(test)]
 mod tests {
+  use std::borrow::Borrow;
+
   use crate::{
-    ConcatSource, RawSource, SourceExt, SourceMapSource, WithoutOriginalOptions,
+    ConcatSource, OriginalSource, RawSource, SourceExt, SourceMapSource,
+    WithoutOriginalOptions,
   };
 
   use super::*;
@@ -207,5 +229,128 @@ mod tests {
     ]);
     let map = source.map(&Default::default()).unwrap();
     assert_eq!(map.mappings(), ";;AACA");
+  }
+
+  #[test]
+  fn should_allow_to_store_and_share_cached_data() {
+    let original = OriginalSource::new("Hello World", "test.txt");
+    let source = CachedSource::new(original);
+    let clone = source.clone();
+
+    // fill up cache
+    let map_options = MapOptions::default();
+    source.source();
+    source.buffer();
+    source.size();
+    source.map(&map_options);
+
+    assert_eq!(clone.cached_source.get().unwrap().borrow(), source.source());
+    assert_eq!(
+      *clone.cached_buffer.get().unwrap(),
+      source.buffer().to_vec()
+    );
+    assert_eq!(*clone.cached_size.get().unwrap(), source.size());
+    assert_eq!(
+      *clone.cached_maps.get(&map_options).unwrap().value(),
+      source.map(&map_options)
+    );
+  }
+
+  #[test]
+  fn should_return_the_correct_size_for_binary_files() {
+    let source = OriginalSource::new(
+      String::from_utf8(vec![0; 256]).unwrap(),
+      "file.wasm",
+    );
+    let cached_source = CachedSource::new(source);
+
+    assert_eq!(cached_source.size(), 256);
+    assert_eq!(cached_source.size(), 256);
+  }
+
+  #[test]
+  fn should_return_the_correct_size_for_cached_binary_files() {
+    let source = OriginalSource::new(
+      String::from_utf8(vec![0; 256]).unwrap(),
+      "file.wasm",
+    );
+    let cached_source = CachedSource::new(source);
+
+    cached_source.source();
+    assert_eq!(cached_source.size(), 256);
+    assert_eq!(cached_source.size(), 256);
+  }
+
+  #[test]
+  fn should_return_the_correct_size_for_text_files() {
+    let source = OriginalSource::new("TestTestTest", "file.js");
+    let cached_source = CachedSource::new(source);
+
+    assert_eq!(cached_source.size(), 12);
+    assert_eq!(cached_source.size(), 12);
+  }
+
+  #[test]
+  fn should_return_the_correct_size_for_cached_text_files() {
+    let source = OriginalSource::new("TestTestTest", "file.js");
+    let cached_source = CachedSource::new(source);
+
+    cached_source.source();
+    assert_eq!(cached_source.size(), 12);
+    assert_eq!(cached_source.size(), 12);
+  }
+
+  #[test]
+  fn should_produce_correct_output_for_cached_raw_source() {
+    let map_options = MapOptions {
+      columns: true,
+      final_source: true,
+    };
+
+    let source = RawSource::from("Test\nTest\nTest\n");
+    let mut on_chunk_count = 0;
+    let mut on_source_count = 0;
+    let mut on_name_count = 0;
+    let generated_info = source.stream_chunks(
+      &map_options,
+      &mut |_chunk, _mapping| {
+        on_chunk_count += 1;
+      },
+      &mut |_source_index, _source, _source_content| {
+        on_source_count += 1;
+      },
+      &mut |_name_index, _name| {
+        on_name_count += 1;
+      },
+    );
+
+    let cached_source = CachedSource::new(source);
+    cached_source.stream_chunks(
+      &map_options,
+      &mut |_chunk, _mapping| {},
+      &mut |_source_index, _source, _source_content| {},
+      &mut |_name_index, _name| {},
+    );
+
+    let mut cached_on_chunk_count = 0;
+    let mut cached_on_source_count = 0;
+    let mut cached_on_name_count = 0;
+    let cached_generated_info = cached_source.stream_chunks(
+      &map_options,
+      &mut |_chunk, _mapping| {
+        cached_on_chunk_count += 1;
+      },
+      &mut |_source_index, _source, _source_content| {
+        cached_on_source_count += 1;
+      },
+      &mut |_name_index, _name| {
+        cached_on_name_count += 1;
+      },
+    );
+
+    assert_eq!(on_chunk_count, cached_on_chunk_count);
+    assert_eq!(on_source_count, cached_on_source_count);
+    assert_eq!(on_name_count, cached_on_name_count);
+    assert_eq!(generated_info, cached_generated_info);
   }
 }

@@ -183,7 +183,8 @@ impl StreamChunks for SourceMapSource {
 #[cfg(test)]
 mod tests {
   use crate::{
-    ConcatSource, OriginalSource, RawSource, ReplaceSource, SourceExt,
+    CachedSource, ConcatSource, OriginalSource, RawSource, ReplaceSource,
+    SourceExt,
   };
 
   use super::*;
@@ -421,6 +422,24 @@ mod tests {
       map.mappings(),
       "AAAA;AAAA;ACAA,ICAA,EDAA,ECAA,EFAA;AEAA,EFAA;ACAA",
     );
+
+    macro_rules! test_cached {
+      ($s:expr, $fn:expr) => {{
+        let c = CachedSource::new($s.clone());
+        let o = $fn(&$s);
+        let a = $fn(&c);
+        assert_eq!(a, o);
+        let b = $fn(&c);
+        assert_eq!(b, o);
+      }};
+    }
+
+    test_cached!(source, |s: &dyn Source| s.source().to_string());
+    test_cached!(source, |s: &dyn Source| s.map(&MapOptions::default()));
+    test_cached!(source, |s: &dyn Source| s.map(&MapOptions {
+      columns: false,
+      final_source: true
+    }));
   }
 
   #[test]
