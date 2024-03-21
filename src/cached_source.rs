@@ -4,7 +4,7 @@ use std::{
   sync::{Arc, OnceLock},
 };
 
-use dashmap::DashMap;
+use dashmap::{mapref::entry::Entry, DashMap};
 use rustc_hash::FxHasher;
 
 use crate::{
@@ -130,27 +130,32 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks
     on_source: crate::helpers::OnSource,
     on_name: crate::helpers::OnName,
   ) -> crate::helpers::GeneratedInfo {
-    if self.cached_maps.contains_key(options) {
-      let source = self.source();
-      if let Some(map) = &self.map(options) {
-        return stream_chunks_of_source_map(
-          &source, map, on_chunk, on_source, on_name, options,
-        );
-      } else {
-        return stream_chunks_of_raw_source(
-          &source, options, on_chunk, on_source, on_name,
-        );
-      }
+    let cached_map = self.cached_maps.entry(options.clone());
+    match cached_map {
+        Entry::Occupied(entry) => {
+          let source = self.source();
+          if let Some(map) = entry.get() {
+            stream_chunks_of_source_map(
+              &source, map, on_chunk, on_source, on_name, options,
+            )
+          } else {
+            stream_chunks_of_raw_source(
+              &source, options, on_chunk, on_source, on_name,
+            )
+          }
+        },
+        Entry::Vacant(entry) => {
+          let (generated_info, map) = stream_and_get_source_and_map(
+            self.original(),
+            options,
+            on_chunk,
+            on_source,
+            on_name,
+          );
+          entry.insert(map);
+          generated_info
+        },
     }
-    let (generated_info, map) = stream_and_get_source_and_map(
-      self.original(),
-      options,
-      on_chunk,
-      on_source,
-      on_name,
-    );
-    self.cached_maps.insert(options.clone(), map);
-    generated_info
   }
 }
 
@@ -249,5 +254,55 @@ mod tests {
       *clone.cached_maps.get(&map_options).unwrap().value(),
       source.map(&map_options)
     );
+  }
+
+  #[test]
+  fn should_return_the_correct_size_for_binary_files() {
+    let source = OriginalSource::new(
+      String::from_utf8(vec![0; 256]).unwrap(),
+      "file.wasm",
+    );
+		let cached_source = CachedSource::new(source);
+
+		assert_eq!(cached_source.size(), 256);
+		assert_eq!(cached_source.size(), 256);
+  }
+
+  #[test]
+  fn should_return_the_correct_size_for_cached_binary_files() {
+    let source = OriginalSource::new(
+      String::from_utf8(vec![0; 256]).unwrap(),
+      "file.wasm",
+    );
+		let cached_source = CachedSource::new(source);
+
+    cached_source.source();
+		assert_eq!(cached_source.size(), 256);
+		assert_eq!(cached_source.size(), 256);
+  }
+
+  #[test]
+  fn should_return_the_correct_size_for_text_files() {
+    let source = OriginalSource::new(
+      "TestTestTest",
+      "file.js"
+    );
+		let cached_source = CachedSource::new(source);
+
+		assert_eq!(cached_source.size(), 12);
+		assert_eq!(cached_source.size(), 12);
+  }
+
+  #[test]
+  fn should_return_the_correct_size_for_cached_text_files() {
+    let source = OriginalSource::new(
+      "TestTestTest",
+      "file.js"
+    );
+		let cached_source = CachedSource::new(source);
+
+    cached_source.source();
+		assert_eq!(cached_source.size(), 12);
+		assert_eq!(cached_source.size(), 12);
   }
 }
