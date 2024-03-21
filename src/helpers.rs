@@ -121,7 +121,7 @@ pub fn stream_chunks_default<S: Source>(
 }
 
 /// `GeneratedSourceInfo` abstraction, see [webpack-sources GeneratedSourceInfo](https://github.com/webpack/webpack-sources/blob/9f98066311d53a153fdc7c633422a1d086528027/lib/helpers/getGeneratedSourceInfo.js)
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct GeneratedInfo {
   /// Generated line
   pub generated_line: u32,
@@ -525,11 +525,15 @@ pub fn get_generated_source_info(source: &str) -> GeneratedInfo {
 
 pub fn stream_chunks_of_raw_source(
   source: &str,
-  _options: &MapOptions,
+  options: &MapOptions,
   on_chunk: OnChunk,
   _on_source: OnSource,
   _on_name: OnName,
 ) -> GeneratedInfo {
+  if options.final_source {
+    return get_generated_source_info(source);
+  }
+
   let mut line = 1;
   let mut last_line = None;
   for l in split_into_lines(source) {

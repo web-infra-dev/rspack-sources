@@ -132,29 +132,29 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks
   ) -> crate::helpers::GeneratedInfo {
     let cached_map = self.cached_maps.entry(options.clone());
     match cached_map {
-        Entry::Occupied(entry) => {
-          let source = self.source();
-          if let Some(map) = entry.get() {
-            stream_chunks_of_source_map(
-              &source, map, on_chunk, on_source, on_name, options,
-            )
-          } else {
-            stream_chunks_of_raw_source(
-              &source, options, on_chunk, on_source, on_name,
-            )
-          }
-        },
-        Entry::Vacant(entry) => {
-          let (generated_info, map) = stream_and_get_source_and_map(
-            self.original(),
-            options,
-            on_chunk,
-            on_source,
-            on_name,
-          );
-          entry.insert(map);
-          generated_info
-        },
+      Entry::Occupied(entry) => {
+        let source = self.source();
+        if let Some(map) = entry.get() {
+          stream_chunks_of_source_map(
+            &source, map, on_chunk, on_source, on_name, options,
+          )
+        } else {
+          stream_chunks_of_raw_source(
+            &source, options, on_chunk, on_source, on_name,
+          )
+        }
+      }
+      Entry::Vacant(entry) => {
+        let (generated_info, map) = stream_and_get_source_and_map(
+          self.original(),
+          options,
+          on_chunk,
+          on_source,
+          on_name,
+        );
+        entry.insert(map);
+        generated_info
+      }
     }
   }
 }
@@ -262,10 +262,10 @@ mod tests {
       String::from_utf8(vec![0; 256]).unwrap(),
       "file.wasm",
     );
-		let cached_source = CachedSource::new(source);
+    let cached_source = CachedSource::new(source);
 
-		assert_eq!(cached_source.size(), 256);
-		assert_eq!(cached_source.size(), 256);
+    assert_eq!(cached_source.size(), 256);
+    assert_eq!(cached_source.size(), 256);
   }
 
   #[test]
@@ -274,35 +274,83 @@ mod tests {
       String::from_utf8(vec![0; 256]).unwrap(),
       "file.wasm",
     );
-		let cached_source = CachedSource::new(source);
+    let cached_source = CachedSource::new(source);
 
     cached_source.source();
-		assert_eq!(cached_source.size(), 256);
-		assert_eq!(cached_source.size(), 256);
+    assert_eq!(cached_source.size(), 256);
+    assert_eq!(cached_source.size(), 256);
   }
 
   #[test]
   fn should_return_the_correct_size_for_text_files() {
-    let source = OriginalSource::new(
-      "TestTestTest",
-      "file.js"
-    );
-		let cached_source = CachedSource::new(source);
+    let source = OriginalSource::new("TestTestTest", "file.js");
+    let cached_source = CachedSource::new(source);
 
-		assert_eq!(cached_source.size(), 12);
-		assert_eq!(cached_source.size(), 12);
+    assert_eq!(cached_source.size(), 12);
+    assert_eq!(cached_source.size(), 12);
   }
 
   #[test]
   fn should_return_the_correct_size_for_cached_text_files() {
-    let source = OriginalSource::new(
-      "TestTestTest",
-      "file.js"
-    );
-		let cached_source = CachedSource::new(source);
+    let source = OriginalSource::new("TestTestTest", "file.js");
+    let cached_source = CachedSource::new(source);
 
     cached_source.source();
-		assert_eq!(cached_source.size(), 12);
-		assert_eq!(cached_source.size(), 12);
+    assert_eq!(cached_source.size(), 12);
+    assert_eq!(cached_source.size(), 12);
+  }
+
+  #[test]
+  fn should_produce_correct_output_for_cached_raw_source() {
+    let map_options = MapOptions {
+      columns: true,
+      final_source: true
+    };
+
+    let source = RawSource::from("Test\nTest\nTest\n");
+    let mut on_chunk_count = 0;
+    let mut on_source_count = 0;
+    let mut on_name_count = 0;
+    let generated_info = source.stream_chunks(
+      &map_options,
+      &mut |_chunk, _mapping| {
+        on_chunk_count += 1;
+      },
+      &mut |_source_index, _source, _source_content| {
+        on_source_count += 1;
+      },
+      &mut |_name_index, _name| {
+        on_name_count += 1;
+      },
+    );
+
+    let cached_source = CachedSource::new(source);
+    cached_source.stream_chunks(
+      &map_options,
+      &mut |_chunk, _mapping| {},
+      &mut |_source_index, _source, _source_content| {},
+      &mut |_name_index, _name| {},
+    );
+
+    let mut cached_on_chunk_count = 0;
+    let mut cached_on_source_count = 0;
+    let mut cached_on_name_count = 0;
+    let cached_generated_info = cached_source.stream_chunks(
+      &map_options,
+      &mut |_chunk, _mapping| {
+        cached_on_chunk_count += 1;
+      },
+      &mut |_source_index, _source, _source_content| {
+        cached_on_source_count += 1;
+      },
+      &mut |_name_index, _name| {
+        cached_on_name_count += 1;
+      },
+    );
+
+    assert_eq!(on_chunk_count, cached_on_chunk_count);
+    assert_eq!(on_source_count, cached_on_source_count);
+    assert_eq!(on_name_count, cached_on_name_count);
+    assert_eq!(generated_info, cached_generated_info);
   }
 }
