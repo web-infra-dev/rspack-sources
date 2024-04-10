@@ -84,13 +84,9 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
   }
 
   fn buffer(&self) -> Cow<[u8]> {
-    let cached = self.cached_buffer.get_or_init(|| {
-      let source = self.cached_source.get();
-      match source {
-        Some(source) => source.as_bytes().to_vec(),
-        None => self.inner.buffer().to_vec(),
-      }
-    });
+    let cached = self
+      .cached_buffer
+      .get_or_init(|| self.inner.buffer().to_vec());
     Cow::Borrowed(cached)
   }
 
@@ -352,5 +348,14 @@ mod tests {
     assert_eq!(on_source_count, cached_on_source_count);
     assert_eq!(on_name_count, cached_on_name_count);
     assert_eq!(generated_info, cached_generated_info);
+  }
+
+  #[test]
+  fn should_have_correct_buffer_if_cache_buffer_from_cache_source() {
+    let buf = vec![128u8];
+    let source = CachedSource::new(RawSource::from(buf.clone()));
+
+    source.source();
+    assert_eq!(source.buffer(), buf.as_slice());
   }
 }
