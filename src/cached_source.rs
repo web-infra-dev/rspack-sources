@@ -102,12 +102,15 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
   }
 
   fn map(&self, options: &MapOptions) -> Option<SourceMap> {
-    if let Some(map) = self.cached_maps.get(options) {
-      map.clone()
-    } else {
-      let map = self.inner.map(options);
-      self.cached_maps.insert(options.clone(), map.clone());
-      map
+    match self.cached_maps.entry(options.clone()) {
+      Entry::Occupied(entry) => {
+        entry.get().clone()
+      },
+      Entry::Vacant(entry) => {
+        let map = self.inner.map(options);
+        entry.insert(map.clone());
+        map
+      },
     }
   }
 
@@ -115,8 +118,19 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
     self.inner.to_writer(writer)
   }
 
-  fn r#type(&self) -> &'static str {
-    "CachedSource"
+  fn is_cached_source(&self) -> bool {
+    true
+  }
+
+  fn is_cached(&self, options: &MapOptions) -> bool {
+    self.cached_maps.contains_key(options)
+  }
+
+  fn ensure_cache(&self, options: &MapOptions) {
+    if let Entry::Vacant(entry) = self.cached_maps.entry(options.clone()) {
+      let map = self.inner.map(options);
+      entry.insert(map);
+    };
   }
 }
 

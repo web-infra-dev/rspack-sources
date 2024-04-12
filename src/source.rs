@@ -43,8 +43,19 @@ pub trait Source:
   /// Writes the source into a writer, preferably a `std::io::BufWriter<std::io::Write>`.
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()>;
 
-  /// Get the type of the source.
-  fn r#type(&self) -> &'static str;
+  /// Returns true if the source is CachedSource, false otherwise.
+  fn is_cached_source(&self) -> bool {
+    false
+  }
+
+  /// Returns true if the source is cached, false otherwise.
+  fn is_cached(&self, _: &MapOptions) -> bool {
+    false
+  }
+
+  /// Ensures that all necessary cache data is built and stored using the provided map options.
+  fn ensure_cache(&self, _: &MapOptions) {
+  }
 }
 
 impl Source for BoxSource {
@@ -68,8 +79,16 @@ impl Source for BoxSource {
     self.as_ref().to_writer(writer)
   }
 
-  fn r#type(&self) -> &'static str {
-    return self.as_ref().r#type();
+  fn is_cached_source(&self) -> bool {
+    self.as_ref().is_cached_source()
+  }
+
+  fn is_cached(&self, options: &MapOptions) -> bool {
+    self.as_ref().is_cached(options)
+  }
+
+  fn ensure_cache(&self, options: &MapOptions) {
+    self.as_ref().ensure_cache(options);
   }
 }
 

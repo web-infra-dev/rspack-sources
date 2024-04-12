@@ -70,10 +70,6 @@ impl Source for OriginalSource {
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
     writer.write_all(self.value.as_bytes())
   }
-
-  fn r#type(&self) -> &'static str {
-    "OriginalSource"
-  }
 }
 
 impl Hash for OriginalSource {
