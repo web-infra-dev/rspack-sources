@@ -8,7 +8,9 @@ use rayon::prelude::*;
 use rustc_hash::FxHashMap as HashMap;
 
 use crate::{
-  helpers::{get_map, GeneratedInfo, OnChunk, OnName, OnSource, StreamChunks}, source::{Mapping, OriginalLocation}, BoxSource, MapOptions, Source, SourceExt, SourceMap
+  helpers::{get_map, GeneratedInfo, OnChunk, OnName, OnSource, StreamChunks},
+  source::{Mapping, OriginalLocation},
+  BoxSource, MapOptions, Source, SourceExt, SourceMap,
 };
 
 /// Concatenate multiple [Source]s to a single [Source].
@@ -161,12 +163,16 @@ impl StreamChunks for ConcatSource {
         .stream_chunks(options, on_chunk, on_source, on_name);
     }
 
+    // Concurrently preprocess maps for child items of type `CachedSource` if  `final_source` option is enabled.
     if options.final_source {
-      self.children().par_iter().for_each(|item| {
-        if item.r#type() == "CachedSource" {
+      self
+        .children()
+        .iter()
+        .filter(|item| item.r#type() == "CachedSource")
+        .par_bridge()
+        .for_each(|item| {
           item.map(options);
-        }
-      });
+        });
     }
 
     let mut current_line_offset = 0;
