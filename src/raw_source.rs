@@ -95,6 +95,10 @@ impl Source for RawSource {
       RawSource::Source(i) => i.as_bytes(),
     })
   }
+
+  fn r#type(&self) -> &'static str {
+    "RawSource"
+  }
 }
 
 impl Hash for RawSource {

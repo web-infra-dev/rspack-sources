@@ -31,6 +31,10 @@ impl Source for CompatSource {
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
     writer.write_all(self.0.as_bytes())
   }
+
+  fn r#type(&self) -> &'static str {
+    "CompatSource"
+  }
 }
 
 impl StreamChunks for CompatSource {

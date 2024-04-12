@@ -197,6 +197,10 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for ReplaceSource<T> {
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
     writer.write_all(self.source().as_bytes())
   }
+
+  fn r#type(&self) -> &'static str {
+    "ReplaceSource"
+  }
 }
 
 impl<T: std::fmt::Debug> std::fmt::Debug for ReplaceSource<T> {

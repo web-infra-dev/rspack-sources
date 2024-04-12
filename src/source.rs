@@ -41,6 +41,9 @@ pub trait Source:
 
   /// Writes the source into a writer, preferably a `std::io::BufWriter<std::io::Write>`.
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()>;
+
+  /// Get the type of the source.
+  fn r#type(&self) -> &'static str;
 }
 
 impl Source for BoxSource {
@@ -62,6 +65,10 @@ impl Source for BoxSource {
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
     self.as_ref().to_writer(writer)
+  }
+
+  fn r#type(&self) -> &'static str {
+    return self.as_ref().r#type();
   }
 }
 

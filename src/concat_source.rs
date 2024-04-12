@@ -4,12 +4,11 @@ use std::{
   hash::{Hash, Hasher},
 };
 
+use rayon::prelude::*;
 use rustc_hash::FxHashMap as HashMap;
 
 use crate::{
-  helpers::{get_map, GeneratedInfo, OnChunk, OnName, OnSource, StreamChunks},
-  source::{Mapping, OriginalLocation},
-  BoxSource, MapOptions, Source, SourceExt, SourceMap,
+  helpers::{get_map, GeneratedInfo, OnChunk, OnName, OnSource, StreamChunks}, source::{Mapping, OriginalLocation}, BoxSource, MapOptions, Source, SourceExt, SourceMap
 };
 
 /// Concatenate multiple [Source]s to a single [Source].
@@ -127,6 +126,10 @@ impl Source for ConcatSource {
     }
     Ok(())
   }
+
+  fn r#type(&self) -> &'static str {
+    "ConcatSource"
+  }
 }
 
 impl Hash for ConcatSource {
@@ -157,6 +160,15 @@ impl StreamChunks for ConcatSource {
       return self.children()[0]
         .stream_chunks(options, on_chunk, on_source, on_name);
     }
+
+    if options.final_source {
+      self.children().par_iter().for_each(|item| {
+        if item.r#type() == "CachedSource" {
+          item.map(options);
+        }
+      });
+    }
+
     let mut current_line_offset = 0;
     let mut current_column_offset = 0;
     let mut source_mapping: HashMap<String, u32> = HashMap::default();
