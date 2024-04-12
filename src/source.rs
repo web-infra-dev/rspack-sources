@@ -1,10 +1,11 @@
 use std::{
   any::{Any, TypeId},
   borrow::Cow,
+  cell::OnceCell,
   convert::{TryFrom, TryInto},
   fmt,
   hash::{Hash, Hasher},
-  sync::Arc,
+  sync::{Arc, OnceLock},
 };
 
 use dyn_clone::DynClone;
@@ -186,7 +187,7 @@ impl MapOptions {
 }
 
 /// The source map created by [Source::map].
-#[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SourceMap {
   file: Option<String>,
   mappings: String,
@@ -194,6 +195,18 @@ pub struct SourceMap {
   sources_content: Vec<Cow<'static, str>>,
   names: Vec<Cow<'static, str>>,
   source_root: Option<String>,
+  decoded_mappings: OnceLock<Vec<Mapping>>,
+}
+
+impl Hash for SourceMap {
+  fn hash<H: Hasher>(&self, state: &mut H) {
+    self.file.hash(state);
+    self.mappings.hash(state);
+    self.sources.hash(state);
+    self.sources_content.hash(state);
+    self.names.hash(state);
+    self.source_root.hash(state);
+  }
 }
 
 impl SourceMap {
@@ -212,6 +225,7 @@ impl SourceMap {
       sources_content,
       names,
       source_root: None,
+      decoded_mappings: Default::default(),
     }
   }
 
@@ -227,7 +241,11 @@ impl SourceMap {
 
   /// Get the decoded mappings in [SourceMap].
   pub fn decoded_mappings(&'_ self) -> impl IntoIterator<Item = Mapping> + '_ {
-    decode_mappings(self)
+    self
+      .decoded_mappings
+      .get_or_init(|| decode_mappings(self).collect::<Vec<_>>())
+      .clone()
+      .into_iter()
   }
 
   /// Get the mappings string in [SourceMap].
@@ -419,6 +437,7 @@ impl TryFrom<RawSourceMap> for SourceMap {
       sources_content,
       names,
       source_root: raw.source_root,
+      decoded_mappings: Default::default(),
     })
   }
 }
