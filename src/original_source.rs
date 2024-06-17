@@ -214,12 +214,12 @@ impl StreamChunks for OriginalSource {
         last_line.filter(|last_line| !last_line.ends_with('\n'))
       {
         GeneratedInfo {
-          generated_line: line,
+          generated_line: line - 1,
           generated_column: last_line.len() as u32,
         }
       } else {
         GeneratedInfo {
-          generated_line: line + 1,
+          generated_line: line,
           generated_column: 0,
         }
       }
@@ -229,6 +229,8 @@ impl StreamChunks for OriginalSource {
 
 #[cfg(test)]
 mod tests {
+  use crate::{ConcatSource, ReplaceSource, SourceExt};
+
   use super::*;
 
   #[test]
@@ -300,5 +302,20 @@ mod tests {
       source.map(&MapOptions::new(false)).unwrap().mappings(),
       "AAAA;AACA",
     );
+  }
+
+  // Fix https://github.com/web-infra-dev/rspack/issues/6793
+  #[test]
+  fn fix_rspack_issue_6793() {
+    let code1 = "hello\n\n";
+    let source1 = OriginalSource::new(code1, "hello.txt");
+    let source1 = ReplaceSource::new(source1);
+
+    let code2 = "world";
+    let source2 = OriginalSource::new(code2, "world.txt");
+
+    let concat = ConcatSource::new([source1.boxed(), source2.boxed()]);
+    let map = concat.map(&MapOptions::new(false)).unwrap();
+    assert_eq!(map.mappings(), "AAAA;AACA;ACDA",);
   }
 }

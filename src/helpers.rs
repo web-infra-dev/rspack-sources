@@ -546,12 +546,12 @@ pub fn stream_chunks_of_raw_source(
     last_line.filter(|last_line| !last_line.ends_with('\n'))
   {
     GeneratedInfo {
-      generated_line: line,
+      generated_line: line - 1,
       generated_column: last_line.len() as u32,
     }
   } else {
     GeneratedInfo {
-      generated_line: line + 1,
+      generated_line: line,
       generated_column: 0,
     }
   }
