@@ -161,7 +161,7 @@ impl StreamChunks for ConcatSource {
     let mut current_column_offset = 0;
     let mut source_mapping: HashMap<String, u32> = HashMap::default();
     let mut name_mapping: HashMap<String, u32> = HashMap::default();
-    let mut need_to_cloas_mapping = false;
+    let mut need_to_close_mapping = false;
     for item in self.children() {
       let source_index_mapping: RefCell<HashMap<u32, u32>> =
         RefCell::new(HashMap::default());
@@ -180,7 +180,7 @@ impl StreamChunks for ConcatSource {
           } else {
             mapping.generated_column
           };
-          if need_to_cloas_mapping {
+          if need_to_close_mapping {
             if mapping.generated_line != 1 || mapping.generated_column != 0 {
               on_chunk(
                 None,
@@ -191,7 +191,7 @@ impl StreamChunks for ConcatSource {
                 },
               );
             }
-            need_to_cloas_mapping = false;
+            need_to_close_mapping = false;
           }
           let result_source_index =
             mapping.original.as_ref().and_then(|original| {
@@ -282,7 +282,7 @@ impl StreamChunks for ConcatSource {
             .insert(i, global_index.unwrap());
         },
       );
-      if need_to_cloas_mapping && (generated_line != 1 || generated_column != 0)
+      if need_to_close_mapping && (generated_line != 1 || generated_column != 0)
       {
         on_chunk(
           None,
@@ -292,14 +292,14 @@ impl StreamChunks for ConcatSource {
             original: None,
           },
         );
-        need_to_cloas_mapping = false;
+        need_to_close_mapping = false;
       }
       if generated_line > 1 {
         current_column_offset = generated_column;
       } else {
         current_column_offset += generated_column;
       }
-      need_to_cloas_mapping = need_to_cloas_mapping
+      need_to_close_mapping = need_to_close_mapping
         || (options.final_source && last_mapping_line == generated_line);
       current_line_offset += generated_line - 1;
     }
@@ -312,7 +312,11 @@ impl StreamChunks for ConcatSource {
 
 #[cfg(test)]
 mod tests {
-  use crate::{OriginalSource, RawSource};
+  use std::{fs::File, io::Write};
+
+use serde_json::Map;
+
+use crate::{source_map_source, OriginalSource, RawSource, ReplaceSource, SourceMapSource, WithoutOriginalOptions};
 
   use super::*;
 
@@ -462,5 +466,77 @@ mod tests {
     ]);
     assert_eq!(source.source(), "abc");
     assert!(source.map(&MapOptions::default()).is_none());
+  }
+
+  #[test]
+  fn test1() {
+    let code1 = include_str!(concat!(
+      env!("CARGO_MANIFEST_DIR"),
+      "/tests/fixtures/dev-server.js"
+    ));
+    let map1 = SourceMap::from_json(include_str!(concat!(
+      env!("CARGO_MANIFEST_DIR"),
+      "/tests/fixtures/dev-server.js.map"
+    )))
+    .unwrap();
+    let code2 = include_str!(concat!(
+      env!("CARGO_MANIFEST_DIR"),
+      "/tests/fixtures/emitter.js"
+    ));
+    let map2 = SourceMap::from_json(include_str!(concat!(
+      env!("CARGO_MANIFEST_DIR"),
+      "/tests/fixtures/emitter.js.map"
+    )))
+    .unwrap();
+
+    let source_map_source1 = OriginalSource::new(code1, "dev-server.js");
+    let mut code_file = File::create(concat!(
+      env!("CARGO_MANIFEST_DIR"),
+      "/tests/fixtures/result-origin.js"
+    )).unwrap();
+    code_file.write_all(source_map_source1.source().as_bytes());
+    let mut map_file = File::create(concat!(
+      env!("CARGO_MANIFEST_DIR"),
+      "/tests/fixtures/result-origin.js.map"
+    )).unwrap();
+    map_file.write_all(source_map_source1.map(&MapOptions::new(false)).unwrap().to_json().unwrap().as_bytes());
+
+    let mut source_map_source1 = ReplaceSource::new(source_map_source1);
+    // source_map_source1.replace(136, 146, "true", None);
+
+    let mut code_file = File::create(concat!(
+      env!("CARGO_MANIFEST_DIR"),
+      "/tests/fixtures/result-replaced.js"
+    )).unwrap();
+    code_file.write_all(source_map_source1.source().as_bytes());
+    let mut map_file = File::create(concat!(
+      env!("CARGO_MANIFEST_DIR"),
+      "/tests/fixtures/result-replaced.js.map"
+    )).unwrap();
+    map_file.write_all(source_map_source1.map(&MapOptions::new(false)).unwrap().to_json().unwrap().as_bytes());
+
+
+    let source_map_source2 = OriginalSource::new(code2, "emitter.js");
+
+    let source_map_source1 = ConcatSource::new([
+      RawSource::Source("(function (module, __unused_webpack_exports, __web".to_string()).boxed() ,
+      source_map_source1.boxed(),
+      RawSource::Source("\n\n})".to_string()).boxed(),
+      RawSource::Source(",\n".to_string()).boxed(),
+    ]);
+
+    let concat_source = ConcatSource::new([source_map_source1.boxed(), source_map_source2.boxed()]);
+    let map = concat_source.map(&MapOptions::new(false)).unwrap();
+    let source = concat_source.source();
+    let mut code_file = File::create(concat!(
+      env!("CARGO_MANIFEST_DIR"),
+      "/tests/fixtures/result.js"
+    )).unwrap();
+    code_file.write_all(source.as_bytes());
+    let mut map_file = File::create(concat!(
+      env!("CARGO_MANIFEST_DIR"),
+      "/tests/fixtures/result.js.map"
+    )).unwrap();
+    map_file.write_all(map.to_json().unwrap().as_bytes());
   }
 }
