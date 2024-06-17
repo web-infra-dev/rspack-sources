@@ -312,11 +312,7 @@ impl StreamChunks for ConcatSource {
 
 #[cfg(test)]
 mod tests {
-  use std::{fs::File, io::Write};
-
-use serde_json::Map;
-
-use crate::{source_map_source, OriginalSource, RawSource, ReplaceSource, SourceMapSource, WithoutOriginalOptions};
+use crate::{OriginalSource, RawSource};
 
   use super::*;
 
