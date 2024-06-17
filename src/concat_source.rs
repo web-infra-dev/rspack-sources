@@ -162,11 +162,15 @@ impl StreamChunks for ConcatSource {
     let mut source_mapping: HashMap<String, u32> = HashMap::default();
     let mut name_mapping: HashMap<String, u32> = HashMap::default();
     let mut need_to_close_mapping = false;
+
+    let source_index_mapping: RefCell<HashMap<u32, u32>> =
+      RefCell::new(HashMap::default());
+    let name_index_mapping: RefCell<HashMap<u32, u32>> =
+      RefCell::new(HashMap::default());
+
     for item in self.children() {
-      let source_index_mapping: RefCell<HashMap<u32, u32>> =
-        RefCell::new(HashMap::default());
-      let name_index_mapping: RefCell<HashMap<u32, u32>> =
-        RefCell::new(HashMap::default());
+      source_index_mapping.borrow_mut().clear();
+      name_index_mapping.borrow_mut().clear();
       let mut last_mapping_line = 0;
       let GeneratedInfo {
         generated_line,
