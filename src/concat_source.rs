@@ -312,7 +312,7 @@ impl StreamChunks for ConcatSource {
 
 #[cfg(test)]
 mod tests {
-use crate::{OriginalSource, RawSource};
+  use crate::{OriginalSource, RawSource};
 
   use super::*;
 
