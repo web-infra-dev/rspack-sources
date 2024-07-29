@@ -498,22 +498,17 @@ pub fn split_into_lines(source: &str) -> Vec<&str> {
 }
 
 pub fn get_generated_source_info(source: &str) -> GeneratedInfo {
-  let last_line_start = source.rfind('\n');
-  if let Some(last_line_start) = last_line_start {
-    let mut generated_line = 2;
-    source[0..last_line_start].chars().for_each(|c| {
-      if c == '\n' {
-        generated_line += 1;
-      }
-    });
-    return GeneratedInfo {
-      generated_line,
-      generated_column: (source.len() - last_line_start - 1) as u32,
-    };
-  }
+  let lines = split_into_lines(source);
+  let last_line = lines.last().unwrap_or(&"");
+  let (generated_line, generated_column) = if last_line.ends_with('\n') {
+    (lines.len() + 1, 0)
+  } else {
+    (lines.len().max(1), last_line.len())
+  };
+
   GeneratedInfo {
-    generated_line: 1,
-    generated_column: source.len() as u32,
+    generated_line: generated_line as u32,
+    generated_column: generated_column as u32,
   }
 }
 
