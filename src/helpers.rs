@@ -498,15 +498,15 @@ pub fn split_into_lines(source: &str) -> Vec<&str> {
 }
 
 pub fn get_generated_source_info(source: &str) -> GeneratedInfo {
-  let mut line_count = 0;
-  let mut last_line = "";
-  for line in split(source, b'\n') {
-    line_count += 1;
-    last_line = line;
-  }
-  let (generated_line, generated_column) = if last_line.ends_with('\n') {
-    (line_count + 1, 0)
+  let (generated_line, generated_column) = if source.ends_with('\n') {
+    (split(source, b'\n').count() + 1, 0)
   } else {
+    let mut line_count = 0;
+    let mut last_line = "";
+    for line in split(source, b'\n') {
+      line_count += 1;
+      last_line = line;
+    }
     (line_count.max(1), last_line.len())
   };
   GeneratedInfo {
