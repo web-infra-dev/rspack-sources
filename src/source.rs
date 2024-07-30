@@ -233,17 +233,9 @@ impl SourceMap {
 
   /// Get the decoded mappings in [SourceMap].
   pub fn decoded_mappings(&'_ self) -> &[Mapping] {
-    self.decoded_mappings.get_or_init(|| {
-      let mut decoded_mappings = Vec::with_capacity(
-        self
-          .mappings
-          .lines()
-          .filter(|line| !line.is_empty())
-          .count(),
-      );
-      decoded_mappings.extend(decode_mappings(self));
-      decoded_mappings
-    })
+    self
+      .decoded_mappings
+      .get_or_init(|| decode_mappings(self).collect::<Vec<_>>())
   }
 
   /// Get the mappings string in [SourceMap].
