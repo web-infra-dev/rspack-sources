@@ -497,7 +497,6 @@ pub fn split_into_lines(source: &str) -> Vec<&str> {
   split(source, b'\n').collect()
 }
 
-#[inline(never)]
 pub fn get_generated_source_info(source: &str) -> GeneratedInfo {
   let mut line_count = 0;
   let mut last_line = "";
