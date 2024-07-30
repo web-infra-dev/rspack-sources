@@ -1,3 +1,4 @@
+use arrayvec::ArrayVec;
 use rustc_hash::FxHashMap as HashMap;
 use std::{
   borrow::{BorrowMut, Cow},
@@ -136,7 +137,7 @@ pub struct SegmentIter<'a> {
   original_column: u32,
   name_index: u32,
   line: &'a str,
-  nums: Vec<i64>,
+  nums: ArrayVec<i64, 5>,
   segment_cursor: usize,
 }
 
@@ -152,7 +153,7 @@ impl<'a> SegmentIter<'a> {
       generated_line: 0,
       segment_cursor: 0,
       generated_column: 0,
-      nums: Vec::with_capacity(5),
+      nums: ArrayVec::new(),
     }
   }
 
