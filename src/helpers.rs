@@ -655,7 +655,7 @@ fn stream_chunks_of_source_map_final(
     }
   };
   for mapping in source_map.decoded_mappings() {
-    on_mapping(&mapping);
+    on_mapping(mapping);
   }
   result
 }
@@ -796,7 +796,7 @@ fn stream_chunks_of_source_map_full(
   };
 
   for mapping in source_map.decoded_mappings() {
-    on_mapping(&mapping);
+    on_mapping(mapping);
   }
   on_mapping(&Mapping {
     generated_line: final_line,
@@ -859,7 +859,7 @@ fn stream_chunks_of_source_map_lines_final(
     }
   };
   for mapping in source_map.decoded_mappings() {
-    on_mapping(&mapping);
+    on_mapping(mapping);
   }
   result
 }
@@ -927,7 +927,7 @@ fn stream_chunks_of_source_map_lines_full(
     }
   };
   for mapping in source_map.decoded_mappings() {
-    on_mapping(&mapping);
+    on_mapping(mapping);
   }
   while current_generated_line as usize <= lines.len() {
     on_chunk(
