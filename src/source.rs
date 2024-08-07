@@ -232,12 +232,10 @@ impl SourceMap {
   }
 
   /// Get the decoded mappings in [SourceMap].
-  pub fn decoded_mappings(&'_ self) -> impl IntoIterator<Item = Mapping> + '_ {
+  pub fn decoded_mappings(&'_ self) -> &[Mapping] {
     self
       .decoded_mappings
       .get_or_init(|| decode_mappings(self).collect::<Vec<_>>())
-      .clone()
-      .into_iter()
   }
 
   /// Get the mappings string in [SourceMap].

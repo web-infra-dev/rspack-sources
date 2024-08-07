@@ -1,3 +1,4 @@
+use arrayvec::ArrayVec;
 use rustc_hash::FxHashMap as HashMap;
 use std::{
   borrow::{BorrowMut, Cow},
@@ -136,7 +137,7 @@ pub struct SegmentIter<'a> {
   original_column: u32,
   name_index: u32,
   line: &'a str,
-  nums: Vec<i64>,
+  nums: ArrayVec<i64, 5>,
   segment_cursor: usize,
 }
 
@@ -152,7 +153,7 @@ impl<'a> SegmentIter<'a> {
       generated_line: 0,
       segment_cursor: 0,
       generated_column: 0,
-      nums: Vec::with_capacity(5),
+      nums: ArrayVec::new(),
     }
   }
 
@@ -652,7 +653,7 @@ fn stream_chunks_of_source_map_final(
     }
   };
   for mapping in source_map.decoded_mappings() {
-    on_mapping(&mapping);
+    on_mapping(mapping);
   }
   result
 }
@@ -793,7 +794,7 @@ fn stream_chunks_of_source_map_full(
   };
 
   for mapping in source_map.decoded_mappings() {
-    on_mapping(&mapping);
+    on_mapping(mapping);
   }
   on_mapping(&Mapping {
     generated_line: final_line,
@@ -856,7 +857,7 @@ fn stream_chunks_of_source_map_lines_final(
     }
   };
   for mapping in source_map.decoded_mappings() {
-    on_mapping(&mapping);
+    on_mapping(mapping);
   }
   result
 }
@@ -924,7 +925,7 @@ fn stream_chunks_of_source_map_lines_full(
     }
   };
   for mapping in source_map.decoded_mappings() {
-    on_mapping(&mapping);
+    on_mapping(mapping);
   }
   while current_generated_line as usize <= lines.len() {
     on_chunk(
