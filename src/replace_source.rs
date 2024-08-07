@@ -398,7 +398,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
           }
           // Insert replacement content split into chunks by lines
           let repl = &repls[i];
-          let lines: Vec<&str> = split_into_lines(&repl.content);
+          let lines: Vec<&str> = split_into_lines(&repl.content).collect();
           let mut replacement_name_index = mapping
             .original
             .as_ref()
@@ -600,7 +600,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
 
     // Insert remaining replacements content split into chunks by lines
     let mut line = result.generated_line as i64 + generated_line_offset;
-    let matches = split_into_lines(&remainder);
+    let matches: Vec<&str> = split_into_lines(&remainder).collect();
     for (m, content_line) in matches.iter().enumerate() {
       on_chunk(
         Some(content_line),

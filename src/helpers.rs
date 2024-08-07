@@ -493,8 +493,8 @@ fn split(haystack: &str, needle: u8) -> impl Iterator<Item = &str> {
 }
 
 // /[^\n]+\n?|\n/g
-pub fn split_into_lines(source: &str) -> Vec<&str> {
-  split(source, b'\n').collect()
+pub fn split_into_lines(source: &str) -> impl Iterator<Item = &str> {
+  split(source, b'\n')
 }
 
 pub fn get_generated_source_info(source: &str) -> GeneratedInfo {
@@ -868,7 +868,7 @@ fn stream_chunks_of_source_map_lines_full(
   on_source: OnSource,
   _on_name: OnName,
 ) -> GeneratedInfo {
-  let lines = split_into_lines(source);
+  let lines: Vec<&str> = split_into_lines(source).collect();
   if lines.is_empty() {
     return GeneratedInfo {
       generated_line: 1,
