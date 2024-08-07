@@ -570,7 +570,6 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
         source_content_lines[source_index as usize] =
           source_content.map(|source_content| {
             split_into_lines(source_content)
-              .into_iter()
               .map(|line| line.to_string())
               .collect()
           });

@@ -1099,7 +1099,6 @@ pub fn stream_chunks_of_combined_source_map(
                 {
                   Some(Rc::new(
                     split_into_lines(original_source)
-                      .into_iter()
                       .map(|s| WithIndices::new(s.into()))
                       .collect(),
                   ))
