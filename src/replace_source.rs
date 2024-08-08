@@ -43,30 +43,25 @@ pub struct ReplaceSource<T> {
   is_sorted: AtomicBool,
 }
 
-#[derive(Debug, Clone, Eq)]
+/// Enforce replacement order when two replacement start and end are both equal
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ReplacementEnforce {
+  /// pre
+  Pre,
+  /// normal
+  #[default]
+  Normal,
+  /// post
+  Post,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct Replacement {
   start: u32,
   end: u32,
   content: String,
   name: Option<String>,
-}
-
-impl Hash for Replacement {
-  fn hash<H: Hasher>(&self, state: &mut H) {
-    self.start.hash(state);
-    self.end.hash(state);
-    self.content.hash(state);
-    self.name.hash(state);
-  }
-}
-
-impl PartialEq for Replacement {
-  fn eq(&self, other: &Self) -> bool {
-    self.start == other.start
-      && self.end == other.end
-      && self.content == other.content
-      && self.name == other.name
-  }
+  enforce: ReplacementEnforce,
 }
 
 impl Replacement {
@@ -75,12 +70,14 @@ impl Replacement {
     end: u32,
     content: String,
     name: Option<String>,
+    enforce: ReplacementEnforce,
   ) -> Self {
     Self {
       start,
       end,
       content,
       name,
+      enforce,
     }
   }
 }
@@ -109,9 +106,9 @@ impl<T> ReplaceSource<T> {
     if self.is_sorted.load(Ordering::SeqCst) {
       return;
     }
-    self
-      .replacements()
-      .sort_by(|a, b| (a.start, a.end).cmp(&(b.start, b.end)));
+    self.replacements().sort_by(|a, b| {
+      (a.start, a.end, a.enforce).cmp(&(b.start, b.end, b.enforce))
+    });
     self.is_sorted.store(true, Ordering::SeqCst)
   }
 }
@@ -128,6 +125,17 @@ impl<T: Source> ReplaceSource<T> {
     self.replace(start, start, content, name)
   }
 
+  /// Insert a content at start, with ReplacementEnforce.
+  pub fn insert_with_enforce(
+    &mut self,
+    start: u32,
+    content: &str,
+    name: Option<&str>,
+    enforce: ReplacementEnforce,
+  ) {
+    self.replace_with_enforce(start, start, content, name, enforce)
+  }
+
   /// Create a replacement with content at `[start, end)`.
   pub fn replace(
     &mut self,
@@ -141,6 +149,26 @@ impl<T: Source> ReplaceSource<T> {
       end,
       content.into(),
       name.map(|s| s.into()),
+      ReplacementEnforce::Normal,
+    ));
+    self.is_sorted.store(false, Ordering::SeqCst);
+  }
+
+  /// Create a replacement with content at `[start, end)`, with ReplacementEnforce.
+  pub fn replace_with_enforce(
+    &mut self,
+    start: u32,
+    end: u32,
+    content: &str,
+    name: Option<&str>,
+    enforce: ReplacementEnforce,
+  ) {
+    self.replacements().push(Replacement::new(
+      start,
+      end,
+      content.into(),
+      name.map(|s| s.into()),
+      enforce,
     ));
     self.is_sorted.store(false, Ordering::SeqCst);
   }
@@ -676,7 +704,7 @@ impl<T: Eq> Eq for ReplaceSource<T> {}
 mod tests {
   use crate::{
     source_map_source::WithoutOriginalOptions, OriginalSource, RawSource,
-    SourceExt, SourceMapSource,
+    ReplacementEnforce, SourceExt, SourceMapSource,
   };
 
   use super::*;
@@ -1073,7 +1101,7 @@ return <div>{data.foo}</div>
     assert_eq!(source.map(&MapOptions::default()), None);
     let mut hasher = twox_hash::XxHash64::default();
     source.hash(&mut hasher);
-    assert_eq!(format!("{:x}", hasher.finish()), "e9877250d7449bc5");
+    assert_eq!(format!("{:x}", hasher.finish()), "5781cda25d360a42");
   }
 
   #[test]
@@ -1111,5 +1139,20 @@ return <div>{data.foo}</div>
         .unwrap(),
       r#"{"version":3,"sources":["file.css"],"sourcesContent":["\n\"abc\"; url(__PUBLIC_PATH__logo.png);\n\"ヒラギノ角ゴ\"; url(__PUBLIC_PATH__logo.png);\n\"游ゴシック体\"; url(__PUBLIC_PATH__logo.png);\n\"🤪\"; url(__PUBLIC_PATH__logo.png);\n\"👨‍👩‍👧‍👧\"; url(__PUBLIC_PATH__logo.png);\n"],"names":[],"mappings":";AACA,OAAO,IAAI,GAAe;AAC1B,sBAAsB;AACtB,sBAAsB;AACtB,QAAQ;AACR,6BAA6B"}"#,
     );
+  }
+
+  #[test]
+  fn replace_same_position_with_enforce() {
+    // Enforce sort HarmonyExportExpressionDependency after PureExpressionDependency, to generate valid code
+    let mut source =
+      ReplaceSource::new(RawSource::from("export default foo;aaa").boxed());
+    let mut source2 = source.clone();
+    source.replace(18, 19, ");", None);
+    source.replace(18, 19, "))", None);
+    assert_eq!(source.source(), "export default foo);))aaa");
+
+    source2.replace_with_enforce(18, 19, ");", None, ReplacementEnforce::Post);
+    source2.replace(18, 19, "))", None);
+    assert_eq!(source2.source(), "export default foo)));aaa");
   }
 }
