@@ -84,6 +84,8 @@ pub type OnSource<'a> = &'a mut dyn FnMut(u32, &str, Option<&str>);
 /// [OnName] abstraction, see [webpack-sources onName](https://github.com/webpack/webpack-sources/blob/9f98066311d53a153fdc7c633422a1d086528027/lib/helpers/streamChunks.js#L13).
 pub type OnName<'a> = &'a mut dyn FnMut(u32, &str);
 
+// pub type OnIndex<'a> = &'a mut dyn FnMut(usize, usize);
+
 /// Default stream chunks behavior impl, see [webpack-sources streamChunks](https://github.com/webpack/webpack-sources/blob/9f98066311d53a153fdc7c633422a1d086528027/lib/helpers/streamChunks.js#L15-L35).
 pub fn stream_chunks_default<S: Source>(
   source: &S,
@@ -666,16 +668,6 @@ fn stream_chunks_of_source_map_full(
   on_source: OnSource,
   on_name: OnName,
 ) -> GeneratedInfo {
-  let lines = split_into_lines(source);
-  let line_with_indices_list =
-    lines.into_iter().map(WithIndices::new).collect::<Vec<_>>();
-
-  if line_with_indices_list.is_empty() {
-    return GeneratedInfo {
-      generated_line: 1,
-      generated_column: 0,
-    };
-  }
   for (i, source) in source_map.sources().iter().enumerate() {
     on_source(
       i as u32,
@@ -683,128 +675,78 @@ fn stream_chunks_of_source_map_full(
       source_map.get_source_content(i),
     )
   }
+
   for (i, name) in source_map.names().iter().enumerate() {
     on_name(i as u32, name);
   }
-  let last_line = line_with_indices_list[line_with_indices_list.len() - 1].line;
-  let last_new_line = last_line.ends_with('\n');
-  let final_line: u32 = if last_new_line {
-    line_with_indices_list.len() + 1
-  } else {
-    line_with_indices_list.len()
-  } as u32;
-  let final_column: u32 =
-    if last_new_line { 0 } else { last_line.len() } as u32;
+
   let mut current_generated_line: u32 = 1;
   let mut current_generated_column: u32 = 0;
-  let mut mapping_active = false;
-  let mut active_mapping_original: Option<OriginalLocation> = None;
 
-  let mut on_mapping = |mapping: &Mapping| {
-    if mapping_active
-      && current_generated_line as usize <= line_with_indices_list.len()
-    {
-      let chunk: &str;
-      let mapping_line = current_generated_line;
-      let mapping_column = current_generated_column;
-      let line = &line_with_indices_list[(current_generated_line - 1) as usize];
-      if mapping.generated_line != current_generated_line {
-        chunk = line.substring(current_generated_column as usize, usize::MAX);
-        current_generated_line += 1;
-        current_generated_column = 0;
+  let mut tracking_generated_index: usize = 0;
+  let mut tracking_generated_line: u32 = 1;
+  let mut tracking_generated_column: u32 = 0;
+  let mut tracking_mapping_original: Option<OriginalLocation> = None;
+
+  let mut mappings_iter = source_map.decoded_mappings().into_iter();
+  let mut current_mapping = mappings_iter.next();
+
+  for (current_generated_index, c) in source.char_indices() {
+    if let Some(mapping) = current_mapping.take() {
+      if mapping.generated_line == current_generated_line && mapping.generated_column == current_generated_column {
+        let chunk = &source[tracking_generated_index..current_generated_index];
+        if !chunk.is_empty() {
+          on_chunk(Some(chunk), Mapping {
+            generated_line: tracking_generated_line,
+            generated_column: tracking_generated_column,
+            original: tracking_mapping_original,
+          });
+        }
+
+        tracking_generated_index = current_generated_index;
+        tracking_generated_line = mapping.generated_line;
+        tracking_generated_column = mapping.generated_column;
+        tracking_mapping_original = mapping.original;
+
+        current_mapping = mappings_iter.next();
       } else {
-        chunk = line.substring(
-          current_generated_column as usize,
-          mapping.generated_column as usize,
-        );
-        current_generated_column = mapping.generated_column;
+        current_mapping = Some(mapping);
       }
-      if !chunk.is_empty() {
-        on_chunk(
-          Some(chunk),
-          Mapping {
-            generated_line: mapping_line,
-            generated_column: mapping_column,
-            original: active_mapping_original,
-          },
-        )
-      }
-      mapping_active = false;
     }
-    if mapping.generated_line > current_generated_line
-      && current_generated_column > 0
-    {
-      if current_generated_line as usize <= line_with_indices_list.len() {
-        let chunk = &line_with_indices_list
-          [(current_generated_line - 1) as usize]
-          .substring(current_generated_column as usize, usize::MAX);
-        on_chunk(
-          Some(chunk),
-          Mapping {
-            generated_line: current_generated_line,
-            generated_column: current_generated_column,
-            original: None,
-          },
-        );
+
+    current_generated_column += 1;
+    if c == '\n' {
+      if tracking_generated_line == current_generated_line {
+        let chunk = &source[tracking_generated_index..current_generated_index + 1];
+        on_chunk(Some(chunk), Mapping {
+          generated_line: tracking_generated_line,
+          generated_column: tracking_generated_column,
+          original: tracking_mapping_original
+        });
+
+        tracking_generated_index = current_generated_index + 1;
+        tracking_generated_line += 1;
+        tracking_generated_column = 0;
+        tracking_mapping_original = None;
       }
+
       current_generated_line += 1;
       current_generated_column = 0;
     }
-    while mapping.generated_line > current_generated_line {
-      if current_generated_line as usize <= line_with_indices_list.len() {
-        on_chunk(
-          Some(
-            line_with_indices_list[(current_generated_line as usize) - 1].line,
-          ),
-          Mapping {
-            generated_line: current_generated_line,
-            generated_column: 0,
-            original: None,
-          },
-        );
-      }
-      current_generated_line += 1;
-    }
-    if mapping.generated_column > current_generated_column {
-      if current_generated_line as usize <= line_with_indices_list.len() {
-        let chunk = line_with_indices_list
-          [(current_generated_line as usize) - 1]
-          .substring(
-            current_generated_column as usize,
-            mapping.generated_column as usize,
-          );
-        on_chunk(
-          Some(chunk),
-          Mapping {
-            generated_line: current_generated_line,
-            generated_column: current_generated_column,
-            original: None,
-          },
-        )
-      }
-      current_generated_column = mapping.generated_column;
-    }
-    if let Some(original) = &mapping.original.filter(|_| {
-      mapping.generated_line < final_line
-        || (mapping.generated_line == final_line
-          && mapping.generated_column < final_column)
-    }) {
-      mapping_active = true;
-      active_mapping_original = Some(*original);
-    }
-  };
-
-  for mapping in source_map.decoded_mappings() {
-    on_mapping(&mapping);
   }
-  on_mapping(&Mapping {
-    generated_line: final_line,
-    generated_column: final_column,
-    original: None,
-  });
+
+  if tracking_generated_index < source.len() {
+    let chunk = &source[tracking_generated_index..];
+    on_chunk(Some(chunk), Mapping {
+      generated_line: tracking_generated_line,
+      generated_column: tracking_generated_column,
+      original: tracking_mapping_original,
+    });
+  }
+
   GeneratedInfo {
-    generated_line: final_line,
-    generated_column: final_column,
+    generated_line: current_generated_line,
+    generated_column: current_generated_column,
   }
 }
 
