@@ -687,19 +687,24 @@ fn stream_chunks_of_source_map_full(
   let mut tracking_generated_column: u32 = 0;
   let mut tracking_mapping_original: Option<OriginalLocation> = None;
 
-  let mut mappings_iter = source_map.decoded_mappings().into_iter();
+  let mut mappings_iter = source_map.decoded_mappings().iter();
   let mut current_mapping = mappings_iter.next();
 
   for (current_generated_index, c) in source.char_indices() {
     if let Some(mapping) = current_mapping.take() {
-      if mapping.generated_line == current_generated_line && mapping.generated_column == current_generated_column {
+      if mapping.generated_line == current_generated_line
+        && mapping.generated_column == current_generated_column
+      {
         let chunk = &source[tracking_generated_index..current_generated_index];
         if !chunk.is_empty() {
-          on_chunk(Some(chunk), Mapping {
-            generated_line: tracking_generated_line,
-            generated_column: tracking_generated_column,
-            original: tracking_mapping_original,
-          });
+          on_chunk(
+            Some(chunk),
+            Mapping {
+              generated_line: tracking_generated_line,
+              generated_column: tracking_generated_column,
+              original: tracking_mapping_original,
+            },
+          );
         }
 
         tracking_generated_index = current_generated_index;
@@ -716,12 +721,16 @@ fn stream_chunks_of_source_map_full(
     current_generated_column += 1;
     if c == '\n' {
       if tracking_generated_line == current_generated_line {
-        let chunk = &source[tracking_generated_index..current_generated_index + 1];
-        on_chunk(Some(chunk), Mapping {
-          generated_line: tracking_generated_line,
-          generated_column: tracking_generated_column,
-          original: tracking_mapping_original
-        });
+        let chunk =
+          &source[tracking_generated_index..current_generated_index + 1];
+        on_chunk(
+          Some(chunk),
+          Mapping {
+            generated_line: tracking_generated_line,
+            generated_column: tracking_generated_column,
+            original: tracking_mapping_original,
+          },
+        );
 
         tracking_generated_index = current_generated_index + 1;
         tracking_generated_line += 1;
@@ -736,11 +745,14 @@ fn stream_chunks_of_source_map_full(
 
   if tracking_generated_index < source.len() {
     let chunk = &source[tracking_generated_index..];
-    on_chunk(Some(chunk), Mapping {
-      generated_line: tracking_generated_line,
-      generated_column: tracking_generated_column,
-      original: tracking_mapping_original,
-    });
+    on_chunk(
+      Some(chunk),
+      Mapping {
+        generated_line: tracking_generated_line,
+        generated_column: tracking_generated_column,
+        original: tracking_mapping_original,
+      },
+    );
   }
 
   GeneratedInfo {
