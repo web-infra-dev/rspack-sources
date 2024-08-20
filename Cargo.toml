@@ -1,6 +1,6 @@
 [package]
 name = "rspack_sources"
-version = "0.2.15"
+version = "0.2.17"
 edition = "2021"
 authors = ["h-a-n-a <andywangsy@gmail.com>", "ahabhgk <ahabhgk@gmail.com>"]
 resolver = "2"
@@ -36,11 +36,11 @@ dyn-clone = "1"
 rustc-hash = "1"
 dashmap = "5"
 substring = "1"
-smallvec = "1.11.2"
 memchr = "2.6.4"
 str_indices = "0.4.3"
 
 codspeed-criterion-compat = { version = "2.3.3", default-features = false, optional = true }
+arrayvec = "0.7.4"
 
 [dev-dependencies]
 twox-hash = "1"

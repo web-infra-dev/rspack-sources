@@ -232,12 +232,10 @@ impl SourceMap {
   }
 
   /// Get the decoded mappings in [SourceMap].
-  pub fn decoded_mappings(&'_ self) -> impl IntoIterator<Item = Mapping> + '_ {
+  pub fn decoded_mappings(&'_ self) -> &[Mapping] {
     self
       .decoded_mappings
       .get_or_init(|| decode_mappings(self).collect::<Vec<_>>())
-      .clone()
-      .into_iter()
   }
 
   /// Get the mappings string in [SourceMap].
@@ -337,8 +335,7 @@ struct RawSourceMap {
   pub sources_content: Option<Vec<Option<Cow<'static, str>>>>,
   #[serde(skip_serializing_if = "Option::is_none")]
   pub names: Option<Vec<Option<Cow<'static, str>>>>,
-  #[serde(skip_serializing_if = "Option::is_none")]
-  pub mappings: Option<String>,
+  pub mappings: String,
 }
 
 impl RawSourceMap {
@@ -424,7 +421,7 @@ impl TryFrom<RawSourceMap> for SourceMap {
       .collect();
     Ok(Self {
       file: raw.file,
-      mappings: raw.mappings.unwrap_or_default(),
+      mappings: raw.mappings,
       sources,
       sources_content,
       names,
@@ -462,7 +459,7 @@ impl From<SourceMap> for RawSourceMap {
           .map(|s| (!s.is_empty()).then_some(s))
           .collect(),
       ),
-      mappings: (!map.mappings.is_empty()).then_some(map.mappings),
+      mappings: map.mappings,
     }
   }
 }

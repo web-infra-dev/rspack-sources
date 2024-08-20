@@ -43,30 +43,25 @@ pub struct ReplaceSource<T> {
   is_sorted: AtomicBool,
 }
 
-#[derive(Debug, Clone, Eq)]
+/// Enforce replacement order when two replacement start and end are both equal
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ReplacementEnforce {
+  /// pre
+  Pre,
+  /// normal
+  #[default]
+  Normal,
+  /// post
+  Post,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct Replacement {
   start: u32,
   end: u32,
   content: String,
   name: Option<String>,
-}
-
-impl Hash for Replacement {
-  fn hash<H: Hasher>(&self, state: &mut H) {
-    self.start.hash(state);
-    self.end.hash(state);
-    self.content.hash(state);
-    self.name.hash(state);
-  }
-}
-
-impl PartialEq for Replacement {
-  fn eq(&self, other: &Self) -> bool {
-    self.start == other.start
-      && self.end == other.end
-      && self.content == other.content
-      && self.name == other.name
-  }
+  enforce: ReplacementEnforce,
 }
 
 impl Replacement {
@@ -75,12 +70,14 @@ impl Replacement {
     end: u32,
     content: String,
     name: Option<String>,
+    enforce: ReplacementEnforce,
   ) -> Self {
     Self {
       start,
       end,
       content,
       name,
+      enforce,
     }
   }
 }
@@ -109,9 +106,9 @@ impl<T> ReplaceSource<T> {
     if self.is_sorted.load(Ordering::SeqCst) {
       return;
     }
-    self
-      .replacements()
-      .sort_by(|a, b| (a.start, a.end).cmp(&(b.start, b.end)));
+    self.replacements().sort_by(|a, b| {
+      (a.start, a.end, a.enforce).cmp(&(b.start, b.end, b.enforce))
+    });
     self.is_sorted.store(true, Ordering::SeqCst)
   }
 }
@@ -128,6 +125,17 @@ impl<T: Source> ReplaceSource<T> {
     self.replace(start, start, content, name)
   }
 
+  /// Insert a content at start, with ReplacementEnforce.
+  pub fn insert_with_enforce(
+    &mut self,
+    start: u32,
+    content: &str,
+    name: Option<&str>,
+    enforce: ReplacementEnforce,
+  ) {
+    self.replace_with_enforce(start, start, content, name, enforce)
+  }
+
   /// Create a replacement with content at `[start, end)`.
   pub fn replace(
     &mut self,
@@ -141,6 +149,26 @@ impl<T: Source> ReplaceSource<T> {
       end,
       content.into(),
       name.map(|s| s.into()),
+      ReplacementEnforce::Normal,
+    ));
+    self.is_sorted.store(false, Ordering::SeqCst);
+  }
+
+  /// Create a replacement with content at `[start, end)`, with ReplacementEnforce.
+  pub fn replace_with_enforce(
+    &mut self,
+    start: u32,
+    end: u32,
+    content: &str,
+    name: Option<&str>,
+    enforce: ReplacementEnforce,
+  ) {
+    self.replacements().push(Replacement::new(
+      start,
+      end,
+      content.into(),
+      name.map(|s| s.into()),
+      enforce,
     ));
     self.is_sorted.store(false, Ordering::SeqCst);
   }
@@ -398,7 +426,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
           }
           // Insert replacement content split into chunks by lines
           let repl = &repls[i];
-          let lines: Vec<&str> = split_into_lines(&repl.content);
+          let lines: Vec<&str> = split_into_lines(&repl.content).collect();
           let mut replacement_name_index = mapping
             .original
             .as_ref()
@@ -570,7 +598,6 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
         source_content_lines[source_index as usize] =
           source_content.map(|source_content| {
             split_into_lines(source_content)
-              .into_iter()
               .map(|line| line.to_string())
               .collect()
           });
@@ -600,7 +627,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
 
     // Insert remaining replacements content split into chunks by lines
     let mut line = result.generated_line as i64 + generated_line_offset;
-    let matches = split_into_lines(&remainder);
+    let matches: Vec<&str> = split_into_lines(&remainder).collect();
     for (m, content_line) in matches.iter().enumerate() {
       on_chunk(
         Some(content_line),
@@ -677,7 +704,7 @@ impl<T: Eq> Eq for ReplaceSource<T> {}
 mod tests {
   use crate::{
     source_map_source::WithoutOriginalOptions, OriginalSource, RawSource,
-    SourceExt, SourceMapSource,
+    ReplacementEnforce, SourceExt, SourceMapSource,
   };
 
   use super::*;
@@ -978,29 +1005,29 @@ export default function StaticPage(_ref) {
     let target_code = source.source();
     let source_map = source.map(&MapOptions::default()).unwrap();
 
-//     assert_eq!(
-//       target_code,
-//       r#"
-// var __N_SSG = true;
-// function StaticPage(_ref) {
-//   var data = _ref.data;
-//   return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", {
-//     children: data.foo
-//   });
-// }"#
-//     );
-//     assert_eq!(source_map.get_name(0).unwrap(), "StaticPage");
-//     assert_eq!(source_map.get_name(1).unwrap(), "data");
-//     assert_eq!(source_map.get_name(2).unwrap(), "foo");
-//     assert_eq!(
-//       source_map.get_source_content(0).unwrap(),
-//       r#"export default function StaticPage({ data }) {
-// return <div>{data.foo}</div>
-// }
-// "#
-//     );
-//     assert!(source_map.file().is_none());
-//     assert_eq!(source_map.get_source(0).unwrap(), "abc");
+    assert_eq!(
+      target_code,
+      r#"
+var __N_SSG = true;
+function StaticPage(_ref) {
+  var data = _ref.data;
+  return /*#__PURE__*/(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)("div", {
+    children: data.foo
+  });
+}"#
+    );
+    assert_eq!(source_map.get_name(0).unwrap(), "StaticPage");
+    assert_eq!(source_map.get_name(1).unwrap(), "data");
+    assert_eq!(source_map.get_name(2).unwrap(), "foo");
+    assert_eq!(
+      source_map.get_source_content(0).unwrap(),
+      r#"export default function StaticPage({ data }) {
+return <div>{data.foo}</div>
+}
+"#
+    );
+    assert!(source_map.file().is_none());
+    assert_eq!(source_map.get_source(0).unwrap(), "abc");
 
     assert_eq!(
       with_readable_mappings(&source_map),
@@ -1074,7 +1101,7 @@ export default function StaticPage(_ref) {
     assert_eq!(source.map(&MapOptions::default()), None);
     let mut hasher = twox_hash::XxHash64::default();
     source.hash(&mut hasher);
-    assert_eq!(format!("{:x}", hasher.finish()), "e9877250d7449bc5");
+    assert_eq!(format!("{:x}", hasher.finish()), "5781cda25d360a42");
   }
 
   #[test]
@@ -1112,5 +1139,20 @@ export default function StaticPage(_ref) {
         .unwrap(),
       r#"{"version":3,"sources":["file.css"],"sourcesContent":["\n\"abc\"; url(__PUBLIC_PATH__logo.png);\n\"ヒラギノ角ゴ\"; url(__PUBLIC_PATH__logo.png);\n\"游ゴシック体\"; url(__PUBLIC_PATH__logo.png);\n\"🤪\"; url(__PUBLIC_PATH__logo.png);\n\"👨‍👩‍👧‍👧\"; url(__PUBLIC_PATH__logo.png);\n"],"names":[],"mappings":";AACA,OAAO,IAAI,GAAe;AAC1B,sBAAsB;AACtB,sBAAsB;AACtB,QAAQ;AACR,6BAA6B"}"#,
     );
+  }
+
+  #[test]
+  fn replace_same_position_with_enforce() {
+    // Enforce sort HarmonyExportExpressionDependency after PureExpressionDependency, to generate valid code
+    let mut source =
+      ReplaceSource::new(RawSource::from("export default foo;aaa").boxed());
+    let mut source2 = source.clone();
+    source.replace(18, 19, ");", None);
+    source.replace(18, 19, "))", None);
+    assert_eq!(source.source(), "export default foo);))aaa");
+
+    source2.replace_with_enforce(18, 19, ");", None, ReplacementEnforce::Post);
+    source2.replace(18, 19, "))", None);
+    assert_eq!(source2.source(), "export default foo)));aaa");
   }
 }

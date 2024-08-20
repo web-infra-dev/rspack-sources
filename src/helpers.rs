@@ -1,3 +1,4 @@
+use arrayvec::ArrayVec;
 use rustc_hash::FxHashMap as HashMap;
 use std::{
   borrow::{BorrowMut, Cow},
@@ -138,7 +139,7 @@ pub struct SegmentIter<'a> {
   original_column: u32,
   name_index: u32,
   line: &'a str,
-  nums: Vec<i64>,
+  nums: ArrayVec<i64, 5>,
   segment_cursor: usize,
 }
 
@@ -154,7 +155,7 @@ impl<'a> SegmentIter<'a> {
       generated_line: 0,
       segment_cursor: 0,
       generated_column: 0,
-      nums: Vec::with_capacity(5),
+      nums: ArrayVec::new(),
     }
   }
 
@@ -495,27 +496,25 @@ fn split(haystack: &str, needle: u8) -> impl Iterator<Item = &str> {
 }
 
 // /[^\n]+\n?|\n/g
-pub fn split_into_lines(source: &str) -> Vec<&str> {
-  split(source, b'\n').collect()
+pub fn split_into_lines(source: &str) -> impl Iterator<Item = &str> {
+  split(source, b'\n')
 }
 
 pub fn get_generated_source_info(source: &str) -> GeneratedInfo {
-  let last_line_start = source.rfind('\n');
-  if let Some(last_line_start) = last_line_start {
-    let mut generated_line = 2;
-    source[0..last_line_start].chars().for_each(|c| {
-      if c == '\n' {
-        generated_line += 1;
-      }
-    });
-    return GeneratedInfo {
-      generated_line,
-      generated_column: (source.len() - last_line_start - 1) as u32,
-    };
-  }
+  let (generated_line, generated_column) = if source.ends_with('\n') {
+    (split(source, b'\n').count() + 1, 0)
+  } else {
+    let mut line_count = 0;
+    let mut last_line = "";
+    for line in split(source, b'\n') {
+      line_count += 1;
+      last_line = line;
+    }
+    (line_count.max(1), last_line.len())
+  };
   GeneratedInfo {
-    generated_line: 1,
-    generated_column: source.len() as u32,
+    generated_line: generated_line as u32,
+    generated_column: generated_column as u32,
   }
 }
 
@@ -656,7 +655,7 @@ fn stream_chunks_of_source_map_final(
     }
   };
   for mapping in source_map.decoded_mappings() {
-    on_mapping(&mapping);
+    on_mapping(mapping);
   }
   result
 }
@@ -800,7 +799,7 @@ fn stream_chunks_of_source_map_lines_final(
     }
   };
   for mapping in source_map.decoded_mappings() {
-    on_mapping(&mapping);
+    on_mapping(mapping);
   }
   result
 }
@@ -812,7 +811,7 @@ fn stream_chunks_of_source_map_lines_full(
   on_source: OnSource,
   _on_name: OnName,
 ) -> GeneratedInfo {
-  let lines = split_into_lines(source);
+  let lines: Vec<&str> = split_into_lines(source).collect();
   if lines.is_empty() {
     return GeneratedInfo {
       generated_line: 1,
@@ -868,7 +867,7 @@ fn stream_chunks_of_source_map_lines_full(
     }
   };
   for mapping in source_map.decoded_mappings() {
-    on_mapping(&mapping);
+    on_mapping(mapping);
   }
   while current_generated_line as usize <= lines.len() {
     on_chunk(
@@ -1043,7 +1042,6 @@ pub fn stream_chunks_of_combined_source_map(
                 {
                   Some(Rc::new(
                     split_into_lines(original_source)
-                      .into_iter()
                       .map(|s| WithIndices::new(s.into()))
                       .collect(),
                   ))
