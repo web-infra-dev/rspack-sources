@@ -85,8 +85,6 @@ pub type OnSource<'a> = &'a mut dyn FnMut(u32, &str, Option<&str>);
 /// [OnName] abstraction, see [webpack-sources onName](https://github.com/webpack/webpack-sources/blob/9f98066311d53a153fdc7c633422a1d086528027/lib/helpers/streamChunks.js#L13).
 pub type OnName<'a> = &'a mut dyn FnMut(u32, &str);
 
-// pub type OnIndex<'a> = &'a mut dyn FnMut(usize, usize);
-
 /// Default stream chunks behavior impl, see [webpack-sources streamChunks](https://github.com/webpack/webpack-sources/blob/9f98066311d53a153fdc7c633422a1d086528027/lib/helpers/streamChunks.js#L15-L35).
 pub fn stream_chunks_default<S: Source>(
   source: &S,
