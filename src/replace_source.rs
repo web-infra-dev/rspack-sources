@@ -356,7 +356,7 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
               original.source_index,
               original.original_line,
               original.original_column,
-              &chunk[0..chunk_pos as usize]
+              &chunk[0..chunk_pos as usize],
             )
           }) {
             original.original_column += chunk_pos;
@@ -380,7 +380,8 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
           if next_replacement_pos > pos {
             // Emit chunk until replacement
             let offset = next_replacement_pos - pos;
-            let chunk_slice = &chunk[chunk_pos as usize..(chunk_pos + offset) as usize];
+            let chunk_slice =
+              &chunk[chunk_pos as usize..(chunk_pos + offset) as usize];
             on_chunk(
               Some(chunk_slice),
               Mapping {
@@ -531,7 +532,8 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
                   original.source_index,
                   original.original_line,
                   original.original_column,
-                  &chunk[chunk_pos as usize..(chunk_pos + offset as u32) as usize]
+                  &chunk
+                    [chunk_pos as usize..(chunk_pos + offset as u32) as usize],
                 )
               })
             {
@@ -592,9 +594,7 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
         }
         source_content_lines[source_index as usize] =
           source_content.map(|source_content| {
-            split_into_lines(source_content)
-              .map(|line| line)
-              .collect()
+            split_into_lines(source_content).collect()
           });
         on_source(source_index, source, source_content);
       },

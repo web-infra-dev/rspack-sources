@@ -99,9 +99,7 @@ pub fn stream_chunks_default<S: Source>(
       &s,
       &map,
       on_chunk,
-      &mut |a, b, c| {
-
-      },
+      &mut |a, b, c| {},
       on_name,
       options,
     )
@@ -949,8 +947,7 @@ pub fn stream_chunks_of_combined_source_map<'a>(
   options: &MapOptions,
 ) -> GeneratedInfo {
   let on_source = RefCell::new(on_source);
-  let inner_source: RefCell<Option<&'a str>> =
-    RefCell::new(inner_source);
+  let inner_source: RefCell<Option<&'a str>> = RefCell::new(inner_source);
   let source_mapping: RefCell<HashMap<ArcStr, u32>> =
     RefCell::new(HashMap::default());
   let mut name_mapping: HashMap<ArcStr, u32> = HashMap::default();
@@ -1310,11 +1307,11 @@ pub fn stream_chunks_of_combined_source_map<'a>(
         if let Some(inner_source) = inner_source.as_ref() {
           source_content = Some(inner_source);
         } else {
-          *inner_source = source_content.clone();
+          *inner_source = source_content;
         }
         source_index_mapping.borrow_mut().insert(i, -2);
         stream_chunks_of_source_map(
-          &source_content.unwrap(),
+          source_content.unwrap(),
           inner_source_map,
           &mut |chunk, mapping| {
             let mut inner_source_map_line_data =

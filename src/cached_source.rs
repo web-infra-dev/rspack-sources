@@ -133,13 +133,14 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks<'_>
           .cached_source
           .get_or_init(|| self.inner.source().into());
         if let Some(map) = entry.get() {
-          let map = unsafe { std::mem::transmute::<&SourceMap, &'a SourceMap>(map) };
+          let map =
+            unsafe { std::mem::transmute::<&SourceMap, &'a SourceMap>(map) };
           stream_chunks_of_source_map(
-            &source, map, on_chunk, on_source, on_name, options,
+            source, map, on_chunk, on_source, on_name, options,
           )
         } else {
           stream_chunks_of_raw_source(
-            &source, options, on_chunk, on_source, on_name,
+            source, options, on_chunk, on_source, on_name,
           )
         }
       }
