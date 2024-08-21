@@ -325,7 +325,6 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
       &mut |chunk, mut mapping| {
         // SAFETY: final_source is false in ReplaceSource
         let chunk = chunk.unwrap();
-        let chunk_with_indices = WithIndices::new(chunk);
         let mut chunk_pos = 0;
         let end_pos = pos + chunk.len() as u32;
         // Skip over when it has been replaced
@@ -357,7 +356,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
               original.source_index,
               original.original_line,
               original.original_column,
-              chunk_with_indices.substring(0, chunk_pos as usize),
+              &chunk[0..chunk_pos as usize]
             )
           }) {
             original.original_column += chunk_pos;
@@ -381,8 +380,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
           if next_replacement_pos > pos {
             // Emit chunk until replacement
             let offset = next_replacement_pos - pos;
-            let chunk_slice = chunk_with_indices
-              .substring(chunk_pos as usize, (chunk_pos + offset) as usize);
+            let chunk_slice = &chunk[chunk_pos as usize..(chunk_pos + offset) as usize];
             on_chunk(
               Some(chunk_slice),
               Mapping {
@@ -533,10 +531,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
                   original.source_index,
                   original.original_line,
                   original.original_column,
-                  chunk_with_indices.substring(
-                    chunk_pos as usize,
-                    (chunk_pos + offset as u32) as usize,
-                  ),
+                  &chunk[chunk_pos as usize..(chunk_pos + offset as u32) as usize]
                 )
               })
             {
@@ -559,7 +554,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
           let chunk_slice = if chunk_pos == 0 {
             chunk
           } else {
-            chunk_with_indices.substring(chunk_pos as usize, usize::MAX)
+            &chunk[chunk_pos as usize..]
           };
           let line = mapping.generated_line as i64 + generated_line_offset;
           on_chunk(
