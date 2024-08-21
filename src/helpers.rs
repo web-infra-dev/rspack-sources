@@ -1416,7 +1416,7 @@ pub fn stream_chunks_of_combined_source_map<'a>(
 
 pub fn stream_and_get_source_and_map<'a, S: StreamChunks<'a>>(
   input_source: &'a S,
-  options: &'a MapOptions,
+  options: &MapOptions,
   on_chunk: OnChunk,
   on_source: OnSource<'_, 'a>,
   on_name: OnName,

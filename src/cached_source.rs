@@ -144,16 +144,15 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks<'_>
         }
       }
       Entry::Vacant(entry) => {
-        // let (generated_info, map) = stream_and_get_source_and_map(
-        //   self.inner.as_ref(),
-        //   options,
-        //   on_chunk,
-        //   on_source,
-        //   on_name,
-        // );
-        // entry.insert(map);
-        // generated_info
-        todo!()
+        let (generated_info, map) = stream_and_get_source_and_map(
+          &self.inner as &T,
+          options,
+          on_chunk,
+          on_source,
+          on_name,
+        );
+        entry.insert(map);
+        generated_info
       }
     }
   }
