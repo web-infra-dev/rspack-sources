@@ -80,7 +80,7 @@ impl<'a> StreamChunks<'a> for BoxSource {
     options: &MapOptions,
     on_chunk: crate::helpers::OnChunk,
     on_source: crate::helpers::OnSource<'_, 'a>,
-    on_name: crate::helpers::OnName,
+    on_name: crate::helpers::OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {
     self
       .as_ref()

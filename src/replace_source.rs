@@ -256,7 +256,7 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
     options: &crate::MapOptions,
     on_chunk: crate::helpers::OnChunk,
     on_source: crate::helpers::OnSource<'_, 'a>,
-    on_name: crate::helpers::OnName,
+    on_name: crate::helpers::OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {
     self.sort_replacement();
     let on_name = RefCell::new(on_name);
@@ -424,7 +424,15 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
             }
           }
           // Insert replacement content split into chunks by lines
-          let repl = &repls[i];
+
+          #[allow(unsafe_code)]
+          // SAFETY: 
+          // - After this point, `ReplaceSource` must not modify `replacements`.
+          // - This ensures that the reference to `Replacement` remains valid for the entire `'a` lifetime.
+          // - We are using `transmute` to extend the lifetime of the reference from a temporary lifetime to `'a`.
+          // - It is critical to maintain the invariant that `replacements` is immutable once accessed in this manner.
+          // - Ensure the logic design guarantees that no further modifications to `replacements` occur after this transmutation.
+          let repl = unsafe { std::mem::transmute::<&Replacement, &'a Replacement>(&repls[i]) };
           let lines: Vec<&str> = split_into_lines(&repl.content).collect();
           let mut replacement_name_index = mapping
             .original

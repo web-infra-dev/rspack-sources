@@ -39,7 +39,7 @@ impl<'a> StreamChunks<'a> for CompatSource {
     options: &MapOptions,
     on_chunk: OnChunk,
     on_source: OnSource<'_, 'a>,
-    on_name: OnName,
+    on_name: OnName<'_, 'a>,
   ) -> GeneratedInfo {
     stream_chunks_default(
       self.0,

@@ -151,7 +151,7 @@ impl<'a> StreamChunks<'a> for ConcatSource {
     options: &MapOptions,
     on_chunk: OnChunk,
     on_source: OnSource<'_, 'a>,
-    on_name: OnName,
+    on_name: OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {
     if self.children().len() == 1 {
       return self.children[0]

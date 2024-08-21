@@ -124,7 +124,7 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks<'_>
     options: &MapOptions,
     on_chunk: crate::helpers::OnChunk,
     on_source: crate::helpers::OnSource<'_, 'a>,
-    on_name: crate::helpers::OnName,
+    on_name: crate::helpers::OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {
     let cached_map = self.cached_maps.entry(options.clone());
     match cached_map {
