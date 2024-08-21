@@ -68,7 +68,7 @@ impl Source for BoxSource {
   }
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
-    todo!()
+    self.as_ref().to_writer(writer)
   }
 }
 
