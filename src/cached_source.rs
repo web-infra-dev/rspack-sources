@@ -116,21 +116,24 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
   }
 }
 
-impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks
+impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks<'_>
   for CachedSource<T>
 {
-  fn stream_chunks(
-    &self,
+  fn stream_chunks<'a>(
+    &'a self,
     options: &MapOptions,
     on_chunk: crate::helpers::OnChunk,
-    on_source: crate::helpers::OnSource,
+    on_source: crate::helpers::OnSource<'_, 'a>,
     on_name: crate::helpers::OnName,
   ) -> crate::helpers::GeneratedInfo {
     let cached_map = self.cached_maps.entry(options.clone());
     match cached_map {
       Entry::Occupied(entry) => {
-        let source = self.source();
+        let source = self
+          .cached_source
+          .get_or_init(|| self.inner.source().into());
         if let Some(map) = entry.get() {
+          let map = unsafe { std::mem::transmute::<&SourceMap, &'a SourceMap>(map) };
           stream_chunks_of_source_map(
             &source, map, on_chunk, on_source, on_name, options,
           )
@@ -141,15 +144,16 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks
         }
       }
       Entry::Vacant(entry) => {
-        let (generated_info, map) = stream_and_get_source_and_map(
-          self.original(),
-          options,
-          on_chunk,
-          on_source,
-          on_name,
-        );
-        entry.insert(map);
-        generated_info
+        // let (generated_info, map) = stream_and_get_source_and_map(
+        //   self.inner.as_ref(),
+        //   options,
+        //   on_chunk,
+        //   on_source,
+        //   on_name,
+        // );
+        // entry.insert(map);
+        // generated_info
+        todo!()
       }
     }
   }

@@ -98,12 +98,12 @@ impl std::fmt::Debug for OriginalSource {
   }
 }
 
-impl StreamChunks for OriginalSource {
+impl<'a> StreamChunks<'a> for OriginalSource {
   fn stream_chunks(
-    &self,
+    &'a self,
     options: &MapOptions,
     on_chunk: OnChunk,
-    on_source: OnSource,
+    on_source: OnSource<'_, 'a>,
     _on_name: OnName,
   ) -> crate::helpers::GeneratedInfo {
     on_source(0, &self.name, Some(&self.value));

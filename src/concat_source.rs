@@ -145,16 +145,16 @@ impl PartialEq for ConcatSource {
 }
 impl Eq for ConcatSource {}
 
-impl StreamChunks for ConcatSource {
+impl<'a> StreamChunks<'a> for ConcatSource {
   fn stream_chunks(
-    &self,
+    &'a self,
     options: &MapOptions,
     on_chunk: OnChunk,
-    on_source: OnSource,
+    on_source: OnSource<'_, 'a>,
     on_name: OnName,
   ) -> crate::helpers::GeneratedInfo {
     if self.children().len() == 1 {
-      return self.children()[0]
+      return self.children[0]
         .stream_chunks(options, on_chunk, on_source, on_name);
     }
     let mut current_line_offset = 0;

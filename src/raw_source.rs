@@ -135,7 +135,7 @@ impl std::fmt::Debug for RawSource {
   }
 }
 
-impl StreamChunks for RawSource {
+impl StreamChunks<'_> for RawSource {
   fn stream_chunks(
     &self,
     options: &MapOptions,

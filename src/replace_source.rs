@@ -250,12 +250,12 @@ impl<T: std::fmt::Debug> std::fmt::Debug for ReplaceSource<T> {
   }
 }
 
-impl<T: Source> StreamChunks for ReplaceSource<T> {
+impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
   fn stream_chunks(
-    &self,
+    &'a self,
     options: &crate::MapOptions,
     on_chunk: crate::helpers::OnChunk,
-    on_source: crate::helpers::OnSource,
+    on_source: crate::helpers::OnSource<'_, 'a>,
     on_name: crate::helpers::OnName,
   ) -> crate::helpers::GeneratedInfo {
     self.sort_replacement();
@@ -268,7 +268,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
     let mut generated_line_offset: i64 = 0;
     let mut generated_column_offset: i64 = 0;
     let mut generated_column_offset_line = 0;
-    let source_content_lines: RefCell<Vec<Option<Vec<String>>>> =
+    let source_content_lines: RefCell<Vec<Option<Vec<&str>>>> =
       RefCell::new(Vec::new());
     let name_mapping: RefCell<HashMap<String, u32>> =
       RefCell::new(HashMap::default());
@@ -593,7 +593,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
         source_content_lines[source_index as usize] =
           source_content.map(|source_content| {
             split_into_lines(source_content)
-              .map(|line| line.to_string())
+              .map(|line| line)
               .collect()
           });
         on_source(source_index, source, source_content);

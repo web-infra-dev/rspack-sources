@@ -20,7 +20,7 @@ pub type BoxSource = Arc<dyn Source>;
 
 /// [Source] abstraction, [webpack-sources docs](https://github.com/webpack/webpack-sources/#source).
 pub trait Source:
-  StreamChunks + DynHash + AsAny + DynEq + DynClone + fmt::Debug + Sync + Send
+  for<'a> StreamChunks<'a> + DynHash + AsAny + DynEq + DynClone + fmt::Debug + Sync + Send
 {
   /// Get the source code.
   fn source(&self) -> Cow<str>;
@@ -59,20 +59,20 @@ impl Source for BoxSource {
   fn map(&self, options: &MapOptions) -> Option<SourceMap> {
     self.as_ref().map(options)
   }
-
+  
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
-    self.as_ref().to_writer(writer)
+    todo!()
   }
 }
 
 dyn_clone::clone_trait_object!(Source);
 
-impl StreamChunks for BoxSource {
+impl<'a> StreamChunks<'a> for BoxSource {
   fn stream_chunks(
-    &self,
+    &'a self,
     options: &MapOptions,
     on_chunk: crate::helpers::OnChunk,
-    on_source: crate::helpers::OnSource,
+    on_source: crate::helpers::OnSource<'_, 'a>,
     on_name: crate::helpers::OnName,
   ) -> crate::helpers::GeneratedInfo {
     self
