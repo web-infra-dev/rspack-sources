@@ -86,26 +86,26 @@ pub type OnSource<'a, 'b> = &'a mut dyn FnMut(u32, &str, Option<&'b str>);
 pub type OnName<'a> = &'a mut dyn FnMut(u32, &str);
 
 /// Default stream chunks behavior impl, see [webpack-sources streamChunks](https://github.com/webpack/webpack-sources/blob/9f98066311d53a153fdc7c633422a1d086528027/lib/helpers/streamChunks.js#L15-L35).
-pub fn stream_chunks_default<S: Source>(
-  source: &S,
+pub fn stream_chunks_default<'a>(
+  source: &'a str,
+  source_map: Option<&'a SourceMap>,
   options: &MapOptions,
   on_chunk: OnChunk,
-  on_source: OnSource,
+  on_source: OnSource<'_, 'a>,
   on_name: OnName,
 ) -> GeneratedInfo {
-  if let Some(map) = source.map(options) {
-    let s = source.source();
+  if let Some(map) = source_map {
     stream_chunks_of_source_map(
-      &s,
+      source,
       &map,
       on_chunk,
-      &mut |a, b, c| {},
+      on_source,
       on_name,
       options,
     )
   } else {
     stream_chunks_of_raw_source(
-      &source.source(),
+      source,
       options,
       on_chunk,
       on_source,
