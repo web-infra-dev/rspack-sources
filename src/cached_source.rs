@@ -133,6 +133,12 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks<'_>
           .cached_source
           .get_or_init(|| self.inner.source().into());
         if let Some(map) = entry.get() {
+          #[allow(unsafe_code)]
+          // SAFETY: We guarantee that once a `SourceMap` is stored in the cache, it will never be removed.
+          // Therefore, even if we force its lifetime to be longer, the reference remains valid.
+          // This is based on the following assumptions:
+          // 1. `SourceMap` will be valid for the entire duration of the application.
+          // 2. The cached `SourceMap` will not be manually removed or replaced, ensuring the reference's safety.
           let map =
             unsafe { std::mem::transmute::<&SourceMap, &'a SourceMap>(map) };
           stream_chunks_of_source_map(

@@ -11,7 +11,7 @@ use crate::{
   source::{Mapping, OriginalLocation},
   vlq::{decode, encode},
   with_indices::WithIndices,
-  MapOptions, Source, SourceMap,
+  MapOptions, SourceMap,
 };
 
 type ArcStr = Arc<str>;
@@ -96,21 +96,10 @@ pub fn stream_chunks_default<'a>(
 ) -> GeneratedInfo {
   if let Some(map) = source_map {
     stream_chunks_of_source_map(
-      source,
-      &map,
-      on_chunk,
-      on_source,
-      on_name,
-      options,
+      source, map, on_chunk, on_source, on_name, options,
     )
   } else {
-    stream_chunks_of_raw_source(
-      source,
-      options,
-      on_chunk,
-      on_source,
-      on_name,
-    )
+    stream_chunks_of_raw_source(source, options, on_chunk, on_source, on_name)
   }
 }
 

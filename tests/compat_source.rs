@@ -41,7 +41,14 @@ impl<'a> StreamChunks<'a> for CompatSource {
     on_source: OnSource<'_, 'a>,
     on_name: OnName,
   ) -> GeneratedInfo {
-    stream_chunks_default(self.0, self.1.as_ref(), options, on_chunk, on_source, on_name)
+    stream_chunks_default(
+      self.0,
+      self.1.as_ref(),
+      options,
+      on_chunk,
+      on_source,
+      on_name,
+    )
   }
 }
 

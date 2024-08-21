@@ -592,10 +592,8 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
         while source_content_lines.len() <= source_index as usize {
           source_content_lines.push(None);
         }
-        source_content_lines[source_index as usize] =
-          source_content.map(|source_content| {
-            split_into_lines(source_content).collect()
-          });
+        source_content_lines[source_index as usize] = source_content
+          .map(|source_content| split_into_lines(source_content).collect());
         on_source(source_index, source, source_content);
       },
       &mut |name_index, name| {
