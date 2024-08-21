@@ -1368,9 +1368,7 @@ pub fn stream_chunks_of_combined_source_map<'a>(
           &mut |i, name| {
             let i = i as i64;
             inner_name_index_mapping.borrow_mut().insert(i, -2);
-            inner_name_index_value_mapping
-              .borrow_mut()
-              .insert(i, name.into());
+            inner_name_index_value_mapping.borrow_mut().insert(i, name);
           },
           &MapOptions {
             columns: options.columns,
@@ -1394,7 +1392,7 @@ pub fn stream_chunks_of_combined_source_map<'a>(
     &mut |i, name| {
       let i = i as i64;
       name_index_mapping.borrow_mut().insert(i, -2);
-      name_index_value_mapping.borrow_mut().insert(i, name.into());
+      name_index_value_mapping.borrow_mut().insert(i, name);
     },
     options,
   )
