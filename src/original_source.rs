@@ -98,15 +98,15 @@ impl std::fmt::Debug for OriginalSource {
   }
 }
 
-impl StreamChunks for OriginalSource {
+impl<'a> StreamChunks<'a> for OriginalSource {
   fn stream_chunks(
-    &self,
+    &'a self,
     options: &MapOptions,
-    on_chunk: OnChunk,
-    on_source: OnSource,
+    on_chunk: OnChunk<'_, 'a>,
+    on_source: OnSource<'_, 'a>,
     _on_name: OnName,
   ) -> crate::helpers::GeneratedInfo {
-    on_source(0, &self.name, Some(&self.value));
+    on_source(0, Cow::Borrowed(&self.name), Some(&self.value));
     if options.columns {
       // With column info we need to read all lines and split them
       let mut line = 1;
@@ -116,7 +116,7 @@ impl StreamChunks for OriginalSource {
         if is_end_of_line && token.len() == 1 {
           if !options.final_source {
             on_chunk(
-              Some(token),
+              Some(Cow::Borrowed(token)),
               Mapping {
                 generated_line: line,
                 generated_column: column,
@@ -126,7 +126,7 @@ impl StreamChunks for OriginalSource {
           }
         } else {
           on_chunk(
-            (!options.final_source).then_some(token),
+            (!options.final_source).then_some(Cow::Borrowed(token)),
             Mapping {
               generated_line: line,
               generated_column: column,
@@ -195,7 +195,7 @@ impl StreamChunks for OriginalSource {
       let mut last_line = None;
       for l in split_into_lines(&self.value) {
         on_chunk(
-          (!options.final_source).then_some(l),
+          (!options.final_source).then_some(Cow::Borrowed(l)),
           Mapping {
             generated_line: line,
             generated_column: 0,

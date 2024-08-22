@@ -256,13 +256,13 @@ impl<T: std::fmt::Debug> std::fmt::Debug for ReplaceSource<T> {
   }
 }
 
-impl<T: Source> StreamChunks for ReplaceSource<T> {
+impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
   fn stream_chunks(
-    &self,
+    &'a self,
     options: &crate::MapOptions,
-    on_chunk: crate::helpers::OnChunk,
-    on_source: crate::helpers::OnSource,
-    on_name: crate::helpers::OnName,
+    on_chunk: crate::helpers::OnChunk<'_, 'a>,
+    on_source: crate::helpers::OnSource<'_, 'a>,
+    on_name: crate::helpers::OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {
     self.sort_replacement();
     let on_name = RefCell::new(on_name);
@@ -274,9 +274,9 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
     let mut generated_line_offset: i64 = 0;
     let mut generated_column_offset: i64 = 0;
     let mut generated_column_offset_line = 0;
-    let source_content_lines: RefCell<Vec<Option<Vec<String>>>> =
+    let source_content_lines: RefCell<Vec<Option<Vec<&str>>>> =
       RefCell::new(Vec::new());
-    let name_mapping: RefCell<HashMap<String, u32>> =
+    let name_mapping: RefCell<HashMap<Cow<str>, u32>> =
       RefCell::new(HashMap::default());
     let name_index_mapping: RefCell<Vec<u32>> = RefCell::new(Vec::new());
 
@@ -331,7 +331,6 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
       &mut |chunk, mut mapping| {
         // SAFETY: final_source is false in ReplaceSource
         let chunk = chunk.unwrap();
-        let chunk_with_indices = WithIndices::new(chunk);
         let mut chunk_pos = 0;
         let end_pos = pos + chunk.len() as u32;
         // Skip over when it has been replaced
@@ -363,7 +362,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
               original.source_index,
               original.original_line,
               original.original_column,
-              chunk_with_indices.substring(0, chunk_pos as usize),
+              &chunk[0..chunk_pos as usize],
             )
           }) {
             original.original_column += chunk_pos;
@@ -387,10 +386,10 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
           if next_replacement_pos > pos {
             // Emit chunk until replacement
             let offset = next_replacement_pos - pos;
-            let chunk_slice = chunk_with_indices
-              .substring(chunk_pos as usize, (chunk_pos + offset) as usize);
+            let chunk_slice =
+              &chunk[chunk_pos as usize..(chunk_pos + offset) as usize];
             on_chunk(
-              Some(chunk_slice),
+              Some(Cow::Owned(chunk_slice.to_string())),
               Mapping {
                 generated_line: line as u32,
                 generated_column: ((mapping.generated_column as i64)
@@ -431,6 +430,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
             }
           }
           // Insert replacement content split into chunks by lines
+
           let repl = &repls[i];
           let lines: Vec<&str> = split_into_lines(&repl.content).collect();
           let mut replacement_name_index = mapping
@@ -441,18 +441,18 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
             repl.name.as_ref().filter(|_| mapping.original.is_some())
           {
             let mut name_mapping = name_mapping.borrow_mut();
-            let mut global_index = name_mapping.get(name).copied();
+            let mut global_index = name_mapping.get(name.as_str()).copied();
             if global_index.is_none() {
               let len = name_mapping.len() as u32;
-              name_mapping.insert(name.to_owned(), len);
-              on_name.borrow_mut()(len, name);
+              name_mapping.insert(Cow::Borrowed(name), len);
+              on_name.borrow_mut()(len, Cow::Owned(name.to_string()));
               global_index = Some(len);
             }
             replacement_name_index = global_index;
           }
           for (m, content_line) in lines.iter().enumerate() {
             on_chunk(
-              Some(content_line),
+              Some(Cow::Owned(content_line.to_string())),
               Mapping {
                 generated_line: line as u32,
                 generated_column: ((mapping.generated_column as i64)
@@ -539,10 +539,8 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
                   original.source_index,
                   original.original_line,
                   original.original_column,
-                  chunk_with_indices.substring(
-                    chunk_pos as usize,
-                    (chunk_pos + offset as u32) as usize,
-                  ),
+                  &chunk
+                    [chunk_pos as usize..(chunk_pos + offset as u32) as usize],
                 )
               })
             {
@@ -565,7 +563,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
           let chunk_slice = if chunk_pos == 0 {
             chunk
           } else {
-            chunk_with_indices.substring(chunk_pos as usize, usize::MAX)
+            Cow::Owned(chunk[chunk_pos as usize..].to_string())
           };
           let line = mapping.generated_line as i64 + generated_line_offset;
           on_chunk(
@@ -601,20 +599,16 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
         while source_content_lines.len() <= source_index as usize {
           source_content_lines.push(None);
         }
-        source_content_lines[source_index as usize] =
-          source_content.map(|source_content| {
-            split_into_lines(source_content)
-              .map(|line| line.to_string())
-              .collect()
-          });
+        source_content_lines[source_index as usize] = source_content
+          .map(|source_content| split_into_lines(source_content).collect());
         on_source(source_index, source, source_content);
       },
       &mut |name_index, name| {
         let mut name_mapping = name_mapping.borrow_mut();
-        let mut global_index = name_mapping.get(name).copied();
+        let mut global_index = name_mapping.get(&name).copied();
         if global_index.is_none() {
           let len = name_mapping.len() as u32;
-          name_mapping.insert(name.to_owned(), len);
+          name_mapping.insert(name.clone(), len);
           on_name.borrow_mut()(len, name);
           global_index = Some(len);
         }
@@ -640,7 +634,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
     let matches: Vec<&str> = split_into_lines(&remainder).collect();
     for (m, content_line) in matches.iter().enumerate() {
       on_chunk(
-        Some(content_line),
+        Some(Cow::Owned(content_line.to_string())),
         Mapping {
           generated_line: line as u32,
           generated_column: ((result.generated_column as i64)

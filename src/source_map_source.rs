@@ -146,13 +146,13 @@ impl std::fmt::Debug for SourceMapSource {
   }
 }
 
-impl StreamChunks for SourceMapSource {
+impl<'a> StreamChunks<'a> for SourceMapSource {
   fn stream_chunks(
-    &self,
+    &'a self,
     options: &MapOptions,
-    on_chunk: crate::helpers::OnChunk,
-    on_source: crate::helpers::OnSource,
-    on_name: crate::helpers::OnName,
+    on_chunk: crate::helpers::OnChunk<'_, 'a>,
+    on_source: crate::helpers::OnSource<'_, 'a>,
+    on_name: crate::helpers::OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {
     if let Some(inner_source_map) = &self.inner_source_map {
       stream_chunks_of_combined_source_map(

@@ -116,33 +116,43 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
   }
 }
 
-impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks
+impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks<'_>
   for CachedSource<T>
 {
-  fn stream_chunks(
-    &self,
+  fn stream_chunks<'a>(
+    &'a self,
     options: &MapOptions,
-    on_chunk: crate::helpers::OnChunk,
-    on_source: crate::helpers::OnSource,
-    on_name: crate::helpers::OnName,
+    on_chunk: crate::helpers::OnChunk<'_, 'a>,
+    on_source: crate::helpers::OnSource<'_, 'a>,
+    on_name: crate::helpers::OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {
     let cached_map = self.cached_maps.entry(options.clone());
     match cached_map {
       Entry::Occupied(entry) => {
-        let source = self.source();
+        let source = self
+          .cached_source
+          .get_or_init(|| self.inner.source().into());
         if let Some(map) = entry.get() {
+          #[allow(unsafe_code)]
+          // SAFETY: We guarantee that once a `SourceMap` is stored in the cache, it will never be removed.
+          // Therefore, even if we force its lifetime to be longer, the reference remains valid.
+          // This is based on the following assumptions:
+          // 1. `SourceMap` will be valid for the entire duration of the application.
+          // 2. The cached `SourceMap` will not be manually removed or replaced, ensuring the reference's safety.
+          let map =
+            unsafe { std::mem::transmute::<&SourceMap, &'a SourceMap>(map) };
           stream_chunks_of_source_map(
-            &source, map, on_chunk, on_source, on_name, options,
+            source, map, on_chunk, on_source, on_name, options,
           )
         } else {
           stream_chunks_of_raw_source(
-            &source, options, on_chunk, on_source, on_name,
+            source, options, on_chunk, on_source, on_name,
           )
         }
       }
       Entry::Vacant(entry) => {
         let (generated_info, map) = stream_and_get_source_and_map(
-          self.original(),
+          &self.inner as &T,
           options,
           on_chunk,
           on_source,
