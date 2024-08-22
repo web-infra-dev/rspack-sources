@@ -2,7 +2,8 @@ use arrayvec::ArrayVec;
 use rustc_hash::FxHashMap as HashMap;
 use std::{
   borrow::{BorrowMut, Cow},
-  cell::RefCell,
+  cell::{OnceCell, RefCell},
+  rc::Rc,
 };
 
 use crate::{
@@ -15,7 +16,7 @@ use crate::{
 
 // Adding this type because sourceContentLine not happy
 type InnerSourceContentLine<'a> =
-  RefCell<HashMap<i64, Option<Vec<WithIndices<&'a str>>>>>;
+  RefCell<HashMap<i64, Option<Rc<Vec<WithIndices<&'a str>>>>>>;
 
 pub fn get_map<'a, S: StreamChunks<'a>>(
   stream: &'a S,
@@ -749,7 +750,29 @@ fn stream_chunks_of_source_map_lines_full<'a>(
 #[derive(Debug)]
 struct SourceMapLineData<'a> {
   pub mappings_data: Vec<i64>,
-  pub chunks: Vec<WithIndices<Cow<'a, str>>>,
+  pub chunks: Vec<SourceMapLineChunk<'a>>,
+}
+
+#[derive(Debug)]
+struct SourceMapLineChunk<'a> {
+  content: Cow<'a, str>,
+  cached: OnceCell<WithIndices<Cow<'a, str>>>,
+}
+
+impl<'a> SourceMapLineChunk<'a> {
+  pub fn new(content: Cow<'a, str>) -> Self {
+    Self {
+      content,
+      cached: OnceCell::new(),
+    }
+  }
+
+  pub fn substring(&self, start_index: usize, end_index: usize) -> &str {
+    let cached = self
+      .cached
+      .get_or_init(|| WithIndices::new(self.content.clone()));
+    cached.substring(start_index, end_index)
+  }
 }
 
 type InnerSourceIndexValueMapping<'a> =
@@ -871,11 +894,11 @@ pub fn stream_chunks_of_combined_source_map<'a>(
                 original_source_lines = if let Some(Some(original_source)) =
                   inner_source_contents.get(&inner_source_index)
                 {
-                  Some(
+                  Some(Rc::new(
                     split_into_lines(original_source)
                       .map(WithIndices::new)
                       .collect(),
-                  )
+                  ))
                 } else {
                   None
                 };
@@ -973,10 +996,12 @@ pub fn stream_chunks_of_combined_source_map<'a>(
                   .and_then(|original_source| {
                     original_source.as_ref().map(|s| {
                       let lines = split_into_lines(s);
-                      lines
-                        .into_iter()
-                        .map(WithIndices::new)
-                        .collect::<Vec<_>>()
+                      Rc::new(
+                        lines
+                          .into_iter()
+                          .map(WithIndices::new)
+                          .collect::<Vec<_>>(),
+                      )
                     })
                   });
                 inner_source_content_lines
@@ -1181,7 +1206,7 @@ pub fn stream_chunks_of_combined_source_map<'a>(
                 .unwrap_or(-1),
             );
             // SAFETY: final_source is false
-            let chunk = WithIndices::new(chunk.unwrap());
+            let chunk = SourceMapLineChunk::new(chunk.unwrap());
             data.chunks.push(chunk);
           },
           &mut |i, source, source_content| {
