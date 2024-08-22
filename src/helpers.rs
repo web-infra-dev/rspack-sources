@@ -913,9 +913,7 @@ impl<'a> SourceMapLineChunk<'a> {
   }
 
   pub fn substring(&self, start_index: usize, end_index: usize) -> &str {
-    let cached = self
-      .cached
-      .get_or_init(|| WithIndices::new(self.content));
+    let cached = self.cached.get_or_init(|| WithIndices::new(self.content));
     cached.substring(start_index, end_index)
   }
 }
@@ -1039,7 +1037,7 @@ pub fn stream_chunks_of_combined_source_map<'a>(
                 {
                   Some(Rc::new(
                     split_into_lines(original_source)
-                      .map(|s| WithIndices::new(s.into()))
+                      .map(WithIndices::new)
                       .collect(),
                   ))
                 } else {
@@ -1081,7 +1079,8 @@ pub fn stream_chunks_of_combined_source_map<'a>(
                 .cloned()
                 .unwrap_or(("".into(), None));
               let mut source_mapping = source_mapping.borrow_mut();
-              let mut global_index = source_mapping.get(&source.to_string()).copied();
+              let mut global_index =
+                source_mapping.get(&source.to_string()).copied();
               if global_index.is_none() {
                 let len = source_mapping.len() as u32;
                 source_mapping.insert(source.to_string(), len);
@@ -1142,7 +1141,7 @@ pub fn stream_chunks_of_combined_source_map<'a>(
                       Rc::new(
                         lines
                           .into_iter()
-                          .map(|s| WithIndices::new(s.into()))
+                          .map(WithIndices::new)
                           .collect::<Vec<_>>(),
                       )
                     })
@@ -1349,7 +1348,7 @@ pub fn stream_chunks_of_combined_source_map<'a>(
                 .unwrap_or(-1),
             );
             // SAFETY: final_source is false
-            let chunk = SourceMapLineChunk::new(chunk.unwrap().into());
+            let chunk = SourceMapLineChunk::new(chunk.unwrap());
             data.chunks.push(chunk);
           },
           &mut |i, source, source_content| {

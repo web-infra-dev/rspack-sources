@@ -1,6 +1,7 @@
 use std::{
   borrow::Cow,
-  hash::{Hash, Hasher}, sync::OnceLock,
+  hash::{Hash, Hasher},
+  sync::OnceLock,
 };
 
 use crate::{
@@ -148,18 +149,15 @@ impl<'a> StreamChunks<'a> for RawSource {
     } else {
       match &self {
         RawSource::Buffer(buffer, value_as_string) => {
-          let source = value_as_string.get_or_init(|| {
-            String::from_utf8_lossy(&buffer).to_string()
-          });
+          let source = value_as_string
+            .get_or_init(|| String::from_utf8_lossy(buffer).to_string());
           stream_chunks_of_raw_source(
-            source,
-            options,
-            on_chunk,
-            on_source,
-            on_name,
+            source, options, on_chunk, on_source, on_name,
           )
-        },
-        RawSource::Source(_) => todo!(),
+        }
+        RawSource::Source(source) => stream_chunks_of_raw_source(
+          source, options, on_chunk, on_source, on_name,
+        ),
       }
     }
   }
