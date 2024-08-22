@@ -624,7 +624,13 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
     );
 
     // Handle remaining replacements
-    let mut remainder = String::new();
+    let mut len = 0;
+    let mut j = i;
+    while j < repls.len() {
+      len += &repls[j].content.len();
+      j += 1;
+    }
+    let mut remainder = String::with_capacity(len);
     while i < repls.len() {
       remainder += &repls[i].content;
       i += 1;
