@@ -183,10 +183,11 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for ReplaceSource<T> {
     // mut_string_push_str is faster that vec join
     // concatenate strings benchmark, see https://github.com/hoodie/concatenation_benchmarks-rs
     let replacements = self.replacements.lock().unwrap();
-    let mut max_len = inner_source_code.len();
-    for replacement in replacements.iter() {
-      max_len += replacement.content.len();
-    }
+    let max_len = replacements
+      .iter()
+      .map(|replacement| replacement.content.len())
+      .sum::<usize>()
+      + inner_source_code.len();
     let mut source_code = String::with_capacity(max_len);
     let mut inner_pos = 0;
     for replacement in replacements.iter() {
@@ -625,10 +626,8 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
 
     // Handle remaining replacements
     let mut len = 0;
-    let mut j = i;
-    while j < repls.len() {
-      len += &repls[j].content.len();
-      j += 1;
+    for replacement in &repls[i..] {
+      len += replacement.content.len();
     }
     let mut remainder = String::with_capacity(len);
     while i < repls.len() {
