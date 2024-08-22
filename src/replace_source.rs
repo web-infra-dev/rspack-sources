@@ -270,7 +270,7 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
     let mut generated_column_offset_line = 0;
     let source_content_lines: RefCell<Vec<Option<Vec<&str>>>> =
       RefCell::new(Vec::new());
-    let name_mapping: RefCell<HashMap<String, u32>> =
+    let name_mapping: RefCell<HashMap<&str, u32>> =
       RefCell::new(HashMap::default());
     let name_index_mapping: RefCell<Vec<u32>> = RefCell::new(Vec::new());
 
@@ -444,10 +444,10 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
             repl.name.as_ref().filter(|_| mapping.original.is_some())
           {
             let mut name_mapping = name_mapping.borrow_mut();
-            let mut global_index = name_mapping.get(name).copied();
+            let mut global_index = name_mapping.get(name.as_str()).copied();
             if global_index.is_none() {
               let len = name_mapping.len() as u32;
-              name_mapping.insert(name.to_owned(), len);
+              name_mapping.insert(name, len);
               on_name.borrow_mut()(len, name);
               global_index = Some(len);
             }
@@ -611,7 +611,7 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
         let mut global_index = name_mapping.get(name).copied();
         if global_index.is_none() {
           let len = name_mapping.len() as u32;
-          name_mapping.insert(name.to_owned(), len);
+          name_mapping.insert(name, len);
           on_name.borrow_mut()(len, name);
           global_index = Some(len);
         }
