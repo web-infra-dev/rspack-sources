@@ -35,12 +35,10 @@ serde_json = "1"
 dyn-clone = "1"
 rustc-hash = "1"
 dashmap = "5"
-substring = "1"
 memchr = "2.6.4"
-str_indices = "0.4.3"
+arrayvec = "0.7.4"
 
 codspeed-criterion-compat = { version = "2.3.3", default-features = false, optional = true }
-arrayvec = "0.7.4"
 
 [dev-dependencies]
 twox-hash = "1"
