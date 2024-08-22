@@ -299,6 +299,7 @@ pub fn decode(segment: &str, rv: &mut ArrayVec<i64, 5>) -> Result<()> {
   }
 }
 
+#[inline(always)]
 fn encode_vlq(out: &mut String, num: i64) {
   let mut num = if num < 0 { ((-num) << 1) + 1 } else { num << 1 };
 
