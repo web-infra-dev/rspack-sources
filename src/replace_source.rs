@@ -41,6 +41,7 @@ pub struct ReplaceSource<T> {
   replacements: Mutex<Vec<Replacement>>,
   /// Whether `replacements` is sorted.
   is_sorted: AtomicBool,
+  remainder: OnceLock<String>,
 }
 
 /// Enforce replacement order when two replacement start and end are both equal
@@ -90,6 +91,7 @@ impl<T> ReplaceSource<T> {
       inner_source_code: OnceLock::new(),
       replacements: Mutex::new(Vec::new()),
       is_sorted: AtomicBool::new(true),
+      remainder: OnceLock::new(),
     }
   }
 
@@ -622,44 +624,47 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
     );
 
     // Handle remaining replacements
-    let mut remainder = String::new();
-    while i < repls.len() {
-      remainder += &repls[i].content;
-      i += 1;
-    }
+    let remainder = self.remainder.get_or_init(|| {
+      let mut remainder = String::new();
+      while i < repls.len() {
+        remainder += &repls[i].content;
+        i += 1;
+      }
+      remainder
+    });
 
     // Insert remaining replacements content split into chunks by lines
     let mut line = result.generated_line as i64 + generated_line_offset;
-    // let matches: Vec<&str> = split_into_lines(&remainder).collect();
-    // for (m, content_line) in matches.iter().enumerate() {
-    //   on_chunk(
-    //     Some(content_line),
-    //     Mapping {
-    //       generated_line: line as u32,
-    //       generated_column: ((result.generated_column as i64)
-    //         + if line == generated_column_offset_line {
-    //           generated_column_offset
-    //         } else {
-    //           0
-    //         }) as u32,
-    //       original: None,
-    //     },
-    //   );
+    let matches: Vec<&str> = split_into_lines(remainder).collect();
+    for (m, content_line) in matches.iter().enumerate() {
+      on_chunk(
+        Some(content_line),
+        Mapping {
+          generated_line: line as u32,
+          generated_column: ((result.generated_column as i64)
+            + if line == generated_column_offset_line {
+              generated_column_offset
+            } else {
+              0
+            }) as u32,
+          original: None,
+        },
+      );
 
-    //   if m == matches.len() - 1 && !content_line.ends_with('\n') {
-    //     if generated_column_offset_line == line {
-    //       generated_column_offset += content_line.len() as i64;
-    //     } else {
-    //       generated_column_offset = content_line.len() as i64;
-    //       generated_column_offset_line = line;
-    //     }
-    //   } else {
-    //     generated_line_offset += 1;
-    //     line += 1;
-    //     generated_column_offset = -(result.generated_column as i64);
-    //     generated_column_offset_line = line;
-    //   }
-    // }
+      if m == matches.len() - 1 && !content_line.ends_with('\n') {
+        if generated_column_offset_line == line {
+          generated_column_offset += content_line.len() as i64;
+        } else {
+          generated_column_offset = content_line.len() as i64;
+          generated_column_offset_line = line;
+        }
+      } else {
+        generated_line_offset += 1;
+        line += 1;
+        generated_column_offset = -(result.generated_column as i64);
+        generated_column_offset_line = line;
+      }
+    }
 
     GeneratedInfo {
       generated_line: line as u32,
@@ -680,6 +685,7 @@ impl<T: Source> Clone for ReplaceSource<T> {
       inner_source_code: self.inner_source_code.clone(),
       replacements: Mutex::new(self.replacements().clone()),
       is_sorted: AtomicBool::new(self.is_sorted.load(Ordering::SeqCst)),
+      remainder: OnceLock::new(),
     }
   }
 }
