@@ -12,6 +12,12 @@ use crate::{
   MapOptions, Source, SourceMap,
 };
 
+#[derive(Clone, PartialEq, Eq)]
+enum RawValue {
+  Buffer(Vec<u8>),
+  String(String),
+}
+
 /// Represents source code without source map, it will not create source map for the source code.
 ///
 /// - [webpack-sources docs](https://github.com/webpack/webpack-sources/#rawsource).
@@ -25,64 +31,88 @@ use crate::{
 /// assert_eq!(s.map(&MapOptions::default()), None);
 /// assert_eq!(s.size(), 16);
 /// ```
-#[derive(Clone, Eq)]
-pub enum RawSource {
-  /// Represent buffer.
-  Buffer(Vec<u8>, OnceLock<String>),
-  /// Represent string.
-  Source(String),
+pub struct RawSource {
+  value: RawValue,
+  value_as_string: OnceLock<String>,
 }
+
+impl Clone for RawSource {
+  fn clone(&self) -> Self {
+    Self {
+      value: self.value.clone(),
+      value_as_string: Default::default(),
+    }
+  }
+}
+
+impl Eq for RawSource {}
 
 impl RawSource {
   /// Whether the [RawSource] represent a buffer.
   pub fn is_buffer(&self) -> bool {
-    matches!(self, Self::Buffer(_, _))
+    matches!(self.value, RawValue::Buffer(_))
   }
 }
 
 impl From<String> for RawSource {
-  fn from(s: String) -> Self {
-    Self::Source(s)
+  fn from(value: String) -> Self {
+    Self {
+      value: RawValue::String(value),
+      value_as_string: Default::default(),
+    }
   }
 }
 
 impl From<Vec<u8>> for RawSource {
-  fn from(s: Vec<u8>) -> Self {
-    Self::Buffer(s, OnceLock::new())
+  fn from(value: Vec<u8>) -> Self {
+    Self {
+      value: RawValue::Buffer(value),
+      value_as_string: Default::default(),
+    }
   }
 }
 
 impl From<&str> for RawSource {
-  fn from(s: &str) -> Self {
-    Self::Source(s.to_owned())
+  fn from(value: &str) -> Self {
+    Self {
+      value: RawValue::String(value.to_string()),
+      value_as_string: Default::default(),
+    }
   }
 }
 
 impl From<&[u8]> for RawSource {
-  fn from(s: &[u8]) -> Self {
-    Self::Buffer(s.to_owned(), OnceLock::new())
+  fn from(value: &[u8]) -> Self {
+    Self {
+      value: RawValue::Buffer(value.to_owned()),
+      value_as_string: Default::default(),
+    }
   }
 }
 
 impl Source for RawSource {
   fn source(&self) -> Cow<str> {
-    match self {
-      RawSource::Buffer(i, _) => String::from_utf8_lossy(i),
-      RawSource::Source(i) => Cow::Borrowed(i),
+    match &self.value {
+      RawValue::String(v) => Cow::Borrowed(v),
+      RawValue::Buffer(v) => Cow::Borrowed(
+        self
+          .value_as_string
+          .get_or_init(|| String::from_utf8_lossy(v).to_string()),
+      ),
     }
   }
 
   fn buffer(&self) -> Cow<[u8]> {
-    match self {
-      RawSource::Buffer(i, _) => Cow::Borrowed(i),
-      RawSource::Source(i) => Cow::Borrowed(i.as_bytes()),
+    match &self.value {
+      RawValue::String(v) => Cow::Borrowed(v.as_bytes()),
+      RawValue::Buffer(v) => Cow::Borrowed(v),
     }
   }
 
   fn size(&self) -> usize {
-    match self {
-      RawSource::Buffer(i, _) => i.len(),
-      RawSource::Source(i) => i.len(),
+    match &self.value {
+      RawValue::String(v) => v.len(),
+      RawValue::Buffer(v) => v.len(),
     }
   }
 
@@ -91,9 +121,9 @@ impl Source for RawSource {
   }
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
-    writer.write_all(match self {
-      RawSource::Buffer(i, _) => i,
-      RawSource::Source(i) => i.as_bytes(),
+    writer.write_all(match &self.value {
+      RawValue::String(v) => v.as_bytes(),
+      RawValue::Buffer(v) => v,
     })
   }
 }
@@ -107,9 +137,9 @@ impl Hash for RawSource {
 
 impl PartialEq for RawSource {
   fn eq(&self, other: &Self) -> bool {
-    match (self, other) {
-      (Self::Buffer(l0, _), Self::Buffer(r0, _)) => l0 == r0,
-      (Self::Source(l0), Self::Source(r0)) => l0 == r0,
+    match (&self.value, &other.value) {
+      (RawValue::Buffer(l0), RawValue::Buffer(r0)) => l0 == r0,
+      (RawValue::String(l0), RawValue::String(r0)) => l0 == r0,
       _ => false,
     }
   }
@@ -121,14 +151,14 @@ impl std::fmt::Debug for RawSource {
     f: &mut std::fmt::Formatter<'_>,
   ) -> Result<(), std::fmt::Error> {
     let mut d = f.debug_struct("RawSource");
-    match self {
-      Self::Buffer(buffer, _) => {
+    match &self.value {
+      RawValue::Buffer(buffer) => {
         d.field(
           "buffer",
           &buffer.iter().take(50).copied().collect::<Vec<u8>>(),
         );
       }
-      Self::Source(string) => {
+      RawValue::String(string) => {
         d.field("source", &string.chars().take(50).collect::<String>());
       }
     }
@@ -147,15 +177,16 @@ impl<'a> StreamChunks<'a> for RawSource {
     if options.final_source {
       get_generated_source_info(&self.source())
     } else {
-      match &self {
-        RawSource::Buffer(buffer, value_as_string) => {
-          let source = value_as_string
+      match &self.value {
+        RawValue::Buffer(buffer) => {
+          let source = self
+            .value_as_string
             .get_or_init(|| String::from_utf8_lossy(buffer).to_string());
           stream_chunks_of_raw_source(
             source, options, on_chunk, on_source, on_name,
           )
         }
-        RawSource::Source(source) => stream_chunks_of_raw_source(
+        RawValue::String(source) => stream_chunks_of_raw_source(
           source, options, on_chunk, on_source, on_name,
         ),
       }
@@ -172,7 +203,7 @@ mod tests {
   // Fix https://github.com/web-infra-dev/rspack/issues/6793
   #[test]
   fn fix_rspack_issue_6793() {
-    let source1 = RawSource::Source("hello\n\n".to_string());
+    let source1 = RawSource::from("hello\n\n".to_string());
     let source1 = ReplaceSource::new(source1);
     let source2 = OriginalSource::new("world".to_string(), "world.txt");
     let concat = ConcatSource::new([source1.boxed(), source2.boxed()]);
