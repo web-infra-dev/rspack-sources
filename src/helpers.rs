@@ -3,7 +3,6 @@ use rustc_hash::FxHashMap as HashMap;
 use std::{
   borrow::{BorrowMut, Cow},
   cell::{OnceCell, RefCell},
-  rc::Rc,
 };
 
 use crate::{
@@ -15,7 +14,7 @@ use crate::{
 
 // Adding this type because sourceContentLine not happy
 type InnerSourceContentLine<'a> =
-  RefCell<HashMap<i64, Option<Rc<Vec<WithIndices<&'a str>>>>>>;
+  RefCell<HashMap<i64, Option<Vec<WithIndices<&'a str>>>>>;
 
 pub fn get_map<'a, S: StreamChunks<'a>>(
   stream: &'a S,
@@ -1046,11 +1045,11 @@ pub fn stream_chunks_of_combined_source_map<'a>(
                 original_source_lines = if let Some(Some(original_source)) =
                   inner_source_contents.get(&inner_source_index)
                 {
-                  Some(Rc::new(
+                  Some(
                     split_into_lines(original_source)
                       .map(WithIndices::new)
                       .collect(),
-                  ))
+                  )
                 } else {
                   None
                 };
@@ -1148,12 +1147,10 @@ pub fn stream_chunks_of_combined_source_map<'a>(
                   .and_then(|original_source| {
                     original_source.as_ref().map(|s| {
                       let lines = split_into_lines(s);
-                      Rc::new(
-                        lines
-                          .into_iter()
-                          .map(WithIndices::new)
-                          .collect::<Vec<_>>(),
-                      )
+                      lines
+                        .into_iter()
+                        .map(WithIndices::new)
+                        .collect::<Vec<_>>()
                     })
                   });
                 inner_source_content_lines
