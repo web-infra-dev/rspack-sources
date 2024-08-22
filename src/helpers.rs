@@ -2,7 +2,7 @@ use arrayvec::ArrayVec;
 use rustc_hash::FxHashMap as HashMap;
 use std::{
   borrow::{BorrowMut, Cow},
-  cell::{OnceCell, RefCell},
+  cell::RefCell,
 };
 
 use crate::{
@@ -265,7 +265,7 @@ fn encode_full_mappings(mappings: &[Mapping]) -> String {
   let mut initial = true;
 
   mappings.iter().fold(
-    String::with_capacity(mappings.len() * 6),
+    String::new(),
     |mut acc, mapping| {
       if active_mapping && current_line == mapping.generated_line {
         // A mapping is still active
@@ -901,29 +901,7 @@ fn stream_chunks_of_source_map_lines_full<'a>(
 #[derive(Debug)]
 struct SourceMapLineData<'a> {
   pub mappings_data: Vec<i64>,
-  pub chunks: Vec<SourceMapLineChunk<'a>>,
-}
-
-#[derive(Debug)]
-struct SourceMapLineChunk<'a> {
-  content: Cow<'a, str>,
-  cached: OnceCell<WithIndices<Cow<'a, str>>>,
-}
-
-impl<'a> SourceMapLineChunk<'a> {
-  pub fn new(content: Cow<'a, str>) -> Self {
-    Self {
-      content,
-      cached: OnceCell::new(),
-    }
-  }
-
-  pub fn substring(&self, start_index: usize, end_index: usize) -> &str {
-    let cached = self
-      .cached
-      .get_or_init(|| WithIndices::new(self.content.clone()));
-    cached.substring(start_index, end_index)
-  }
+  pub chunks: Vec<WithIndices<Cow<'a, str>>>,
 }
 
 type InnerSourceIndexValueMapping<'a> =
@@ -1355,7 +1333,7 @@ pub fn stream_chunks_of_combined_source_map<'a>(
                 .unwrap_or(-1),
             );
             // SAFETY: final_source is false
-            let chunk = SourceMapLineChunk::new(chunk.unwrap());
+            let chunk = WithIndices::new(chunk.unwrap());
             data.chunks.push(chunk);
           },
           &mut |i, source, source_content| {
