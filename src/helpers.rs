@@ -348,13 +348,14 @@ fn encode_lines_only_mappings(mappings: &[Mapping]) -> String {
   let mut current_line = 1;
   let mut current_source_index = 0;
   let mut current_original_line = 1;
+  let mut out = String::new();
   mappings.iter().fold(String::new(), |acc, mapping| {
     if let Some(original) = &mapping.original {
       if last_written_line == mapping.generated_line {
         // avoid writing multiple original mappings per line
         return acc;
       }
-      let mut out = String::new();
+      out.clear();
       last_written_line = mapping.generated_line;
       if mapping.generated_line == current_line + 1 {
         current_line = mapping.generated_line;
