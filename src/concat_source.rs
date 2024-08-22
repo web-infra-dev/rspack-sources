@@ -149,7 +149,7 @@ impl<'a> StreamChunks<'a> for ConcatSource {
   fn stream_chunks(
     &'a self,
     options: &MapOptions,
-    on_chunk: OnChunk,
+    on_chunk: OnChunk<'_, 'a>,
     on_source: OnSource<'_, 'a>,
     on_name: OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {

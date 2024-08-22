@@ -4,7 +4,6 @@ use std::{
   borrow::{BorrowMut, Cow},
   cell::{OnceCell, RefCell},
   rc::Rc,
-  sync::Arc,
 };
 
 use crate::{
@@ -14,10 +13,9 @@ use crate::{
   MapOptions, SourceMap,
 };
 
-type ArcStr = Arc<str>;
 // Adding this type because sourceContentLine not happy
-type InnerSourceContentLine =
-  RefCell<HashMap<i64, Option<Rc<Vec<WithIndices<ArcStr>>>>>>;
+type InnerSourceContentLine<'a> =
+  RefCell<HashMap<i64, Option<Rc<Vec<WithIndices<&'a str>>>>>>;
 
 pub fn get_map<'a, S: StreamChunks<'a>>(
   stream: &'a S,
@@ -70,14 +68,14 @@ pub trait StreamChunks<'a> {
   fn stream_chunks(
     &'a self,
     options: &MapOptions,
-    on_chunk: OnChunk,
+    on_chunk: OnChunk<'_, 'a>,
     on_source: OnSource<'_, 'a>,
     on_name: OnName<'_, 'a>,
   ) -> GeneratedInfo;
 }
 
 /// [OnChunk] abstraction, see [webpack-sources onChunk](https://github.com/webpack/webpack-sources/blob/9f98066311d53a153fdc7c633422a1d086528027/lib/helpers/streamChunks.js#L13).
-pub type OnChunk<'a> = &'a mut dyn FnMut(Option<&str>, Mapping);
+pub type OnChunk<'a, 'b> = &'a mut dyn FnMut(Option<&'b str>, Mapping);
 
 /// [OnSource] abstraction, see [webpack-sources onSource](https://github.com/webpack/webpack-sources/blob/9f98066311d53a153fdc7c633422a1d086528027/lib/helpers/streamChunks.js#L13).
 pub type OnSource<'a, 'b> = &'a mut dyn FnMut(u32, &str, Option<&'b str>);
@@ -90,7 +88,7 @@ pub fn stream_chunks_default<'a>(
   source: &'a str,
   source_map: Option<&'a SourceMap>,
   options: &MapOptions,
-  on_chunk: OnChunk,
+  on_chunk: OnChunk<'_, 'a>,
   on_source: OnSource<'_, 'a>,
   on_name: OnName<'_, 'a>,
 ) -> GeneratedInfo {
@@ -506,12 +504,12 @@ pub fn get_generated_source_info(source: &str) -> GeneratedInfo {
   }
 }
 
-pub fn stream_chunks_of_raw_source(
-  source: &str,
+pub fn stream_chunks_of_raw_source<'a>(
+  source: &'a str,
   options: &MapOptions,
-  on_chunk: OnChunk,
-  _on_source: OnSource,
-  _on_name: OnName,
+  on_chunk: OnChunk<'_, 'a>,
+  _on_source: OnSource<'_, 'a>,
+  _on_name: OnName<'_, 'a>,
 ) -> GeneratedInfo {
   if options.final_source {
     return get_generated_source_info(source);
@@ -549,7 +547,7 @@ pub fn stream_chunks_of_raw_source(
 pub fn stream_chunks_of_source_map<'a>(
   source: &'a str,
   source_map: &'a SourceMap,
-  on_chunk: OnChunk,
+  on_chunk: OnChunk<'_, 'a>,
   on_source: OnSource<'_, 'a>,
   on_name: OnName<'_, 'a>,
   options: &MapOptions,
@@ -651,7 +649,7 @@ fn stream_chunks_of_source_map_final<'a>(
 fn stream_chunks_of_source_map_full<'a>(
   source: &'a str,
   source_map: &'a SourceMap,
-  on_chunk: OnChunk,
+  on_chunk: OnChunk<'_, 'a>,
   on_source: OnSource<'_, 'a>,
   on_name: OnName<'_, 'a>,
 ) -> GeneratedInfo {
@@ -807,7 +805,7 @@ fn stream_chunks_of_source_map_lines_final<'a>(
 fn stream_chunks_of_source_map_lines_full<'a>(
   source: &'a str,
   source_map: &'a SourceMap,
-  on_chunk: OnChunk,
+  on_chunk: OnChunk<'_, 'a>,
   on_source: OnSource<'_, 'a>,
   _on_name: OnName,
 ) -> GeneratedInfo {
@@ -895,19 +893,19 @@ fn stream_chunks_of_source_map_lines_full<'a>(
 }
 
 #[derive(Debug)]
-struct SourceMapLineData {
+struct SourceMapLineData<'a> {
   pub mappings_data: Vec<i64>,
-  pub chunks: Vec<SourceMapLineChunk>,
+  pub chunks: Vec<SourceMapLineChunk<'a>>,
 }
 
 #[derive(Debug)]
-struct SourceMapLineChunk {
-  content: ArcStr,
-  cached: OnceCell<WithIndices<ArcStr>>,
+struct SourceMapLineChunk<'a> {
+  content: &'a str,
+  cached: OnceCell<WithIndices<&'a str>>,
 }
 
-impl SourceMapLineChunk {
-  pub fn new(content: ArcStr) -> Self {
+impl<'a> SourceMapLineChunk<'a> {
+  pub fn new(content: &'a str) -> Self {
     Self {
       content,
       cached: OnceCell::new(),
@@ -917,7 +915,7 @@ impl SourceMapLineChunk {
   pub fn substring(&self, start_index: usize, end_index: usize) -> &str {
     let cached = self
       .cached
-      .get_or_init(|| WithIndices::new(self.content.clone()));
+      .get_or_init(|| WithIndices::new(self.content));
     cached.substring(start_index, end_index)
   }
 }
@@ -930,14 +928,14 @@ pub fn stream_chunks_of_combined_source_map<'a>(
   inner_source: Option<&'a str>,
   inner_source_map: &'a SourceMap,
   remove_inner_source: bool,
-  on_chunk: OnChunk,
+  on_chunk: OnChunk<'_, 'a>,
   on_source: OnSource<'_, 'a>,
   on_name: OnName<'_, 'a>,
   options: &MapOptions,
 ) -> GeneratedInfo {
   let on_source = RefCell::new(on_source);
-  let inner_source: RefCell<Option<&'a str>> = RefCell::new(inner_source);
-  let source_mapping: RefCell<HashMap<ArcStr, u32>> =
+  let inner_source: RefCell<Option<&str>> = RefCell::new(inner_source);
+  let source_mapping: RefCell<HashMap<String, u32>> =
     RefCell::new(HashMap::default());
   let mut name_mapping: HashMap<&str, u32> = HashMap::default();
   let source_index_mapping: RefCell<HashMap<i64, i64>> =
@@ -950,9 +948,9 @@ pub fn stream_chunks_of_combined_source_map<'a>(
   let inner_source_index_mapping: RefCell<HashMap<i64, i64>> =
     RefCell::new(HashMap::default());
   let inner_source_index_value_mapping: RefCell<
-    HashMap<i64, (ArcStr, Option<&'a str>)>,
+    HashMap<i64, (String, Option<&str>)>,
   > = RefCell::new(HashMap::default());
-  let inner_source_contents: RefCell<HashMap<i64, Option<ArcStr>>> =
+  let inner_source_contents: RefCell<HashMap<i64, Option<&str>>> =
     RefCell::new(HashMap::default());
   let inner_source_content_lines: InnerSourceContentLine =
     RefCell::new(HashMap::default());
@@ -1083,10 +1081,10 @@ pub fn stream_chunks_of_combined_source_map<'a>(
                 .cloned()
                 .unwrap_or(("".into(), None));
               let mut source_mapping = source_mapping.borrow_mut();
-              let mut global_index = source_mapping.get(&source).copied();
+              let mut global_index = source_mapping.get(&source.to_string()).copied();
               if global_index.is_none() {
                 let len = source_mapping.len() as u32;
-                source_mapping.insert(source.clone(), len);
+                source_mapping.insert(source.to_string(), len);
                 on_source.borrow_mut()(len, &source, source_content);
                 global_index = Some(len);
               }
@@ -1363,7 +1361,7 @@ pub fn stream_chunks_of_combined_source_map<'a>(
             inner_source_index_mapping.borrow_mut().insert(i, -2);
             inner_source_index_value_mapping
               .borrow_mut()
-              .insert(i, (source.into(), source_content.map(Into::into)));
+              .insert(i, (source.to_string(), source_content));
           },
           &mut |i, name| {
             let i = i as i64;
@@ -1380,7 +1378,7 @@ pub fn stream_chunks_of_combined_source_map<'a>(
         let mut global_index = source_mapping.get(source).copied();
         if global_index.is_none() {
           let len = source_mapping.len() as u32;
-          source_mapping.insert(source.into(), len);
+          source_mapping.insert(source.to_string(), len);
           on_source.borrow_mut()(len, source, source_content);
           global_index = Some(len);
         }
@@ -1401,7 +1399,7 @@ pub fn stream_chunks_of_combined_source_map<'a>(
 pub fn stream_and_get_source_and_map<'a, S: StreamChunks<'a>>(
   input_source: &'a S,
   options: &MapOptions,
-  on_chunk: OnChunk,
+  on_chunk: OnChunk<'_, 'a>,
   on_source: OnSource<'_, 'a>,
   on_name: OnName<'_, 'a>,
 ) -> (GeneratedInfo, Option<SourceMap>) {

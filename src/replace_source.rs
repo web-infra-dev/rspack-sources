@@ -254,7 +254,7 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
   fn stream_chunks(
     &'a self,
     options: &crate::MapOptions,
-    on_chunk: crate::helpers::OnChunk,
+    on_chunk: crate::helpers::OnChunk<'_, 'a>,
     on_source: crate::helpers::OnSource<'_, 'a>,
     on_name: crate::helpers::OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {
@@ -630,36 +630,36 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
 
     // Insert remaining replacements content split into chunks by lines
     let mut line = result.generated_line as i64 + generated_line_offset;
-    let matches: Vec<&str> = split_into_lines(&remainder).collect();
-    for (m, content_line) in matches.iter().enumerate() {
-      on_chunk(
-        Some(content_line),
-        Mapping {
-          generated_line: line as u32,
-          generated_column: ((result.generated_column as i64)
-            + if line == generated_column_offset_line {
-              generated_column_offset
-            } else {
-              0
-            }) as u32,
-          original: None,
-        },
-      );
+    // let matches: Vec<&str> = split_into_lines(&remainder).collect();
+    // for (m, content_line) in matches.iter().enumerate() {
+    //   on_chunk(
+    //     Some(content_line),
+    //     Mapping {
+    //       generated_line: line as u32,
+    //       generated_column: ((result.generated_column as i64)
+    //         + if line == generated_column_offset_line {
+    //           generated_column_offset
+    //         } else {
+    //           0
+    //         }) as u32,
+    //       original: None,
+    //     },
+    //   );
 
-      if m == matches.len() - 1 && !content_line.ends_with('\n') {
-        if generated_column_offset_line == line {
-          generated_column_offset += content_line.len() as i64;
-        } else {
-          generated_column_offset = content_line.len() as i64;
-          generated_column_offset_line = line;
-        }
-      } else {
-        generated_line_offset += 1;
-        line += 1;
-        generated_column_offset = -(result.generated_column as i64);
-        generated_column_offset_line = line;
-      }
-    }
+    //   if m == matches.len() - 1 && !content_line.ends_with('\n') {
+    //     if generated_column_offset_line == line {
+    //       generated_column_offset += content_line.len() as i64;
+    //     } else {
+    //       generated_column_offset = content_line.len() as i64;
+    //       generated_column_offset_line = line;
+    //     }
+    //   } else {
+    //     generated_line_offset += 1;
+    //     line += 1;
+    //     generated_column_offset = -(result.generated_column as i64);
+    //     generated_column_offset_line = line;
+    //   }
+    // }
 
     GeneratedInfo {
       generated_line: line as u32,

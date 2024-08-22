@@ -102,7 +102,7 @@ impl<'a> StreamChunks<'a> for OriginalSource {
   fn stream_chunks(
     &'a self,
     options: &MapOptions,
-    on_chunk: OnChunk,
+    on_chunk: OnChunk<'_, 'a>,
     on_source: OnSource<'_, 'a>,
     _on_name: OnName,
   ) -> crate::helpers::GeneratedInfo {

@@ -1,6 +1,6 @@
 use std::{
   borrow::Cow,
-  hash::{Hash, Hasher},
+  hash::{Hash, Hasher}, sync::OnceLock,
 };
 
 use crate::{
@@ -27,7 +27,7 @@ use crate::{
 #[derive(Clone, Eq)]
 pub enum RawSource {
   /// Represent buffer.
-  Buffer(Vec<u8>),
+  Buffer(Vec<u8>, OnceLock<String>),
   /// Represent string.
   Source(String),
 }
@@ -35,7 +35,7 @@ pub enum RawSource {
 impl RawSource {
   /// Whether the [RawSource] represent a buffer.
   pub fn is_buffer(&self) -> bool {
-    matches!(self, Self::Buffer(_))
+    matches!(self, Self::Buffer(_, _))
   }
 }
 
@@ -47,7 +47,7 @@ impl From<String> for RawSource {
 
 impl From<Vec<u8>> for RawSource {
   fn from(s: Vec<u8>) -> Self {
-    Self::Buffer(s)
+    Self::Buffer(s, OnceLock::new())
   }
 }
 
@@ -59,28 +59,28 @@ impl From<&str> for RawSource {
 
 impl From<&[u8]> for RawSource {
   fn from(s: &[u8]) -> Self {
-    Self::Buffer(s.to_owned())
+    Self::Buffer(s.to_owned(), OnceLock::new())
   }
 }
 
 impl Source for RawSource {
   fn source(&self) -> Cow<str> {
     match self {
-      RawSource::Buffer(i) => String::from_utf8_lossy(i),
+      RawSource::Buffer(i, _) => String::from_utf8_lossy(i),
       RawSource::Source(i) => Cow::Borrowed(i),
     }
   }
 
   fn buffer(&self) -> Cow<[u8]> {
     match self {
-      RawSource::Buffer(i) => Cow::Borrowed(i),
+      RawSource::Buffer(i, _) => Cow::Borrowed(i),
       RawSource::Source(i) => Cow::Borrowed(i.as_bytes()),
     }
   }
 
   fn size(&self) -> usize {
     match self {
-      RawSource::Buffer(i) => i.len(),
+      RawSource::Buffer(i, _) => i.len(),
       RawSource::Source(i) => i.len(),
     }
   }
@@ -91,7 +91,7 @@ impl Source for RawSource {
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
     writer.write_all(match self {
-      RawSource::Buffer(i) => i,
+      RawSource::Buffer(i, _) => i,
       RawSource::Source(i) => i.as_bytes(),
     })
   }
@@ -107,7 +107,7 @@ impl Hash for RawSource {
 impl PartialEq for RawSource {
   fn eq(&self, other: &Self) -> bool {
     match (self, other) {
-      (Self::Buffer(l0), Self::Buffer(r0)) => l0 == r0,
+      (Self::Buffer(l0, _), Self::Buffer(r0, _)) => l0 == r0,
       (Self::Source(l0), Self::Source(r0)) => l0 == r0,
       _ => false,
     }
@@ -121,7 +121,7 @@ impl std::fmt::Debug for RawSource {
   ) -> Result<(), std::fmt::Error> {
     let mut d = f.debug_struct("RawSource");
     match self {
-      Self::Buffer(buffer) => {
+      Self::Buffer(buffer, _) => {
         d.field(
           "buffer",
           &buffer.iter().take(50).copied().collect::<Vec<u8>>(),
@@ -135,24 +135,32 @@ impl std::fmt::Debug for RawSource {
   }
 }
 
-impl StreamChunks<'_> for RawSource {
+impl<'a> StreamChunks<'a> for RawSource {
   fn stream_chunks(
-    &self,
+    &'a self,
     options: &MapOptions,
-    on_chunk: OnChunk,
-    on_source: OnSource,
-    on_name: OnName,
+    on_chunk: OnChunk<'_, 'a>,
+    on_source: OnSource<'_, 'a>,
+    on_name: OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {
     if options.final_source {
       get_generated_source_info(&self.source())
     } else {
-      stream_chunks_of_raw_source(
-        &self.source(),
-        options,
-        on_chunk,
-        on_source,
-        on_name,
-      )
+      match &self {
+        RawSource::Buffer(buffer, value_as_string) => {
+          let source = value_as_string.get_or_init(|| {
+            String::from_utf8_lossy(&buffer).to_string()
+          });
+          stream_chunks_of_raw_source(
+            source,
+            options,
+            on_chunk,
+            on_source,
+            on_name,
+          )
+        },
+        RawSource::Source(_) => todo!(),
+      }
     }
   }
 }

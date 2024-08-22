@@ -78,7 +78,7 @@ impl<'a> StreamChunks<'a> for BoxSource {
   fn stream_chunks(
     &'a self,
     options: &MapOptions,
-    on_chunk: crate::helpers::OnChunk,
+    on_chunk: crate::helpers::OnChunk<'_, 'a>,
     on_source: crate::helpers::OnSource<'_, 'a>,
     on_name: crate::helpers::OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {
