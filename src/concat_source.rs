@@ -160,7 +160,7 @@ impl<'a> StreamChunks<'a> for ConcatSource {
     let mut current_line_offset = 0;
     let mut current_column_offset = 0;
     let mut source_mapping: HashMap<Cow<str>, u32> = HashMap::default();
-    let mut name_mapping: HashMap<&str, u32> = HashMap::default();
+    let mut name_mapping: HashMap<Cow<str>, u32> = HashMap::default();
     let mut need_to_close_mapping = false;
 
     let source_index_mapping: RefCell<HashMap<u32, u32>> =
@@ -274,10 +274,10 @@ impl<'a> StreamChunks<'a> for ConcatSource {
             .insert(i, global_index.unwrap());
         },
         &mut |i, name| {
-          let mut global_index = name_mapping.get(name).copied();
+          let mut global_index = name_mapping.get(&name).copied();
           if global_index.is_none() {
             let len = name_mapping.len() as u32;
-            name_mapping.insert(name, len);
+            name_mapping.insert(name.clone(), len);
             on_name(len, name);
             global_index = Some(len);
           }

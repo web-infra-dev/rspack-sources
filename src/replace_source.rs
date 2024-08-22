@@ -276,7 +276,7 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
     let mut generated_column_offset_line = 0;
     let source_content_lines: RefCell<Vec<Option<Vec<&str>>>> =
       RefCell::new(Vec::new());
-    let name_mapping: RefCell<HashMap<&str, u32>> =
+    let name_mapping: RefCell<HashMap<Cow<str>, u32>> =
       RefCell::new(HashMap::default());
     let name_index_mapping: RefCell<Vec<u32>> = RefCell::new(Vec::new());
 
@@ -431,16 +431,7 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
           }
           // Insert replacement content split into chunks by lines
 
-          #[allow(unsafe_code)]
-          // SAFETY:
-          // - After this point, `ReplaceSource` must not modify `replacements`.
-          // - This ensures that the reference to `Replacement` remains valid for the entire `'a` lifetime.
-          // - We are using `transmute` to extend the lifetime of the reference from a temporary lifetime to `'a`.
-          // - It is critical to maintain the invariant that `replacements` is immutable once accessed in this manner.
-          // - Ensure the logic design guarantees that no further modifications to `replacements` occur after this transmutation.
-          let repl = unsafe {
-            std::mem::transmute::<&Replacement, &'a Replacement>(&repls[i])
-          };
+          let repl = &repls[i];
           let lines: Vec<&str> = split_into_lines(&repl.content).collect();
           let mut replacement_name_index = mapping
             .original
@@ -453,15 +444,15 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
             let mut global_index = name_mapping.get(name.as_str()).copied();
             if global_index.is_none() {
               let len = name_mapping.len() as u32;
-              name_mapping.insert(name, len);
-              on_name.borrow_mut()(len, name);
+              name_mapping.insert(Cow::Borrowed(name), len);
+              on_name.borrow_mut()(len, Cow::Owned(name.to_string()));
               global_index = Some(len);
             }
             replacement_name_index = global_index;
           }
           for (m, content_line) in lines.iter().enumerate() {
             on_chunk(
-              Some(Cow::Borrowed(content_line)),
+              Some(Cow::Owned(content_line.to_string())),
               Mapping {
                 generated_line: line as u32,
                 generated_column: ((mapping.generated_column as i64)
@@ -614,10 +605,10 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
       },
       &mut |name_index, name| {
         let mut name_mapping = name_mapping.borrow_mut();
-        let mut global_index = name_mapping.get(name).copied();
+        let mut global_index = name_mapping.get(&name).copied();
         if global_index.is_none() {
           let len = name_mapping.len() as u32;
-          name_mapping.insert(name, len);
+          name_mapping.insert(name.clone(), len);
           on_name.borrow_mut()(len, name);
           global_index = Some(len);
         }
