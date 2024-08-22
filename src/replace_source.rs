@@ -430,7 +430,6 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
           // Insert replacement content split into chunks by lines
 
           let repl = &repls[i];
-          let lines: Vec<&str> = split_into_lines(&repl.content).collect();
           let mut replacement_name_index = mapping
             .original
             .as_ref()
@@ -448,7 +447,8 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
             }
             replacement_name_index = global_index;
           }
-          for (m, content_line) in lines.iter().enumerate() {
+          let mut consumed_len = 0;
+          for content_line in split_into_lines(&repl.content) {
             on_chunk(
               Some(Cow::Owned(content_line.to_string())),
               Mapping {
@@ -471,8 +471,10 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
             );
             // Only the first chunk has name assigned
             replacement_name_index = None;
-
-            if m == lines.len() - 1 && !content_line.ends_with('\n') {
+            consumed_len += content_line.len();
+            if consumed_len == repl.content.len()
+              && !content_line.ends_with('\n')
+            {
               if generated_column_offset_line == line {
                 generated_column_offset += content_line.len() as i64;
               } else {
