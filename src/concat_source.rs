@@ -159,7 +159,7 @@ impl<'a> StreamChunks<'a> for ConcatSource {
     }
     let mut current_line_offset = 0;
     let mut current_column_offset = 0;
-    let mut source_mapping: HashMap<String, u32> = HashMap::default();
+    let mut source_mapping: HashMap<Cow<str>, u32> = HashMap::default();
     let mut name_mapping: HashMap<&str, u32> = HashMap::default();
     let mut need_to_close_mapping = false;
 
@@ -262,10 +262,10 @@ impl<'a> StreamChunks<'a> for ConcatSource {
           }
         },
         &mut |i, source, source_content| {
-          let mut global_index = source_mapping.get(source).copied();
+          let mut global_index = source_mapping.get(&source).copied();
           if global_index.is_none() {
             let len = source_mapping.len() as u32;
-            source_mapping.insert(source.to_owned(), len);
+            source_mapping.insert(source.clone(), len);
             on_source(len, source, source_content);
             global_index = Some(len);
           }

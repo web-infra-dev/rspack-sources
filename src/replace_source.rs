@@ -41,7 +41,6 @@ pub struct ReplaceSource<T> {
   replacements: Mutex<Vec<Replacement>>,
   /// Whether `replacements` is sorted.
   is_sorted: AtomicBool,
-  remainder: OnceLock<String>,
 }
 
 /// Enforce replacement order when two replacement start and end are both equal
@@ -91,7 +90,6 @@ impl<T> ReplaceSource<T> {
       inner_source_code: OnceLock::new(),
       replacements: Mutex::new(Vec::new()),
       is_sorted: AtomicBool::new(true),
-      remainder: OnceLock::new(),
     }
   }
 
@@ -385,7 +383,7 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
             let chunk_slice =
               &chunk[chunk_pos as usize..(chunk_pos + offset) as usize];
             on_chunk(
-              Some(chunk_slice),
+              Some(Cow::Owned(chunk_slice.to_string())),
               Mapping {
                 generated_line: line as u32,
                 generated_column: ((mapping.generated_column as i64)
@@ -457,7 +455,7 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
           }
           for (m, content_line) in lines.iter().enumerate() {
             on_chunk(
-              Some(content_line),
+              Some(Cow::Borrowed(content_line)),
               Mapping {
                 generated_line: line as u32,
                 generated_column: ((mapping.generated_column as i64)
@@ -568,7 +566,7 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
           let chunk_slice = if chunk_pos == 0 {
             chunk
           } else {
-            &chunk[chunk_pos as usize..]
+            Cow::Owned(chunk[chunk_pos as usize..].to_string())
           };
           let line = mapping.generated_line as i64 + generated_line_offset;
           on_chunk(
@@ -624,21 +622,18 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
     );
 
     // Handle remaining replacements
-    let remainder = self.remainder.get_or_init(|| {
-      let mut remainder = String::new();
-      while i < repls.len() {
-        remainder += &repls[i].content;
-        i += 1;
-      }
-      remainder
-    });
+    let mut remainder = String::new();
+    while i < repls.len() {
+      remainder += &repls[i].content;
+      i += 1;
+    }
 
     // Insert remaining replacements content split into chunks by lines
     let mut line = result.generated_line as i64 + generated_line_offset;
-    let matches: Vec<&str> = split_into_lines(remainder).collect();
+    let matches: Vec<&str> = split_into_lines(&remainder).collect();
     for (m, content_line) in matches.iter().enumerate() {
       on_chunk(
-        Some(content_line),
+        Some(Cow::Owned(content_line.to_string())),
         Mapping {
           generated_line: line as u32,
           generated_column: ((result.generated_column as i64)
@@ -685,7 +680,6 @@ impl<T: Source> Clone for ReplaceSource<T> {
       inner_source_code: self.inner_source_code.clone(),
       replacements: Mutex::new(self.replacements().clone()),
       is_sorted: AtomicBool::new(self.is_sorted.load(Ordering::SeqCst)),
-      remainder: OnceLock::new(),
     }
   }
 }
