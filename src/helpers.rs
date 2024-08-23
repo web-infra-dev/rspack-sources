@@ -7,8 +7,9 @@ use std::{
 };
 
 use crate::{
+  encoder::create_encoder,
   source::{Mapping, OriginalLocation},
-  vlq::{decode, encode},
+  vlq::decode,
   with_indices::WithIndices,
   MapOptions, SourceMap,
 };
@@ -21,10 +22,11 @@ pub fn get_map<'a, S: StreamChunks<'a>>(
   stream: &'a S,
   options: &'a MapOptions,
 ) -> Option<SourceMap> {
-  let mut mappings = Vec::new();
+  let mut mappings_encoder = create_encoder(options.columns);
   let mut sources: Vec<Cow<'static, str>> = Vec::new();
   let mut sources_content: Vec<Cow<'static, str>> = Vec::new();
   let mut names: Vec<Cow<'static, str>> = Vec::new();
+
   stream.stream_chunks(
     &MapOptions {
       columns: options.columns,
@@ -32,7 +34,7 @@ pub fn get_map<'a, S: StreamChunks<'a>>(
     },
     // on_chunk
     &mut |_, mapping| {
-      mappings.push(mapping);
+      mappings_encoder.encode(&mapping);
     },
     // on_source
     &mut |source_index, source, source_content| {
@@ -57,7 +59,7 @@ pub fn get_map<'a, S: StreamChunks<'a>>(
       names[name_index] = name.to_string().into();
     },
   );
-  let mappings = encode_mappings(&mappings, options);
+  let mappings = mappings_encoder.drain();
   (!mappings.is_empty())
     .then(|| SourceMap::new(None, mappings, sources, sources_content, names))
 }
@@ -244,160 +246,6 @@ impl<'a> Iterator for SegmentIter<'a> {
       None => None,
     }
   }
-}
-
-pub fn encode_mappings(mappings: &[Mapping], options: &MapOptions) -> String {
-  if options.columns {
-    encode_full_mappings(mappings)
-  } else {
-    encode_lines_only_mappings(mappings)
-  }
-}
-
-fn encode_full_mappings(mappings: &[Mapping]) -> String {
-  let mut current_line = 1;
-  let mut current_column = 0;
-  let mut current_original_line = 1;
-  let mut current_original_column = 0;
-  let mut current_source_index = 0;
-  let mut current_name_index = 0;
-  let mut active_mapping = false;
-  let mut active_name = false;
-  let mut initial = true;
-
-  mappings.iter().fold(
-    String::with_capacity(mappings.len() * 6),
-    |mut acc, mapping| {
-      if active_mapping && current_line == mapping.generated_line {
-        // A mapping is still active
-        if mapping.original.is_some_and(|original| {
-          original.source_index == current_source_index
-            && original.original_line == current_original_line
-            && original.original_column == current_original_column
-            && !active_name
-            && original.name_index.is_none()
-        }) {
-          // avoid repeating the same original mapping
-          return acc;
-        }
-      } else {
-        // No mapping is active
-        if mapping.original.is_none() {
-          // avoid writing unnecessary generated mappings
-          return acc;
-        }
-      }
-
-      if current_line < mapping.generated_line {
-        (0..mapping.generated_line - current_line).for_each(|_| acc.push(';'));
-        current_line = mapping.generated_line;
-        current_column = 0;
-        initial = false;
-      } else if initial {
-        initial = false;
-      } else {
-        acc.push(',');
-      }
-
-      encode(&mut acc, mapping.generated_column, current_column);
-      current_column = mapping.generated_column;
-      if let Some(original) = &mapping.original {
-        active_mapping = true;
-        if original.source_index == current_source_index {
-          acc.push('A');
-        } else {
-          encode(&mut acc, original.source_index, current_source_index);
-          current_source_index = original.source_index;
-        }
-        encode(&mut acc, original.original_line, current_original_line);
-        current_original_line = original.original_line;
-        if original.original_column == current_original_column {
-          acc.push('A');
-        } else {
-          encode(&mut acc, original.original_column, current_original_column);
-          current_original_column = original.original_column;
-        }
-        if let Some(name_index) = original.name_index {
-          encode(&mut acc, name_index, current_name_index);
-          current_name_index = name_index;
-          active_name = true;
-        } else {
-          active_name = false;
-        }
-      } else {
-        active_mapping = false;
-      }
-      acc
-    },
-  )
-}
-
-fn encode_lines_only_mappings(mappings: &[Mapping]) -> String {
-  let mut last_written_line = 0;
-  let mut current_line = 1;
-  let mut current_source_index = 0;
-  let mut current_original_line = 1;
-  let mut out = String::new();
-  mappings.iter().fold(String::new(), |acc, mapping| {
-    if let Some(original) = &mapping.original {
-      if last_written_line == mapping.generated_line {
-        // avoid writing multiple original mappings per line
-        return acc;
-      }
-      out.clear();
-      last_written_line = mapping.generated_line;
-      if mapping.generated_line == current_line + 1 {
-        current_line = mapping.generated_line;
-        if original.source_index == current_source_index {
-          if original.original_line == current_original_line + 1 {
-            current_original_line = original.original_line;
-            out.push_str(";AACA");
-            return acc + &out;
-          } else {
-            out.push_str(";AA");
-            encode(&mut out, original.original_line, current_original_line);
-            current_original_line = original.original_line;
-            out.push('A');
-            return acc + &out;
-          }
-        } else {
-          out.push_str(";A");
-          encode(&mut out, original.source_index, current_source_index);
-          current_source_index = original.source_index;
-          encode(&mut out, original.original_line, current_original_line);
-          current_original_line = original.original_line;
-          out.push('A');
-          return acc + &out;
-        }
-      } else {
-        (0..mapping.generated_line - current_line).for_each(|_| out.push(';'));
-        current_line = mapping.generated_line;
-        if original.source_index == current_source_index {
-          if original.original_line == current_original_line + 1 {
-            current_original_line = original.original_line;
-            out.push_str("AACA");
-            return acc + &out;
-          } else {
-            out.push_str("AA");
-            encode(&mut out, original.original_line, current_original_line);
-            current_original_line = original.original_line;
-            out.push('A');
-            return acc + &out;
-          }
-        } else {
-          out.push('A');
-          encode(&mut out, original.source_index, current_source_index);
-          current_source_index = original.source_index;
-          encode(&mut out, original.original_line, current_original_line);
-          current_original_line = original.original_line;
-          out.push('A');
-          return acc + &out;
-        }
-      }
-    }
-    // avoid writing generated mappings at all
-    acc
-  })
 }
 
 pub struct PotentialTokens<'a> {
@@ -1412,14 +1260,15 @@ pub fn stream_and_get_source_and_map<'a, S: StreamChunks<'a>>(
   on_source: OnSource<'_, 'a>,
   on_name: OnName<'_, 'a>,
 ) -> (GeneratedInfo, Option<SourceMap>) {
-  let mut mappings = Vec::new();
+  let mut mappings_encoder = create_encoder(options.columns);
   let mut sources: Vec<Cow<'static, str>> = Vec::new();
   let mut sources_content: Vec<Cow<'static, str>> = Vec::new();
   let mut names: Vec<Cow<'static, str>> = Vec::new();
+
   let generated_info = input_source.stream_chunks(
     options,
     &mut |chunk, mapping| {
-      mappings.push(mapping.clone());
+      mappings_encoder.encode(&mapping);
       on_chunk(chunk, mapping);
     },
     &mut |source_index, source, source_content| {
@@ -1446,7 +1295,7 @@ pub fn stream_and_get_source_and_map<'a, S: StreamChunks<'a>>(
     },
   );
 
-  let mappings = encode_mappings(&mappings, options);
+  let mappings = mappings_encoder.drain();
   let map = if mappings.is_empty() {
     None
   } else {
