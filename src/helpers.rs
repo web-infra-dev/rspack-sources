@@ -1,5 +1,4 @@
 use arrayvec::ArrayVec;
-use rustc_hash::FxHashMap;
 use std::{
   borrow::{BorrowMut, Cow},
   cell::{OnceCell, RefCell},
@@ -10,6 +9,7 @@ use rustc_hash::FxHashMap as HashMap;
 
 use crate::{
   encoder::create_encoder,
+  linear_map::LinearMap,
   source::{Mapping, OriginalLocation},
   vlq::decode,
   with_indices::WithIndices,
@@ -778,7 +778,7 @@ impl<'a> SourceMapLineChunk<'a> {
 }
 
 type InnerSourceIndexValueMapping<'a> =
-  HashMap<u32, (Cow<'a, str>, Option<&'a str>)>;
+  LinearMap<(Cow<'a, str>, Option<&'a str>)>;
 
 #[allow(clippy::too_many_arguments)]
 pub fn stream_chunks_of_combined_source_map<'a>(
@@ -795,28 +795,28 @@ pub fn stream_chunks_of_combined_source_map<'a>(
 ) -> GeneratedInfo {
   let on_source = RefCell::new(on_source);
   let inner_source: RefCell<Option<&str>> = RefCell::new(inner_source);
-  let source_mapping: RefCell<FxHashMap<Cow<str>, u32>> =
-    RefCell::new(FxHashMap::default());
-  let mut name_mapping: FxHashMap<Cow<str>, u32> = FxHashMap::default();
-  let source_index_mapping: RefCell<HashMap<u32, i64>> =
+  let source_mapping: RefCell<HashMap<Cow<str>, u32>> =
     RefCell::new(HashMap::default());
-  let name_index_mapping: RefCell<HashMap<u32, i64>> =
-    RefCell::new(HashMap::default());
-  let name_index_value_mapping: RefCell<HashMap<u32, Cow<str>>> =
-    RefCell::new(HashMap::default());
+  let mut name_mapping: HashMap<Cow<str>, u32> = HashMap::default();
+  let source_index_mapping: RefCell<LinearMap<i64>> =
+    RefCell::new(LinearMap::default());
+  let name_index_mapping: RefCell<LinearMap<i64>> =
+    RefCell::new(LinearMap::default());
+  let name_index_value_mapping: RefCell<LinearMap<Cow<str>>> =
+    RefCell::new(LinearMap::default());
   let inner_source_index: RefCell<i64> = RefCell::new(-2);
-  let inner_source_index_mapping: RefCell<HashMap<u32, i64>> =
-    RefCell::new(HashMap::default());
+  let inner_source_index_mapping: RefCell<LinearMap<i64>> =
+    RefCell::new(LinearMap::default());
   let inner_source_index_value_mapping: RefCell<InnerSourceIndexValueMapping> =
-    RefCell::new(HashMap::default());
-  let inner_source_contents: RefCell<HashMap<u32, Option<&str>>> =
-    RefCell::new(HashMap::default());
+    RefCell::new(LinearMap::default());
+  let inner_source_contents: RefCell<LinearMap<Option<&str>>> =
+    RefCell::new(LinearMap::default());
   let inner_source_content_lines: InnerSourceContentLine =
-    RefCell::new(FxHashMap::default());
-  let inner_name_index_mapping: RefCell<HashMap<u32, i64>> =
     RefCell::new(HashMap::default());
-  let inner_name_index_value_mapping: RefCell<HashMap<u32, Cow<str>>> =
-    RefCell::new(HashMap::default());
+  let inner_name_index_mapping: RefCell<LinearMap<i64>> =
+    RefCell::new(LinearMap::default());
+  let inner_name_index_value_mapping: RefCell<LinearMap<Cow<str>>> =
+    RefCell::new(LinearMap::default());
   let inner_source_map_line_data: RefCell<Vec<SourceMapLineData>> =
     RefCell::new(Vec::new());
 
