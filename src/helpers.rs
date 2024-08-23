@@ -681,7 +681,7 @@ fn stream_chunks_of_source_map_full<'a>(
   let mut current_mapping = mappings_iter.next();
 
   for (current_generated_index, c) in source.char_indices() {
-    if let Some(mapping) = current_mapping.take() {
+    if let Some(mapping) = current_mapping {
       if mapping.generated_line == current_generated_line
         && mapping.generated_column == current_generated_column
       {
@@ -703,8 +703,6 @@ fn stream_chunks_of_source_map_full<'a>(
         tracking_mapping_original = mapping.original;
 
         current_mapping = mappings_iter.next();
-      } else {
-        current_mapping = Some(mapping);
       }
     }
 
