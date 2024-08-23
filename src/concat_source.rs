@@ -8,6 +8,7 @@ use rustc_hash::FxHashMap as HashMap;
 
 use crate::{
   helpers::{get_map, GeneratedInfo, OnChunk, OnName, OnSource, StreamChunks},
+  linear_map::LinearMap,
   source::{Mapping, OriginalLocation},
   BoxSource, MapOptions, Source, SourceExt, SourceMap,
 };
@@ -163,10 +164,10 @@ impl<'a> StreamChunks<'a> for ConcatSource {
     let mut name_mapping: HashMap<Cow<str>, u32> = HashMap::default();
     let mut need_to_close_mapping = false;
 
-    let source_index_mapping: RefCell<HashMap<u32, u32>> =
-      RefCell::new(HashMap::default());
-    let name_index_mapping: RefCell<HashMap<u32, u32>> =
-      RefCell::new(HashMap::default());
+    let source_index_mapping: RefCell<LinearMap<u32>> =
+      RefCell::new(LinearMap::default());
+    let name_index_mapping: RefCell<LinearMap<u32>> =
+      RefCell::new(LinearMap::default());
 
     for item in self.children() {
       source_index_mapping.borrow_mut().clear();
