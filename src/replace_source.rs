@@ -1,14 +1,18 @@
 use std::{
-  borrow::Cow, cell::RefCell, collections::HashMap, hash::{Hash, Hasher}, sync::{
+  borrow::Cow,
+  cell::RefCell,
+  hash::{Hash, Hasher},
+  sync::{
     atomic::{AtomicBool, Ordering},
     Arc, Mutex, MutexGuard, OnceLock,
-  }
+  },
 };
 
-use rustc_hash::FxHashMap;
+use rustc_hash::FxHashMap as HashMap;
 
 use crate::{
-  hash::IdentityHashBuilder, helpers::{get_map, split_into_lines, GeneratedInfo, StreamChunks}, with_indices::WithIndices, MapOptions, Mapping, OriginalLocation, Source, SourceMap
+  helpers::{get_map, split_into_lines, GeneratedInfo, StreamChunks},
+  MapOptions, Mapping, OriginalLocation, Source, SourceMap,
 };
 
 /// Decorates a Source with replacements and insertions of source code,
@@ -271,9 +275,9 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
     let mut generated_column_offset_line = 0;
     let source_content_lines: RefCell<Vec<Option<Vec<&str>>>> =
       RefCell::new(Vec::new());
-    let name_mapping: RefCell<FxHashMap<Cow<str>, u32>> =
-      RefCell::new(FxHashMap::default());
-      let name_index_mapping: RefCell<HashMap<u32, u32, IdentityHashBuilder>> =
+    let name_mapping: RefCell<HashMap<Cow<str>, u32>> =
+      RefCell::new(HashMap::default());
+    let name_index_mapping: RefCell<HashMap<u32, u32>> =
       RefCell::new(HashMap::default());
 
     // check if source_content[line][col] is equal to expect
@@ -308,10 +312,17 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
           source_content_lines.borrow().get(source_index as usize)
         {
           if let Some(content_line) = content_lines.get(line as usize - 1) {
-            WithIndices::new(content_line).substring(
-              column as usize,
-              column as usize + expected_chunk.len(),
-            ) == expected_chunk
+            match content_line
+              .char_indices()
+              .nth(column as usize)
+              .map(|(byte_index, _)| byte_index)
+            {
+              Some(byte_index) => {
+                content_line.get(byte_index..byte_index + expected_chunk.len())
+                  == Some(expected_chunk)
+              }
+              None => false,
+            }
           } else {
             false
           }
@@ -319,6 +330,7 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
           false
         }
       };
+
     let result = self.inner.stream_chunks(
       &MapOptions {
         columns: options.columns,
@@ -400,10 +412,7 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
                     original_line: original.original_line,
                     original_column: original.original_column,
                     name_index: original.name_index.and_then(|name_index| {
-                      name_index_mapping
-                        .borrow()
-                        .get(&name_index)
-                        .copied()
+                      name_index_mapping.borrow().get(&name_index).copied()
                     }),
                   }
                 }),
@@ -578,10 +587,7 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
                   original_line: original.original_line,
                   original_column: original.original_column,
                   name_index: original.name_index.and_then(|name_index| {
-                    name_index_mapping
-                      .borrow()
-                      .get(&name_index)
-                      .copied()
+                    name_index_mapping.borrow().get(&name_index).copied()
                   }),
                 }
               }),
