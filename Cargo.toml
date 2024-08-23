@@ -39,6 +39,7 @@ memchr = "2.6.4"
 arrayvec = "0.7.4"
 
 codspeed-criterion-compat = { version = "2.3.3", default-features = false, optional = true }
+bumpalo = { version = "3.16.0", features = ["collections"] }
 
 [dev-dependencies]
 twox-hash = "1"

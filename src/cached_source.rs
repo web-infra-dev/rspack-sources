@@ -4,6 +4,7 @@ use std::{
   sync::{Arc, OnceLock},
 };
 
+use bumpalo::Bump;
 use dashmap::{mapref::entry::Entry, DashMap};
 use rustc_hash::FxHasher;
 
@@ -121,6 +122,7 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks<'_>
 {
   fn stream_chunks<'a>(
     &'a self,
+    bump: &Bump,
     options: &MapOptions,
     on_chunk: crate::helpers::OnChunk<'_, 'a>,
     on_source: crate::helpers::OnSource<'_, 'a>,
@@ -142,16 +144,17 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks<'_>
           let map =
             unsafe { std::mem::transmute::<&SourceMap, &'a SourceMap>(map) };
           stream_chunks_of_source_map(
-            source, map, on_chunk, on_source, on_name, options,
+            bump, source, map, on_chunk, on_source, on_name, options,
           )
         } else {
           stream_chunks_of_raw_source(
-            source, options, on_chunk, on_source, on_name,
+            bump, source, options, on_chunk, on_source, on_name,
           )
         }
       }
       Entry::Vacant(entry) => {
         let (generated_info, map) = stream_and_get_source_and_map(
+          bump,
           &self.inner as &T,
           options,
           on_chunk,
@@ -308,6 +311,7 @@ mod tests {
 
   #[test]
   fn should_produce_correct_output_for_cached_raw_source() {
+    let mut bump = Bump::new();
     let map_options = MapOptions {
       columns: true,
       final_source: true,
@@ -318,6 +322,7 @@ mod tests {
     let mut on_source_count = 0;
     let mut on_name_count = 0;
     let generated_info = source.stream_chunks(
+      &bump,
       &map_options,
       &mut |_chunk, _mapping| {
         on_chunk_count += 1;
@@ -332,6 +337,7 @@ mod tests {
 
     let cached_source = CachedSource::new(source);
     cached_source.stream_chunks(
+      &bump,
       &map_options,
       &mut |_chunk, _mapping| {},
       &mut |_source_index, _source, _source_content| {},
@@ -342,6 +348,7 @@ mod tests {
     let mut cached_on_source_count = 0;
     let mut cached_on_name_count = 0;
     let cached_generated_info = cached_source.stream_chunks(
+      &bump,
       &map_options,
       &mut |_chunk, _mapping| {
         cached_on_chunk_count += 1;

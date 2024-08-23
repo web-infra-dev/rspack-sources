@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::hash::Hash;
 
+use bumpalo::Bump;
 use rspack_sources::stream_chunks::{
   stream_chunks_default, GeneratedInfo, OnChunk, OnName, OnSource, StreamChunks,
 };
@@ -36,12 +37,14 @@ impl Source for CompatSource {
 impl<'a> StreamChunks<'a> for CompatSource {
   fn stream_chunks(
     &'a self,
+    bump: &Bump,
     options: &MapOptions,
     on_chunk: OnChunk<'_, 'a>,
     on_source: OnSource<'_, 'a>,
     on_name: OnName<'_, 'a>,
   ) -> GeneratedInfo {
     stream_chunks_default(
+      bump,
       self.0,
       self.1.as_ref(),
       options,

@@ -1,11 +1,13 @@
-pub struct LinearMap<V: Default> {
-  inner: Vec<V>,
+use bumpalo::{collections::Vec, Bump};
+
+pub struct LinearMap<'a, V: Default> {
+  inner: Vec<'a, V>,
 }
 
-impl<V: Default> LinearMap<V> {
-  pub fn new() -> Self {
+impl<'a, V: Default> LinearMap<'a, V> {
+  pub fn new(bump: &'a Bump) -> Self {
     Self {
-      inner: Default::default(),
+      inner: Vec::new_in(bump),
     }
   }
 
@@ -15,19 +17,13 @@ impl<V: Default> LinearMap<V> {
 
   pub fn insert(&mut self, key: u32, value: V) {
     let key = key as usize;
-    if key >= self.inner.len() {
-      self.inner.resize_with(key + 1, Default::default);
+    while key >= self.inner.len() {
+      self.inner.push(Default::default());
     }
     self.inner[key] = value;
   }
 
   pub fn clear(&mut self) {
     self.inner.clear()
-  }
-}
-
-impl<V: Default> Default for LinearMap<V> {
-  fn default() -> Self {
-    Self::new()
   }
 }

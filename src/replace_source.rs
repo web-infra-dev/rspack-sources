@@ -8,6 +8,7 @@ use std::{
   },
 };
 
+use bumpalo::Bump;
 use rustc_hash::FxHashMap as HashMap;
 
 use crate::{
@@ -259,6 +260,7 @@ impl<T: std::fmt::Debug> std::fmt::Debug for ReplaceSource<T> {
 impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
   fn stream_chunks(
     &'a self,
+    bump: &Bump,
     options: &crate::MapOptions,
     on_chunk: crate::helpers::OnChunk<'_, 'a>,
     on_source: crate::helpers::OnSource<'_, 'a>,
@@ -275,11 +277,11 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
     let mut generated_column_offset: i64 = 0;
     let mut generated_column_offset_line = 0;
     let source_content_lines: RefCell<LinearMap<Option<Vec<&str>>>> =
-      RefCell::new(LinearMap::default());
-    let name_mapping: RefCell<HashMap<Cow<str>, u32>> =
-      RefCell::new(HashMap::default());
+      RefCell::new(LinearMap::new(bump));
+    let name_mapping: RefCell<&mut HashMap<Cow<str>, u32>> =
+      RefCell::new(bump.alloc(HashMap::default()));
     let name_index_mapping: RefCell<LinearMap<u32>> =
-      RefCell::new(LinearMap::default());
+      RefCell::new(LinearMap::new(bump));
 
     // check if source_content[line][col] is equal to expect
     // Why this is needed?
@@ -333,6 +335,7 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
       };
 
     let result = self.inner.stream_chunks(
+      bump,
       &MapOptions {
         columns: options.columns,
         final_source: false,

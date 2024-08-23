@@ -3,6 +3,8 @@ use std::{
   hash::{Hash, Hasher},
 };
 
+use bumpalo::Bump;
+
 use crate::{
   helpers::{
     get_map, stream_chunks_of_combined_source_map, stream_chunks_of_source_map,
@@ -149,6 +151,7 @@ impl std::fmt::Debug for SourceMapSource {
 impl<'a> StreamChunks<'a> for SourceMapSource {
   fn stream_chunks(
     &'a self,
+    bump: &Bump,
     options: &MapOptions,
     on_chunk: crate::helpers::OnChunk<'_, 'a>,
     on_source: crate::helpers::OnSource<'_, 'a>,
@@ -156,6 +159,7 @@ impl<'a> StreamChunks<'a> for SourceMapSource {
   ) -> crate::helpers::GeneratedInfo {
     if let Some(inner_source_map) = &self.inner_source_map {
       stream_chunks_of_combined_source_map(
+        bump,
         &self.value,
         &self.source_map,
         &self.name,
@@ -169,6 +173,7 @@ impl<'a> StreamChunks<'a> for SourceMapSource {
       )
     } else {
       stream_chunks_of_source_map(
+        bump,
         &self.value,
         &self.source_map,
         on_chunk,

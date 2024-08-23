@@ -4,6 +4,7 @@ use std::{
   hash::{Hash, Hasher},
 };
 
+use bumpalo::Bump;
 use rustc_hash::FxHashMap as HashMap;
 
 use crate::{
@@ -149,6 +150,7 @@ impl Eq for ConcatSource {}
 impl<'a> StreamChunks<'a> for ConcatSource {
   fn stream_chunks(
     &'a self,
+    bump: &Bump,
     options: &MapOptions,
     on_chunk: OnChunk<'_, 'a>,
     on_source: OnSource<'_, 'a>,
@@ -156,18 +158,20 @@ impl<'a> StreamChunks<'a> for ConcatSource {
   ) -> crate::helpers::GeneratedInfo {
     if self.children().len() == 1 {
       return self.children[0]
-        .stream_chunks(options, on_chunk, on_source, on_name);
+        .stream_chunks(bump, options, on_chunk, on_source, on_name);
     }
     let mut current_line_offset = 0;
     let mut current_column_offset = 0;
-    let mut source_mapping: HashMap<Cow<str>, u32> = HashMap::default();
-    let mut name_mapping: HashMap<Cow<str>, u32> = HashMap::default();
+    let mut source_mapping: &mut HashMap<Cow<str>, u32> =
+      bump.alloc(HashMap::default());
+    let mut name_mapping: &mut HashMap<Cow<str>, u32> =
+      bump.alloc(HashMap::default());
     let mut need_to_close_mapping = false;
 
     let source_index_mapping: RefCell<LinearMap<u32>> =
-      RefCell::new(LinearMap::default());
+      RefCell::new(LinearMap::new(bump));
     let name_index_mapping: RefCell<LinearMap<u32>> =
-      RefCell::new(LinearMap::default());
+      RefCell::new(LinearMap::new(bump));
 
     for item in self.children() {
       source_index_mapping.borrow_mut().clear();
@@ -177,6 +181,7 @@ impl<'a> StreamChunks<'a> for ConcatSource {
         generated_line,
         generated_column,
       } = item.stream_chunks(
+        bump,
         options,
         &mut |chunk, mapping| {
           let line = mapping.generated_line + current_line_offset;

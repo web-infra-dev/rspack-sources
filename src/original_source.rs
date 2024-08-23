@@ -3,6 +3,8 @@ use std::{
   hash::{Hash, Hasher},
 };
 
+use bumpalo::Bump;
+
 use crate::{
   helpers::{
     get_generated_source_info, get_map, split_into_lines,
@@ -101,6 +103,7 @@ impl std::fmt::Debug for OriginalSource {
 impl<'a> StreamChunks<'a> for OriginalSource {
   fn stream_chunks(
     &'a self,
+    _bump: &Bump,
     options: &MapOptions,
     on_chunk: OnChunk<'_, 'a>,
     on_source: OnSource<'_, 'a>,

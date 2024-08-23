@@ -4,6 +4,8 @@ use std::{
   sync::OnceLock,
 };
 
+use bumpalo::Bump;
+
 use crate::{
   helpers::{
     get_generated_source_info, stream_chunks_of_raw_source, OnChunk, OnName,
@@ -169,6 +171,7 @@ impl std::fmt::Debug for RawSource {
 impl<'a> StreamChunks<'a> for RawSource {
   fn stream_chunks(
     &'a self,
+    bump: &Bump,
     options: &MapOptions,
     on_chunk: OnChunk<'_, 'a>,
     on_source: OnSource<'_, 'a>,
@@ -183,11 +186,11 @@ impl<'a> StreamChunks<'a> for RawSource {
             .value_as_string
             .get_or_init(|| String::from_utf8_lossy(buffer).to_string());
           stream_chunks_of_raw_source(
-            source, options, on_chunk, on_source, on_name,
+            bump, source, options, on_chunk, on_source, on_name,
           )
         }
         RawValue::String(source) => stream_chunks_of_raw_source(
-          source, options, on_chunk, on_source, on_name,
+          bump, source, options, on_chunk, on_source, on_name,
         ),
       }
     }

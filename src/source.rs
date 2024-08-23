@@ -7,6 +7,7 @@ use std::{
   sync::{Arc, OnceLock},
 };
 
+use bumpalo::Bump;
 use dyn_clone::DynClone;
 use serde::{Deserialize, Serialize};
 
@@ -77,6 +78,7 @@ dyn_clone::clone_trait_object!(Source);
 impl<'a> StreamChunks<'a> for BoxSource {
   fn stream_chunks(
     &'a self,
+    bump: &Bump,
     options: &MapOptions,
     on_chunk: crate::helpers::OnChunk<'_, 'a>,
     on_source: crate::helpers::OnSource<'_, 'a>,
@@ -84,7 +86,7 @@ impl<'a> StreamChunks<'a> for BoxSource {
   ) -> crate::helpers::GeneratedInfo {
     self
       .as_ref()
-      .stream_chunks(options, on_chunk, on_source, on_name)
+      .stream_chunks(bump, options, on_chunk, on_source, on_name)
   }
 }
 
