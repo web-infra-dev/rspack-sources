@@ -111,9 +111,9 @@ pub struct GeneratedInfo {
   pub generated_column: u32,
 }
 
-pub fn decode_mappings<'b, 'a: 'b>(
-  source_map: &'a SourceMap,
-) -> impl Iterator<Item = Mapping> + 'b {
+pub fn decode_mappings(
+  source_map: &SourceMap,
+) -> impl Iterator<Item = Mapping> + '_ {
   SegmentIter::new(source_map.mappings())
 }
 
@@ -640,7 +640,7 @@ fn stream_chunks_of_source_map_final<'a>(
     }
   };
   for mapping in source_map.decoded_mappings() {
-    on_mapping(mapping);
+    on_mapping(&mapping);
   }
   result
 }
@@ -672,11 +672,11 @@ fn stream_chunks_of_source_map_full<'a>(
   let mut tracking_generated_column: u32 = 0;
   let mut tracking_mapping_original: Option<OriginalLocation> = None;
 
-  let mut mappings_iter = source_map.decoded_mappings().iter();
+  let mut mappings_iter = source_map.decoded_mappings();
   let mut current_mapping = mappings_iter.next();
 
   for (current_generated_index, c) in source.char_indices() {
-    if let Some(mapping) = current_mapping {
+    if let Some(mapping) = &current_mapping {
       if mapping.generated_line == current_generated_line
         && mapping.generated_column == current_generated_column
       {
@@ -794,7 +794,7 @@ fn stream_chunks_of_source_map_lines_final<'a>(
     }
   };
   for mapping in source_map.decoded_mappings() {
-    on_mapping(mapping);
+    on_mapping(&mapping);
   }
   result
 }
@@ -864,7 +864,7 @@ fn stream_chunks_of_source_map_lines_full<'a>(
     }
   };
   for mapping in source_map.decoded_mappings() {
-    on_mapping(mapping);
+    on_mapping(&mapping);
   }
   while current_generated_line as usize <= lines.len() {
     let chunk = lines[current_generated_line as usize - 1];
