@@ -4,7 +4,7 @@ use std::{
   convert::{TryFrom, TryInto},
   fmt,
   hash::{Hash, Hasher},
-  sync::{Arc, OnceLock},
+  sync::Arc,
 };
 
 use dyn_clone::DynClone;
@@ -194,7 +194,6 @@ pub struct SourceMap {
   sources_content: Vec<Cow<'static, str>>,
   names: Vec<Cow<'static, str>>,
   source_root: Option<String>,
-  decoded_mappings: OnceLock<Vec<Mapping>>,
 }
 
 impl Hash for SourceMap {
@@ -224,7 +223,6 @@ impl SourceMap {
       sources_content,
       names,
       source_root: None,
-      decoded_mappings: Default::default(),
     }
   }
 
@@ -239,10 +237,8 @@ impl SourceMap {
   }
 
   /// Get the decoded mappings in [SourceMap].
-  pub fn decoded_mappings(&'_ self) -> &[Mapping] {
-    self
-      .decoded_mappings
-      .get_or_init(|| decode_mappings(self).collect::<Vec<_>>())
+  pub fn decoded_mappings(&self) -> impl Iterator<Item = Mapping> + '_ {
+    decode_mappings(self)
   }
 
   /// Get the mappings string in [SourceMap].
@@ -433,7 +429,6 @@ impl TryFrom<RawSourceMap> for SourceMap {
       sources_content,
       names,
       source_root: raw.source_root,
-      decoded_mappings: Default::default(),
     })
   }
 }
