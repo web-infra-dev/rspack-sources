@@ -1,15 +1,11 @@
 use std::{
-  borrow::Cow,
-  cell::RefCell,
-  hash::{Hash, Hasher},
+  borrow::Cow, cell::RefCell, collections::HashMap, hash::{Hash, Hasher}
 };
 
-use rustc_hash::FxHashMap as HashMap;
+use rustc_hash::FxHashMap;
 
 use crate::{
-  helpers::{get_map, GeneratedInfo, OnChunk, OnName, OnSource, StreamChunks},
-  source::{Mapping, OriginalLocation},
-  BoxSource, MapOptions, Source, SourceExt, SourceMap,
+  hash::IdentityHashBuilder, helpers::{get_map, GeneratedInfo, OnChunk, OnName, OnSource, StreamChunks}, source::{Mapping, OriginalLocation}, BoxSource, MapOptions, Source, SourceExt, SourceMap
 };
 
 /// Concatenate multiple [Source]s to a single [Source].
@@ -159,13 +155,13 @@ impl<'a> StreamChunks<'a> for ConcatSource {
     }
     let mut current_line_offset = 0;
     let mut current_column_offset = 0;
-    let mut source_mapping: HashMap<Cow<str>, u32> = HashMap::default();
-    let mut name_mapping: HashMap<Cow<str>, u32> = HashMap::default();
+    let mut source_mapping: FxHashMap<Cow<str>, u32> = FxHashMap::default();
+    let mut name_mapping: FxHashMap<Cow<str>, u32> = FxHashMap::default();
     let mut need_to_close_mapping = false;
 
-    let source_index_mapping: RefCell<HashMap<u32, u32>> =
+    let source_index_mapping: RefCell<HashMap<u32, u32, IdentityHashBuilder>> =
       RefCell::new(HashMap::default());
-    let name_index_mapping: RefCell<HashMap<u32, u32>> =
+    let name_index_mapping: RefCell<HashMap<u32, u32, IdentityHashBuilder>> =
       RefCell::new(HashMap::default());
 
     for item in self.children() {

@@ -1,19 +1,14 @@
 use std::{
-  borrow::Cow,
-  cell::RefCell,
-  hash::{Hash, Hasher},
-  sync::{
+  borrow::Cow, cell::RefCell, collections::HashMap, hash::{Hash, Hasher}, sync::{
     atomic::{AtomicBool, Ordering},
     Arc, Mutex, MutexGuard, OnceLock,
-  },
+  }
 };
 
-use rustc_hash::FxHashMap as HashMap;
+use rustc_hash::FxHashMap;
 
 use crate::{
-  helpers::{get_map, split_into_lines, GeneratedInfo, StreamChunks},
-  with_indices::WithIndices,
-  MapOptions, Mapping, OriginalLocation, Source, SourceMap,
+  hash::IdentityHashBuilder, helpers::{get_map, split_into_lines, GeneratedInfo, StreamChunks}, with_indices::WithIndices, MapOptions, Mapping, OriginalLocation, Source, SourceMap
 };
 
 /// Decorates a Source with replacements and insertions of source code,
@@ -276,9 +271,10 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
     let mut generated_column_offset_line = 0;
     let source_content_lines: RefCell<Vec<Option<Vec<&str>>>> =
       RefCell::new(Vec::new());
-    let name_mapping: RefCell<HashMap<Cow<str>, u32>> =
+    let name_mapping: RefCell<FxHashMap<Cow<str>, u32>> =
+      RefCell::new(FxHashMap::default());
+      let name_index_mapping: RefCell<HashMap<u32, u32, IdentityHashBuilder>> =
       RefCell::new(HashMap::default());
-    let name_index_mapping: RefCell<Vec<u32>> = RefCell::new(Vec::new());
 
     // check if source_content[line][col] is equal to expect
     // Why this is needed?
@@ -406,7 +402,7 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
                     name_index: original.name_index.and_then(|name_index| {
                       name_index_mapping
                         .borrow()
-                        .get(name_index as usize)
+                        .get(&name_index)
                         .copied()
                     }),
                   }
@@ -584,7 +580,7 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
                   name_index: original.name_index.and_then(|name_index| {
                     name_index_mapping
                       .borrow()
-                      .get(name_index as usize)
+                      .get(&name_index)
                       .copied()
                   }),
                 }
@@ -614,7 +610,7 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
         }
         name_index_mapping
           .borrow_mut()
-          .insert(name_index as usize, global_index.unwrap());
+          .insert(name_index, global_index.unwrap());
       },
     );
 

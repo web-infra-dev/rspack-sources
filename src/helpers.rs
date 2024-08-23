@@ -1,21 +1,16 @@
 use arrayvec::ArrayVec;
-use rustc_hash::FxHashMap as HashMap;
+use rustc_hash::FxHashMap;
 use std::{
-  borrow::{BorrowMut, Cow},
-  cell::{OnceCell, RefCell},
-  rc::Rc,
+  borrow::{BorrowMut, Cow}, cell::{OnceCell, RefCell}, collections::HashMap, rc::Rc
 };
 
 use crate::{
-  source::{Mapping, OriginalLocation},
-  vlq::{decode, encode},
-  with_indices::WithIndices,
-  MapOptions, SourceMap,
+  hash::IdentityHashBuilder, source::{Mapping, OriginalLocation}, vlq::{decode, encode}, with_indices::WithIndices, MapOptions, SourceMap
 };
 
 // Adding this type because sourceContentLine not happy
 type InnerSourceContentLine<'a> =
-  RefCell<HashMap<i64, Option<Rc<Vec<WithIndices<&'a str>>>>>>;
+  RefCell<FxHashMap<u32, Option<Rc<Vec<WithIndices<&'a str>>>>>>;
 
 pub fn get_map<'a, S: StreamChunks<'a>>(
   stream: &'a S,
@@ -928,7 +923,7 @@ impl<'a> SourceMapLineChunk<'a> {
 }
 
 type InnerSourceIndexValueMapping<'a> =
-  HashMap<i64, (Cow<'a, str>, Option<&'a str>)>;
+  HashMap<u32, (Cow<'a, str>, Option<&'a str>), IdentityHashBuilder>;
 
 #[allow(clippy::too_many_arguments)]
 pub fn stream_chunks_of_combined_source_map<'a>(
@@ -945,30 +940,31 @@ pub fn stream_chunks_of_combined_source_map<'a>(
 ) -> GeneratedInfo {
   let on_source = RefCell::new(on_source);
   let inner_source: RefCell<Option<&str>> = RefCell::new(inner_source);
-  let source_mapping: RefCell<HashMap<Cow<str>, u32>> =
+  let source_mapping: RefCell<FxHashMap<Cow<str>, u32>> =
+    RefCell::new(FxHashMap::default());
+  let mut name_mapping: FxHashMap<Cow<str>, u32> = FxHashMap::default();
+  let source_index_mapping: RefCell<HashMap<u32, i64, IdentityHashBuilder>> =
     RefCell::new(HashMap::default());
-  let mut name_mapping: HashMap<Cow<str>, u32> = HashMap::default();
-  let source_index_mapping: RefCell<HashMap<i64, i64>> =
+  let name_index_mapping: RefCell<HashMap<u32, i64, IdentityHashBuilder>> =
     RefCell::new(HashMap::default());
-  let name_index_mapping: RefCell<HashMap<i64, i64>> =
-    RefCell::new(HashMap::default());
-  let name_index_value_mapping: RefCell<HashMap<i64, Cow<str>>> =
+  let name_index_value_mapping: RefCell<HashMap<u32, Cow<str>, IdentityHashBuilder>> =
     RefCell::new(HashMap::default());
   let inner_source_index: RefCell<i64> = RefCell::new(-2);
-  let inner_source_index_mapping: RefCell<HashMap<i64, i64>> =
+  let inner_source_index_mapping: RefCell<HashMap<u32, i64, IdentityHashBuilder>> =
     RefCell::new(HashMap::default());
   let inner_source_index_value_mapping: RefCell<InnerSourceIndexValueMapping> =
     RefCell::new(HashMap::default());
-  let inner_source_contents: RefCell<HashMap<i64, Option<&str>>> =
+  let inner_source_contents: RefCell<HashMap<u32, Option<&str>, IdentityHashBuilder>> =
     RefCell::new(HashMap::default());
   let inner_source_content_lines: InnerSourceContentLine =
+    RefCell::new(FxHashMap::default());
+  let inner_name_index_mapping: RefCell<HashMap<u32, i64, IdentityHashBuilder>> =
     RefCell::new(HashMap::default());
-  let inner_name_index_mapping: RefCell<HashMap<i64, i64>> =
-    RefCell::new(HashMap::default());
-  let inner_name_index_value_mapping: RefCell<HashMap<i64, Cow<str>>> =
+  let inner_name_index_value_mapping: RefCell<HashMap<u32, Cow<str>, IdentityHashBuilder>> =
     RefCell::new(HashMap::default());
   let inner_source_map_line_data: RefCell<Vec<SourceMapLineData>> =
     RefCell::new(Vec::new());
+
   let find_inner_mapping = |line: i64, column: i64| -> Option<u32> {
     let inner_source_map_line_data = inner_source_map_line_data.borrow();
     if line as usize > inner_source_map_line_data.len() {
@@ -1016,6 +1012,8 @@ pub fn stream_chunks_of_combined_source_map<'a>(
 
       // Check if this is a mapping to the inner source
       if source_index == *inner_source_index.borrow() {
+        let source_index = source_index as u32;
+
         // Check if there is a mapping in the inner source
         if let Some(idx) = find_inner_mapping(original_line, original_column) {
           let idx = idx as usize;
@@ -1029,6 +1027,7 @@ pub fn stream_chunks_of_combined_source_map<'a>(
           let mut inner_original_column = mappings_data[mi + 3];
           let mut inner_name_index = mappings_data[mi + 4];
           if inner_source_index >= 0 {
+            let inner_source_index = inner_source_index as u32;
             // Check for an identity mapping
             // where we are allowed to adjust the original column
             let inner_chunk = &chunks[idx];
@@ -1105,6 +1104,7 @@ pub fn stream_chunks_of_combined_source_map<'a>(
             // emit name when needed and compute global name index
             let mut final_name_index = -1;
             if inner_name_index >= 0 {
+              let inner_name_index = inner_name_index as u32;
               // when we have a inner name
               let mut inner_name_index_mapping =
                 inner_name_index_mapping.borrow_mut();
@@ -1132,6 +1132,7 @@ pub fn stream_chunks_of_combined_source_map<'a>(
                   .insert(inner_name_index, final_name_index);
               }
             } else if name_index >= 0 {
+              let name_index = name_index as u32;
               // when we don't have an inner name,
               // but we have an outer name
               // it can be used when inner original code equals to the name
@@ -1246,11 +1247,16 @@ pub fn stream_chunks_of_combined_source_map<'a>(
         }
       }
 
-      let final_source_index = source_index_mapping
-        .borrow()
-        .get(&source_index)
-        .copied()
-        .unwrap_or(-1);
+      let final_source_index = if source_index < 0 {
+        -1
+      } else {
+        let source_index = source_index as u32;
+        source_index_mapping
+          .borrow()
+          .get(&source_index)
+          .copied()
+          .unwrap_or(-1)
+      };
       if final_source_index < 0 {
         // no source, so we make it a generated chunk
         on_chunk(
@@ -1264,9 +1270,14 @@ pub fn stream_chunks_of_combined_source_map<'a>(
       } else {
         // Pass through the chunk with mapping
         let mut name_index_mapping = name_index_mapping.borrow_mut();
-        let mut final_name_index =
-          name_index_mapping.get(&name_index).copied().unwrap_or(-1);
+        let mut final_name_index = if name_index >= 0 {
+          let name_index = name_index as u32;
+          name_index_mapping.get(&name_index).copied().unwrap_or(-1)
+        } else {
+          -1
+        };
         if final_name_index == -2 {
+          let name_index = name_index as u32;
           let name_index_value_mapping = name_index_value_mapping.borrow();
           let name = name_index_value_mapping.get(&name_index).unwrap();
           let mut global_index = name_mapping.get(name).copied();
@@ -1296,9 +1307,8 @@ pub fn stream_chunks_of_combined_source_map<'a>(
       }
     },
     &mut |i, source, mut source_content| {
-      let i = i as i64;
       if source == inner_source_name {
-        *inner_source_index.borrow_mut() = i;
+        *inner_source_index.borrow_mut() = i as i64;
         let mut inner_source = inner_source.borrow_mut();
         if let Some(inner_source) = inner_source.as_ref() {
           source_content = Some(inner_source);
@@ -1362,7 +1372,6 @@ pub fn stream_chunks_of_combined_source_map<'a>(
             data.chunks.push(chunk);
           },
           &mut |i, source, source_content| {
-            let i = i as i64;
             inner_source_contents
               .borrow_mut()
               .insert(i, source_content.map(Into::into));
@@ -1373,7 +1382,6 @@ pub fn stream_chunks_of_combined_source_map<'a>(
               .insert(i, (source, source_content));
           },
           &mut |i, name| {
-            let i = i as i64;
             inner_name_index_mapping.borrow_mut().insert(i, -2);
             inner_name_index_value_mapping.borrow_mut().insert(i, name);
           },
@@ -1397,7 +1405,6 @@ pub fn stream_chunks_of_combined_source_map<'a>(
       }
     },
     &mut |i, name| {
-      let i = i as i64;
       name_index_mapping.borrow_mut().insert(i, -2);
       name_index_value_mapping.borrow_mut().insert(i, name);
     },
