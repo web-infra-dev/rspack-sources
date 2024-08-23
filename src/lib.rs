@@ -2,6 +2,7 @@
 
 mod cached_source;
 mod concat_source;
+mod encoder;
 mod error;
 mod helpers;
 mod original_source;
@@ -11,6 +12,7 @@ mod source;
 mod source_map_source;
 mod vlq;
 mod with_indices;
+
 pub use cached_source::CachedSource;
 pub use concat_source::ConcatSource;
 pub use error::{Error, Result};

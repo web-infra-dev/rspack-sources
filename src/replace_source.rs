@@ -12,7 +12,6 @@ use rustc_hash::FxHashMap as HashMap;
 
 use crate::{
   helpers::{get_map, split_into_lines, GeneratedInfo, StreamChunks},
-  with_indices::WithIndices,
   MapOptions, Mapping, OriginalLocation, Source, SourceMap,
 };
 
@@ -313,10 +312,17 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
           source_content_lines.borrow().get(source_index as usize)
         {
           if let Some(content_line) = content_lines.get(line as usize - 1) {
-            WithIndices::new(content_line).substring(
-              column as usize,
-              column as usize + expected_chunk.len(),
-            ) == expected_chunk
+            match content_line
+              .char_indices()
+              .nth(column as usize)
+              .map(|(byte_index, _)| byte_index)
+            {
+              Some(byte_index) => {
+                content_line.get(byte_index..byte_index + expected_chunk.len())
+                  == Some(expected_chunk)
+              }
+              None => false,
+            }
           } else {
             false
           }
@@ -324,6 +330,7 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
           false
         }
       };
+
     let result = self.inner.stream_chunks(
       &MapOptions {
         columns: options.columns,
