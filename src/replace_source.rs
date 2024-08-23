@@ -12,6 +12,7 @@ use rustc_hash::FxHashMap as HashMap;
 
 use crate::{
   helpers::{get_map, split_into_lines, GeneratedInfo, StreamChunks},
+  linear_map::LinearMap,
   MapOptions, Mapping, OriginalLocation, Source, SourceMap,
 };
 
@@ -258,8 +259,8 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
     let mut generated_line_offset: i64 = 0;
     let mut generated_column_offset: i64 = 0;
     let mut generated_column_offset_line = 0;
-    let source_content_lines: RefCell<Vec<Option<Vec<&str>>>> =
-      RefCell::new(Vec::new());
+    let source_content_lines: RefCell<LinearMap<Option<Vec<&str>>>> =
+      RefCell::new(LinearMap::default());
     let name_mapping: RefCell<HashMap<Cow<str>, u32>> =
       RefCell::new(HashMap::default());
     let name_index_mapping: RefCell<HashMap<u32, u32>> =
@@ -294,7 +295,7 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
     let check_original_content =
       |source_index: u32, line: u32, column: u32, expected_chunk: &str| {
         if let Some(Some(content_lines)) =
-          source_content_lines.borrow().get(source_index as usize)
+          source_content_lines.borrow().get(&source_index)
         {
           if let Some(content_line) = content_lines.get(line as usize - 1) {
             match content_line
@@ -585,11 +586,9 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
       },
       &mut |source_index, source, source_content| {
         let mut source_content_lines = source_content_lines.borrow_mut();
-        while source_content_lines.len() <= source_index as usize {
-          source_content_lines.push(None);
-        }
-        source_content_lines[source_index as usize] = source_content
+        let lines = source_content
           .map(|source_content| split_into_lines(source_content).collect());
+        source_content_lines.insert(source_index, lines);
         on_source(source_index, source, source_content);
       },
       &mut |name_index, name| {

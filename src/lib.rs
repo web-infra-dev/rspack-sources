@@ -5,6 +5,7 @@ mod concat_source;
 mod encoder;
 mod error;
 mod helpers;
+mod linear_map;
 mod original_source;
 mod raw_source;
 mod replace_source;
