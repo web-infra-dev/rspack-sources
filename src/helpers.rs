@@ -118,80 +118,75 @@ pub fn decode_mappings<'b, 'a: 'b>(
 }
 
 pub struct SegmentIter<'a> {
-  mapping_str: &'a str,
+  mapping_str: &'a [u8],
   generated_line: usize,
   generated_column: u32,
   source_index: u32,
   original_line: u32,
   original_column: u32,
   name_index: u32,
-  line: &'a str,
   nums: ArrayVec<i64, 5>,
-  segment_cursor: usize,
+  tracing_index: usize,
+  current_index: usize,
 }
 
 impl<'a> SegmentIter<'a> {
   pub fn new(mapping_str: &'a str) -> Self {
     SegmentIter {
-      line: "",
-      mapping_str,
+      mapping_str: mapping_str.as_bytes(),
       source_index: 0,
       original_line: 1,
       original_column: 0,
       name_index: 0,
-      generated_line: 0,
-      segment_cursor: 0,
+      generated_line: 1,
       generated_column: 0,
       nums: ArrayVec::new(),
+      tracing_index: 0,
+      current_index: 0,
     }
   }
 
-  fn next_segment(&mut self) -> Option<&'a str> {
-    if self.line.is_empty() {
-      loop {
-        match self.next_line() {
-          Some(line) => {
-            self.generated_line += 1;
-            if line.is_empty() {
-              continue;
-            }
-            self.line = line;
-            self.generated_column = 0;
-            self.segment_cursor = 0;
-            break;
-          }
-          None => return None,
-        }
-      }
-    }
-
-    if let Some(i) =
-      memchr::memchr(b',', self.line[self.segment_cursor..].as_bytes())
-    {
-      let cursor = self.segment_cursor;
-      self.segment_cursor = self.segment_cursor + i + 1;
-      Some(&self.line[cursor..cursor + i])
-    } else {
-      let line = self.line;
-      self.line = "";
-      Some(&line[self.segment_cursor..])
-    }
-  }
-
-  fn next_line(&mut self) -> Option<&'a str> {
-    if self.mapping_str.is_empty() {
+  fn next_segment(&mut self) -> Option<&'a [u8]> {
+    let mapping_str_len = self.mapping_str.len();
+    if self.current_index == mapping_str_len {
       return None;
     }
-    match memchr::memchr(b';', self.mapping_str.as_bytes()) {
-      Some(i) => {
-        let temp_str = self.mapping_str;
-        self.mapping_str = &self.mapping_str[i + 1..];
-        Some(&temp_str[..i])
+
+    loop {
+      match self.mapping_str[self.current_index] {
+        b',' => {
+          if self.tracing_index != self.current_index {
+            let segment =
+              &self.mapping_str[self.tracing_index..self.current_index];
+            self.tracing_index = self.current_index;
+            return Some(segment);
+          }
+          self.current_index += 1;
+          self.tracing_index = self.current_index;
+        }
+        b';' => {
+          if self.tracing_index != self.current_index {
+            let segment =
+              &self.mapping_str[self.tracing_index..self.current_index];
+            self.tracing_index = self.current_index;
+            return Some(segment);
+          }
+          self.generated_line += 1;
+          self.generated_column = 0;
+          self.current_index += 1;
+          self.tracing_index = self.current_index;
+        }
+        _ => self.current_index += 1,
       }
-      None => {
-        let tem_str = self.mapping_str;
-        self.mapping_str = "";
-        Some(tem_str)
+
+      if self.current_index == mapping_str_len {
+        if self.tracing_index != self.current_index {
+          let segment =
+            &self.mapping_str[self.tracing_index..self.current_index];
+          return Some(segment);
+        } else {
+          return None;
+        }
       }
     }
   }

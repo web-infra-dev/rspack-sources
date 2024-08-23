@@ -267,12 +267,12 @@ const B64: [i8; 256] = [
 ];
 
 /// Parses a VLQ segment into a pre-allocated `Vec` instead of returning a new allocation.
-pub fn decode(segment: &str, rv: &mut ArrayVec<i64, 5>) -> Result<()> {
+pub fn decode(segment: &[u8], rv: &mut ArrayVec<i64, 5>) -> Result<()> {
   let mut cur = 0;
   let mut shift = 0;
 
-  for c in segment.bytes() {
-    let enc = i64::from(B64[c as usize]);
+  for c in segment {
+    let enc = i64::from(B64[*c as usize]);
     let val = enc & 0b11111;
     let cont = enc >> 5;
     cur += val.checked_shl(shift).ok_or(Error::VlqOverflow)?;
