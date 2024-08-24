@@ -1,10 +1,10 @@
-use arrayvec::ArrayVec;
 use std::{
   borrow::{BorrowMut, Cow},
   cell::RefCell,
   rc::Rc,
 };
 
+use memchr::Memchr2;
 use rustc_hash::FxHashMap as HashMap;
 
 use crate::{
@@ -13,7 +13,7 @@ use crate::{
   source::{Mapping, OriginalLocation},
   vlq::decode,
   with_indices::WithIndices,
-  MapOptions, SourceMap,
+  Error, MapOptions, SourceMap,
 };
 
 // Adding this type because sourceContentLine not happy
@@ -123,81 +123,78 @@ pub fn decode_mappings(
 
 pub struct SegmentIter<'a> {
   mapping_str: &'a [u8],
+  mapping_iter: Memchr2<'a>,
   generated_line: usize,
   generated_column: u32,
   source_index: u32,
   original_line: u32,
   original_column: u32,
   name_index: u32,
-  nums: ArrayVec<i64, 5>,
   tracing_index: usize,
-  current_index: usize,
+  tracing_newline: bool,
 }
 
 impl<'a> SegmentIter<'a> {
   pub fn new(mapping_str: &'a str) -> Self {
+    let mapping_str = mapping_str.as_bytes();
+    let mapping_iter = memchr::memchr2_iter(b',', b';', mapping_str);
     SegmentIter {
-      mapping_str: mapping_str.as_bytes(),
+      mapping_str,
+      mapping_iter,
       source_index: 0,
       original_line: 1,
       original_column: 0,
       name_index: 0,
       generated_line: 1,
       generated_column: 0,
-      nums: ArrayVec::new(),
       tracing_index: 0,
-      current_index: 0,
+      tracing_newline: false,
     }
   }
 
   fn next_segment(&mut self) -> Option<&'a [u8]> {
     let mapping_str_len = self.mapping_str.len();
-    if self.current_index == mapping_str_len {
-      return None;
-    }
 
     loop {
-      match self.mapping_str[self.current_index] {
-        b',' => {
-          if self.tracing_index != self.current_index {
-            let segment =
-              &self.mapping_str[self.tracing_index..self.current_index];
-            self.tracing_index = self.current_index;
-            return Some(segment);
-          }
-          self.current_index += 1;
-          self.tracing_index = self.current_index;
-        }
-        b';' => {
-          if self.tracing_index != self.current_index {
-            let segment =
-              &self.mapping_str[self.tracing_index..self.current_index];
-            self.tracing_index = self.current_index;
-            return Some(segment);
-          }
-          self.generated_line += 1;
-          self.generated_column = 0;
-          self.current_index += 1;
-          self.tracing_index = self.current_index;
-        }
-        _ => match memchr::memchr2(
-          b',',
-          b';',
-          &self.mapping_str[self.current_index..],
-        ) {
-          Some(index) => self.current_index += index,
-          None => self.current_index = mapping_str_len,
-        },
+      if self.tracing_newline {
+        self.generated_line += 1;
+        self.generated_column = 0;
+        self.tracing_newline = false;
       }
 
-      if self.current_index == mapping_str_len {
-        if self.tracing_index != self.current_index {
-          let segment =
-            &self.mapping_str[self.tracing_index..self.current_index];
-          return Some(segment);
-        } else {
-          return None;
+      match self.mapping_iter.next() {
+        Some(index) => match self.mapping_str[index] {
+          b',' => {
+            if self.tracing_index != index {
+              let segment = &self.mapping_str[self.tracing_index..index];
+              self.tracing_index = index + 1;
+              return Some(segment);
+            }
+            self.tracing_index = index + 1;
+          }
+          b';' => {
+            self.tracing_newline = true;
+            if self.tracing_index != index {
+              let segment = &self.mapping_str[self.tracing_index..index];
+              self.tracing_index = index + 1;
+              return Some(segment);
+            }
+            self.tracing_index = index + 1;
+          }
+          _ => unreachable!(),
+        },
+        None => {
+          if self.tracing_index != mapping_str_len {
+            let segment =
+              &self.mapping_str[self.tracing_index..mapping_str_len];
+            self.tracing_index = mapping_str_len;
+            return Some(segment);
+          }
         }
+      }
+
+      if self.tracing_index == mapping_str_len {
+        return None;
       }
     }
   }
@@ -209,30 +206,38 @@ impl<'a> Iterator for SegmentIter<'a> {
   fn next(&mut self) -> Option<Self::Item> {
     match self.next_segment() {
       Some(segment) => {
-        self.nums.clear();
-        decode(segment, &mut self.nums).unwrap();
-        self.generated_column =
-          (i64::from(self.generated_column) + self.nums[0]) as u32;
+        let mut vlq = decode(segment);
+        self.generated_column = (i64::from(self.generated_column)
+          + vlq
+            .next()
+            .unwrap_or_else(|| Err(Error::VlqNoValues))
+            .unwrap()) as u32;
 
         let mut src = None;
         let mut name = None;
 
-        if self.nums.len() > 1 {
-          if self.nums.len() != 4 && self.nums.len() != 5 {
-            panic!("got {} segments, expected 4 or 5", self.nums.len());
-          }
+        if let Some(source_index) = vlq.next() {
+          // if self.nums.len() != 4 && self.nums.len() != 5 {
+          //   panic!("got {} segments, expected 4 or 5", self.nums.len());
+          // }
           self.source_index =
-            (i64::from(self.source_index) + self.nums[1]) as u32;
+            (i64::from(self.source_index) + source_index.unwrap()) as u32;
           src = Some(self.source_index);
-          self.original_line =
-            (i64::from(self.original_line) + self.nums[2]) as u32;
-          self.original_column =
-            (i64::from(self.original_column) + self.nums[3]) as u32;
+          self.original_line = (i64::from(self.original_line)
+            + vlq
+              .next()
+              .unwrap_or_else(|| Err(Error::VlqNoValues))
+              .unwrap()) as u32;
+          self.original_column = (i64::from(self.original_column)
+            + vlq
+              .next()
+              .unwrap_or_else(|| Err(Error::VlqNoValues))
+              .unwrap()) as u32;
 
-          if self.nums.len() > 4 {
+          if let Some(name_index) = vlq.next() {
             self.name_index =
-              (i64::from(self.name_index) + self.nums[4]) as u32;
-            name = Some(self.name_index);
+              (i64::from(self.name_index) + name_index.unwrap()) as u32;
+            name = Some(self.name_index)
           }
         }
 

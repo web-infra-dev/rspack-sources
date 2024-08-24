@@ -263,8 +263,8 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
       RefCell::new(LinearMap::default());
     let name_mapping: RefCell<HashMap<Cow<str>, u32>> =
       RefCell::new(HashMap::default());
-    let name_index_mapping: RefCell<HashMap<u32, u32>> =
-      RefCell::new(HashMap::default());
+    let name_index_mapping: RefCell<LinearMap<u32>> =
+      RefCell::new(LinearMap::default());
 
     // check if source_content[line][col] is equal to expect
     // Why this is needed?
