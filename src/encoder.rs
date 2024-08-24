@@ -170,7 +170,6 @@ impl MappingsEncoder for LinesOnlyMappingsEncoder {
 
       self.current_line = mapping.generated_line;
 
-      self.mappings.reserve(4);
       if original.source_index == self.current_source_index {
         if original.original_line == self.current_original_line + 1 {
           self.current_original_line = original.original_line;
