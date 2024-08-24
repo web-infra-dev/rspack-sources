@@ -23,7 +23,7 @@ struct FullMappingsEncoder {
   active_mapping: bool,
   active_name: bool,
   initial: bool,
-  mappings: String,
+  mappings: Vec<u8>,
 }
 
 impl FullMappingsEncoder {
@@ -67,14 +67,14 @@ impl MappingsEncoder for FullMappingsEncoder {
 
     if self.current_line < mapping.generated_line {
       (0..mapping.generated_line - self.current_line)
-        .for_each(|_| self.mappings.push(';'));
+        .for_each(|_| self.mappings.push(b';'));
       self.current_line = mapping.generated_line;
       self.current_column = 0;
       self.initial = false;
     } else if self.initial {
       self.initial = false;
     } else {
-      self.mappings.push(',');
+      self.mappings.push(b',');
     }
 
     encode(
@@ -86,7 +86,7 @@ impl MappingsEncoder for FullMappingsEncoder {
     if let Some(original) = &mapping.original {
       self.active_mapping = true;
       if original.source_index == self.current_source_index {
-        self.mappings.push('A');
+        self.mappings.push(b'A');
       } else {
         encode(
           &mut self.mappings,
@@ -102,7 +102,7 @@ impl MappingsEncoder for FullMappingsEncoder {
       );
       self.current_original_line = original.original_line;
       if original.original_column == self.current_original_column {
-        self.mappings.push('A');
+        self.mappings.push(b'A');
       } else {
         encode(
           &mut self.mappings,
@@ -123,8 +123,12 @@ impl MappingsEncoder for FullMappingsEncoder {
     }
   }
 
+  #[allow(unsafe_code)]
   fn drain(self: Box<Self>) -> String {
-    self.mappings
+    unsafe {
+      // SAFETY: The `mappings` field in the source map consists solely of ASCII characters.
+      String::from_utf8_unchecked(self.mappings)
+    }
   }
 }
 
@@ -133,7 +137,7 @@ pub(crate) struct LinesOnlyMappingsEncoder {
   current_line: u32,
   current_source_index: u32,
   current_original_line: u32,
-  mappings: String,
+  mappings: Vec<u8>,
 }
 
 impl LinesOnlyMappingsEncoder {
@@ -156,77 +160,55 @@ impl MappingsEncoder for LinesOnlyMappingsEncoder {
         return;
       }
       self.last_written_line = mapping.generated_line;
-      if mapping.generated_line == self.current_line + 1 {
-        self.current_line = mapping.generated_line;
-        if original.source_index == self.current_source_index {
-          if original.original_line == self.current_original_line + 1 {
-            self.current_original_line = original.original_line;
-            self.mappings.push_str(";AACA");
-          } else {
-            self.mappings.push_str(";AA");
-            encode(
-              &mut self.mappings,
-              original.original_line,
-              self.current_original_line,
-            );
-            self.current_original_line = original.original_line;
-            self.mappings.push('A');
-          }
+
+      let line_delta = mapping.generated_line - self.current_line;
+      if line_delta > 0 {
+        self
+          .mappings
+          .extend(std::iter::repeat(b';').take(line_delta as usize));
+      }
+
+      self.current_line = mapping.generated_line;
+
+      self.mappings.reserve(4);
+      if original.source_index == self.current_source_index {
+        if original.original_line == self.current_original_line + 1 {
+          self.current_original_line = original.original_line;
+          self.mappings.extend(b"AACA");
         } else {
-          self.mappings.push_str(";A");
-          encode(
-            &mut self.mappings,
-            original.source_index,
-            self.current_source_index,
-          );
-          self.current_source_index = original.source_index;
+          self.mappings.extend(b"AA");
           encode(
             &mut self.mappings,
             original.original_line,
             self.current_original_line,
           );
           self.current_original_line = original.original_line;
-          self.mappings.push('A');
+          self.mappings.push(b'A');
         }
       } else {
-        (0..mapping.generated_line - self.current_line)
-          .for_each(|_| self.mappings.push(';'));
-        self.current_line = mapping.generated_line;
-        if original.source_index == self.current_source_index {
-          if original.original_line == self.current_original_line + 1 {
-            self.current_original_line = original.original_line;
-            self.mappings.push_str("AACA");
-          } else {
-            self.mappings.push_str("AA");
-            encode(
-              &mut self.mappings,
-              original.original_line,
-              self.current_original_line,
-            );
-            self.current_original_line = original.original_line;
-            self.mappings.push('A');
-          }
-        } else {
-          self.mappings.push('A');
-          encode(
-            &mut self.mappings,
-            original.source_index,
-            self.current_source_index,
-          );
-          self.current_source_index = original.source_index;
-          encode(
-            &mut self.mappings,
-            original.original_line,
-            self.current_original_line,
-          );
-          self.current_original_line = original.original_line;
-          self.mappings.push('A');
-        }
+        self.mappings.extend(b"A");
+        encode(
+          &mut self.mappings,
+          original.source_index,
+          self.current_source_index,
+        );
+        self.current_source_index = original.source_index;
+        encode(
+          &mut self.mappings,
+          original.original_line,
+          self.current_original_line,
+        );
+        self.current_original_line = original.original_line;
+        self.mappings.push(b'A');
       }
     }
   }
 
+  #[allow(unsafe_code)]
   fn drain(self: Box<Self>) -> String {
-    self.mappings
+    unsafe {
+      // SAFETY: The `mappings` field in the source map consists solely of ASCII characters.
+      String::from_utf8_unchecked(self.mappings)
+    }
   }
 }
