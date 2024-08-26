@@ -347,27 +347,29 @@ struct RawSourceMap {
 
 impl RawSourceMap {
   pub fn from_reader<R: std::io::Read>(r: R) -> Result<Self> {
-    let raw: RawSourceMap = serde_json::from_reader(r)?;
+    let raw: RawSourceMap = simd_json::serde::from_reader(r)?;
     Ok(raw)
   }
 
-  pub fn from_slice(v: &[u8]) -> Result<Self> {
-    let raw: RawSourceMap = serde_json::from_slice(v)?;
+  pub fn from_slice(val: &[u8]) -> Result<Self> {
+    let mut v = val.to_vec();
+    let raw: RawSourceMap = simd_json::serde::from_slice(&mut v)?;
     Ok(raw)
   }
 
-  pub fn from_json(s: &str) -> Result<Self> {
-    let raw: RawSourceMap = serde_json::from_str(s)?;
+  pub fn from_json(val: &str) -> Result<Self> {
+    let mut v = val.as_bytes().to_vec();
+    let raw: RawSourceMap = simd_json::serde::from_slice(&mut v)?;
     Ok(raw)
   }
 
   pub fn to_json(&self) -> Result<String> {
-    let json = serde_json::to_string(self)?;
+    let json = simd_json::serde::to_string(self)?;
     Ok(json)
   }
 
   pub fn to_writer<W: std::io::Write>(&self, w: W) -> Result<()> {
-    serde_json::to_writer(w, self)?;
+    simd_json::to_writer(w, self)?;
     Ok(())
   }
 }
