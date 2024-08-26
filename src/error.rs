@@ -10,6 +10,8 @@ pub enum Error {
   VlqLeftover,
   /// a VLQ string was empty and no values could be decoded.
   VlqNoValues,
+  /// Unexpectedly hit EOF.
+  VlqUnexpectedEof,
   /// Overflow in Vlq handling
   VlqOverflow,
   /// a JSON parsing related failure
@@ -21,6 +23,7 @@ impl fmt::Display for Error {
     match self {
       Error::VlqLeftover => write!(f, "leftover cur/shift in vlq decode"),
       Error::VlqNoValues => write!(f, "vlq decode did not produce any values"),
+      Error::VlqUnexpectedEof => write!(f, "vlq decode unexpected eof"),
       Error::VlqOverflow => write!(f, "vlq decode caused an overflow"),
       Error::BadJson(err) => write!(f, "bad json: {err}"),
     }

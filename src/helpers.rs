@@ -223,13 +223,13 @@ impl<'a> Iterator for SegmentIter<'a> {
 
           let offset = vlq
             .next()
-            .unwrap_or_else(|| Err(Error::VlqNoValues))
+            .unwrap_or_else(|| Err(Error::VlqUnexpectedEof))
             .unwrap();
           self.original_line = (i64::from(self.original_line) + offset) as u32;
 
           let offset = vlq
             .next()
-            .unwrap_or_else(|| Err(Error::VlqNoValues))
+            .unwrap_or_else(|| Err(Error::VlqUnexpectedEof))
             .unwrap();
           self.original_column =
             (i64::from(self.original_column) + offset) as u32;
