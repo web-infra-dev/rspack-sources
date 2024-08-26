@@ -466,20 +466,20 @@ fn stream_chunks_of_source_map_final<'a>(
     on_name(i as u32, Cow::Borrowed(name));
   }
   let mut mapping_active_line = 0;
-  let mut on_mapping = |mapping: &Mapping| {
+  let mut on_mapping = |mapping: Mapping| {
     if mapping.generated_line >= result.generated_line
       && (mapping.generated_column >= result.generated_column
         || mapping.generated_line > result.generated_line)
     {
       return;
     }
-    if let Some(original) = &mapping.original {
+    if let Some(original) = mapping.original {
       on_chunk(
         None,
         Mapping {
           generated_line: mapping.generated_line,
           generated_column: mapping.generated_column,
-          original: Some(*original),
+          original: Some(original),
         },
       );
       mapping_active_line = mapping.generated_line;
@@ -527,7 +527,7 @@ fn stream_chunks_of_source_map_full<'a>(
   let mut tracking_generated_column: u32 = 0;
   let mut tracking_mapping_original: Option<OriginalLocation> = None;
 
-  let mut mappings_iter = source_map.decoded_mappings().iter();
+  let mut mappings_iter = source_map.decoded_mappings();
   let mut current_mapping = mappings_iter.next();
 
   for (current_generated_index, c) in source.char_indices() {
@@ -629,25 +629,15 @@ fn stream_chunks_of_source_map_lines_final<'a>(
   };
   let mut current_generated_line = 1;
 
-  let mut on_mapping = |mapping: &Mapping| {
-    if let Some(original) = &mapping.original.filter(|_| {
+  let mut on_mapping = |mut mapping: Mapping| {
+    if let Some(mut original) = mapping.original.filter(|_| {
       current_generated_line <= mapping.generated_line
         && mapping.generated_line <= final_line
     }) {
-      on_chunk(
-        None,
-        Mapping {
-          generated_line: mapping.generated_line,
-          generated_column: 0,
-          original: Some(OriginalLocation {
-            source_index: original.source_index,
-            original_line: original.original_line,
-            original_column: original.original_column,
-            name_index: None,
-          }),
-        },
-      );
+      mapping.generated_column = 0;
+      original.name_index = None;
       current_generated_line = mapping.generated_line + 1;
+      on_chunk(None, mapping);
     }
   };
   for mapping in source_map.decoded_mappings() {
@@ -678,7 +668,7 @@ fn stream_chunks_of_source_map_lines_full<'a>(
     )
   }
   let mut current_generated_line = 1;
-  let mut on_mapping = |mapping: &Mapping| {
+  let mut on_mapping = |mut mapping: Mapping| {
     if mapping.original.is_none()
       || mapping.generated_line < current_generated_line
       || mapping.generated_line as usize > lines.len()
@@ -699,24 +689,14 @@ fn stream_chunks_of_source_map_lines_full<'a>(
       }
       current_generated_line += 1;
     }
-    if let Some(original) = &mapping
+    if let Some(mut original) = mapping
       .original
       .filter(|_| mapping.generated_line as usize <= lines.len())
     {
       let chunk = lines[current_generated_line as usize - 1];
-      on_chunk(
-        Some(Cow::Borrowed(chunk)),
-        Mapping {
-          generated_line: mapping.generated_line,
-          generated_column: 0,
-          original: Some(OriginalLocation {
-            source_index: original.source_index,
-            original_line: original.original_line,
-            original_column: original.original_column,
-            name_index: None,
-          }),
-        },
-      );
+      mapping.generated_column = 0;
+      original.name_index = None;
+      on_chunk(Some(Cow::Borrowed(chunk)), mapping);
       current_generated_line += 1;
     }
   };
