@@ -731,7 +731,7 @@ fn stream_chunks_of_source_map_lines_full<'a>(
 #[derive(Debug)]
 struct SourceMapLineData<'a> {
   pub mappings_data: Vec<i64>,
-  pub chunks: Vec<WithIndices<Cow<'a, str>>>,
+  pub chunks: Vec<Cow<'a, str>>,
 }
 
 type InnerSourceIndexValueMapping<'a> =
@@ -867,16 +867,18 @@ pub fn stream_chunks_of_combined_source_map<'a>(
               if let Some(original_source_lines) = original_source_lines {
                 let original_chunk = original_source_lines
                   .get(inner_original_line as usize - 1)
-                  .map_or("", |lines| {
+                  .map(|lines| {
                     let start = inner_original_column as usize;
                     let end = start + location_in_chunk as usize;
                     lines.substring(start, end)
                   });
-                if inner_chunk.substring(0, location_in_chunk as usize)
-                  == original_chunk
-                {
-                  inner_original_column += location_in_chunk;
-                  inner_name_index = -1;
+                if let Some(original_chunk) = original_chunk {
+                  if original_chunk.len() <= inner_chunk.len()
+                    && &inner_chunk[..original_chunk.len()] == original_chunk
+                  {
+                    inner_original_column += location_in_chunk;
+                    inner_name_index = -1;
+                  }
                 }
               }
             }
@@ -1169,8 +1171,7 @@ pub fn stream_chunks_of_combined_source_map<'a>(
                 .unwrap_or(-1),
             );
             // SAFETY: final_source is false
-            let chunk = WithIndices::new(chunk.unwrap());
-            data.chunks.push(chunk);
+            data.chunks.push(chunk.unwrap());
           },
           &mut |i, source, source_content| {
             inner_source_contents.borrow_mut().insert(i, source_content);
