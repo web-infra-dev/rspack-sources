@@ -751,29 +751,7 @@ fn stream_chunks_of_source_map_lines_full<'a>(
 #[derive(Debug)]
 struct SourceMapLineData<'a> {
   pub mappings_data: Vec<i64>,
-  pub chunks: Vec<SourceMapLineChunk<'a>>,
-}
-
-#[derive(Debug)]
-struct SourceMapLineChunk<'a> {
-  content: Cow<'a, str>,
-  cached: OnceCell<WithIndices<Cow<'a, str>>>,
-}
-
-impl<'a> SourceMapLineChunk<'a> {
-  pub fn new(content: Cow<'a, str>) -> Self {
-    Self {
-      content,
-      cached: OnceCell::new(),
-    }
-  }
-
-  pub fn substring(&self, start_index: usize, end_index: usize) -> &str {
-    let cached = self
-      .cached
-      .get_or_init(|| WithIndices::new(self.content.clone()));
-    cached.substring(start_index, end_index)
-  }
+  pub chunks: Vec<WithIndices<Cow<'a, str>>>,
 }
 
 type InnerSourceIndexValueMapping<'a> =
@@ -848,19 +826,15 @@ pub fn stream_chunks_of_combined_source_map<'a>(
     &mut |chunk, mapping| {
       let source_index = mapping
         .original
-        .as_ref()
         .map_or(-1, |o| o.source_index as i64);
       let original_line = mapping
         .original
-        .as_ref()
         .map_or(-1, |o| o.original_line as i64);
       let original_column = mapping
         .original
-        .as_ref()
         .map_or(-1, |o| o.original_column as i64);
       let name_index = mapping
         .original
-        .as_ref()
         .and_then(|o| o.name_index)
         .map(|i| i as i64)
         .unwrap_or(-1);
@@ -1211,7 +1185,7 @@ pub fn stream_chunks_of_combined_source_map<'a>(
                 .unwrap_or(-1),
             );
             // SAFETY: final_source is false
-            let chunk = SourceMapLineChunk::new(chunk.unwrap());
+            let chunk = WithIndices::new(chunk.unwrap());
             data.chunks.push(chunk);
           },
           &mut |i, source, source_content| {
