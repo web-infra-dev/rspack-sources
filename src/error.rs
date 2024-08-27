@@ -13,7 +13,7 @@ pub enum Error {
   /// Overflow in Vlq handling
   VlqOverflow,
   /// a JSON parsing related failure
-  BadJson(serde_json::Error),
+  BadJson(simd_json::Error),
 }
 
 impl fmt::Display for Error {
@@ -29,8 +29,8 @@ impl fmt::Display for Error {
 
 impl error::Error for Error {}
 
-impl From<serde_json::Error> for Error {
-  fn from(err: serde_json::Error) -> Error {
+impl From<simd_json::Error> for Error {
+  fn from(err: simd_json::Error) -> Error {
     Error::BadJson(err)
   }
 }

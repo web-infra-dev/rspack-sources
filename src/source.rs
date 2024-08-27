@@ -4,7 +4,7 @@ use std::{
   convert::{TryFrom, TryInto},
   fmt,
   hash::{Hash, Hasher},
-  sync::{Arc, OnceLock},
+  sync::Arc,
 };
 
 use dyn_clone::DynClone;
@@ -194,7 +194,6 @@ pub struct SourceMap {
   sources_content: Vec<Cow<'static, str>>,
   names: Vec<Cow<'static, str>>,
   source_root: Option<String>,
-  decoded_mappings: OnceLock<Vec<Mapping>>,
 }
 
 impl Hash for SourceMap {
@@ -224,7 +223,6 @@ impl SourceMap {
       sources_content,
       names,
       source_root: None,
-      decoded_mappings: Default::default(),
     }
   }
 
@@ -239,10 +237,8 @@ impl SourceMap {
   }
 
   /// Get the decoded mappings in [SourceMap].
-  pub fn decoded_mappings(&'_ self) -> &[Mapping] {
-    self
-      .decoded_mappings
-      .get_or_init(|| decode_mappings(self).collect::<Vec<_>>())
+  pub fn decoded_mappings(&self) -> impl Iterator<Item = Mapping> + '_ {
+    decode_mappings(self)
   }
 
   /// Get the mappings string in [SourceMap].
@@ -347,27 +343,29 @@ struct RawSourceMap {
 
 impl RawSourceMap {
   pub fn from_reader<R: std::io::Read>(r: R) -> Result<Self> {
-    let raw: RawSourceMap = serde_json::from_reader(r)?;
+    let raw: RawSourceMap = simd_json::serde::from_reader(r)?;
     Ok(raw)
   }
 
-  pub fn from_slice(v: &[u8]) -> Result<Self> {
-    let raw: RawSourceMap = serde_json::from_slice(v)?;
+  pub fn from_slice(val: &[u8]) -> Result<Self> {
+    let mut v = val.to_vec();
+    let raw: RawSourceMap = simd_json::serde::from_slice(&mut v)?;
     Ok(raw)
   }
 
-  pub fn from_json(s: &str) -> Result<Self> {
-    let raw: RawSourceMap = serde_json::from_str(s)?;
+  pub fn from_json(val: &str) -> Result<Self> {
+    let mut v = val.as_bytes().to_vec();
+    let raw: RawSourceMap = simd_json::serde::from_slice(&mut v)?;
     Ok(raw)
   }
 
   pub fn to_json(&self) -> Result<String> {
-    let json = serde_json::to_string(self)?;
+    let json = simd_json::serde::to_string(self)?;
     Ok(json)
   }
 
   pub fn to_writer<W: std::io::Write>(&self, w: W) -> Result<()> {
-    serde_json::to_writer(w, self)?;
+    simd_json::to_writer(w, self)?;
     Ok(())
   }
 }
@@ -433,7 +431,6 @@ impl TryFrom<RawSourceMap> for SourceMap {
       sources_content,
       names,
       source_root: raw.source_root,
-      decoded_mappings: Default::default(),
     })
   }
 }
