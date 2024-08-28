@@ -1,4 +1,3 @@
-use arrayvec::ArrayVec;
 use std::{
   borrow::{BorrowMut, Cow},
   cell::{OnceCell, RefCell},
@@ -7,10 +6,10 @@ use std::{
 use rustc_hash::FxHashMap as HashMap;
 
 use crate::{
+  decoder::MappingsDecoder,
   encoder::create_encoder,
   linear_map::LinearMap,
   source::{Mapping, OriginalLocation},
-  vlq::decode,
   with_indices::WithIndices,
   MapOptions, SourceMap,
 };
@@ -114,139 +113,10 @@ pub struct GeneratedInfo {
   pub generated_column: u32,
 }
 
-pub fn decode_mappings<'b, 'a: 'b>(
-  source_map: &'a SourceMap,
-) -> impl Iterator<Item = Mapping> + 'b {
-  SegmentIter::new(source_map.mappings())
-}
-
-pub struct SegmentIter<'a> {
-  mapping_str: &'a str,
-  generated_line: usize,
-  generated_column: u32,
-  source_index: u32,
-  original_line: u32,
-  original_column: u32,
-  name_index: u32,
-  line: &'a str,
-  nums: ArrayVec<i64, 5>,
-  segment_cursor: usize,
-}
-
-impl<'a> SegmentIter<'a> {
-  pub fn new(mapping_str: &'a str) -> Self {
-    SegmentIter {
-      line: "",
-      mapping_str,
-      source_index: 0,
-      original_line: 1,
-      original_column: 0,
-      name_index: 0,
-      generated_line: 0,
-      segment_cursor: 0,
-      generated_column: 0,
-      nums: ArrayVec::new(),
-    }
-  }
-
-  fn next_segment(&mut self) -> Option<&'a str> {
-    if self.line.is_empty() {
-      loop {
-        match self.next_line() {
-          Some(line) => {
-            self.generated_line += 1;
-            if line.is_empty() {
-              continue;
-            }
-            self.line = line;
-            self.generated_column = 0;
-            self.segment_cursor = 0;
-            break;
-          }
-          None => return None,
-        }
-      }
-    }
-
-    if let Some(i) =
-      memchr::memchr(b',', self.line[self.segment_cursor..].as_bytes())
-    {
-      let cursor = self.segment_cursor;
-      self.segment_cursor = self.segment_cursor + i + 1;
-      Some(&self.line[cursor..cursor + i])
-    } else {
-      let line = self.line;
-      self.line = "";
-      Some(&line[self.segment_cursor..])
-    }
-  }
-
-  fn next_line(&mut self) -> Option<&'a str> {
-    if self.mapping_str.is_empty() {
-      return None;
-    }
-    match memchr::memchr(b';', self.mapping_str.as_bytes()) {
-      Some(i) => {
-        let temp_str = self.mapping_str;
-        self.mapping_str = &self.mapping_str[i + 1..];
-        Some(&temp_str[..i])
-      }
-      None => {
-        let tem_str = self.mapping_str;
-        self.mapping_str = "";
-        Some(tem_str)
-      }
-    }
-  }
-}
-
-impl<'a> Iterator for SegmentIter<'a> {
-  type Item = Mapping;
-
-  fn next(&mut self) -> Option<Self::Item> {
-    match self.next_segment() {
-      Some(segment) => {
-        self.nums.clear();
-        decode(segment, &mut self.nums).unwrap();
-        self.generated_column =
-          (i64::from(self.generated_column) + self.nums[0]) as u32;
-
-        let mut src = None;
-        let mut name = None;
-
-        if self.nums.len() > 1 {
-          if self.nums.len() != 4 && self.nums.len() != 5 {
-            panic!("got {} segments, expected 4 or 5", self.nums.len());
-          }
-          self.source_index =
-            (i64::from(self.source_index) + self.nums[1]) as u32;
-          src = Some(self.source_index);
-          self.original_line =
-            (i64::from(self.original_line) + self.nums[2]) as u32;
-          self.original_column =
-            (i64::from(self.original_column) + self.nums[3]) as u32;
-
-          if self.nums.len() > 4 {
-            self.name_index =
-              (i64::from(self.name_index) + self.nums[4]) as u32;
-            name = Some(self.name_index);
-          }
-        }
-
-        Some(Mapping {
-          generated_line: self.generated_line as u32,
-          generated_column: self.generated_column,
-          original: src.map(|src_id| OriginalLocation {
-            source_index: src_id,
-            original_line: self.original_line,
-            original_column: self.original_column,
-            name_index: name,
-          }),
-        })
-      }
-      None => None,
-    }
-  }
+pub fn decode_mappings(
+  source_map: &SourceMap,
+) -> impl Iterator<Item = Mapping> + '_ {
+  MappingsDecoder::new(source_map.mappings())
 }
 
 pub struct PotentialTokens<'a> {
@@ -530,7 +400,7 @@ fn stream_chunks_of_source_map_full<'a>(
   let mut current_mapping = mappings_iter.next();
 
   for (current_generated_index, c) in source.char_indices() {
-    if let Some(mapping) = current_mapping.take() {
+    if let Some(mapping) = &current_mapping {
       if mapping.generated_line == current_generated_line
         && mapping.generated_column == current_generated_column
       {
@@ -552,8 +422,6 @@ fn stream_chunks_of_source_map_full<'a>(
         tracking_mapping_original = mapping.original;
 
         current_mapping = mappings_iter.next();
-      } else {
-        current_mapping = Some(mapping);
       }
     }
 

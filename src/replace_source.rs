@@ -256,6 +256,33 @@ impl<T: std::fmt::Debug> std::fmt::Debug for ReplaceSource<T> {
   }
 }
 
+enum SourceContent<'a> {
+  Raw(&'a str),
+  Lines(Vec<&'a str>),
+}
+
+fn check_content_at_position(
+  lines: &[&str],
+  line: u32,
+  column: u32,
+  expected: &str,
+) -> bool {
+  if let Some(line) = lines.get(line as usize - 1) {
+    match line
+      .char_indices()
+      .nth(column as usize)
+      .map(|(byte_index, _)| byte_index)
+    {
+      Some(byte_index) => {
+        line.get(byte_index..byte_index + expected.len()) == Some(expected)
+      }
+      None => false,
+    }
+  } else {
+    false
+  }
+}
+
 impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
   fn stream_chunks(
     &'a self,
@@ -274,7 +301,7 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
     let mut generated_line_offset: i64 = 0;
     let mut generated_column_offset: i64 = 0;
     let mut generated_column_offset_line = 0;
-    let source_content_lines: RefCell<LinearMap<Option<Vec<&str>>>> =
+    let source_content_lines: RefCell<LinearMap<Option<SourceContent>>> =
       RefCell::new(LinearMap::default());
     let name_mapping: RefCell<HashMap<Cow<str>, u32>> =
       RefCell::new(HashMap::default());
@@ -309,23 +336,20 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
     // webpack-sources also have this function, refer https://github.com/webpack/webpack-sources/blob/main/lib/ReplaceSource.js#L158
     let check_original_content =
       |source_index: u32, line: u32, column: u32, expected_chunk: &str| {
-        if let Some(Some(content_lines)) =
-          source_content_lines.borrow().get(&source_index)
+        if let Some(Some(source_content)) =
+          source_content_lines.borrow_mut().get_mut(&source_index)
         {
-          if let Some(content_line) = content_lines.get(line as usize - 1) {
-            match content_line
-              .char_indices()
-              .nth(column as usize)
-              .map(|(byte_index, _)| byte_index)
-            {
-              Some(byte_index) => {
-                content_line.get(byte_index..byte_index + expected_chunk.len())
-                  == Some(expected_chunk)
-              }
-              None => false,
+          match source_content {
+            SourceContent::Raw(source) => {
+              let lines = split_into_lines(source).collect::<Vec<_>>();
+              let matched =
+                check_content_at_position(&lines, line, column, expected_chunk);
+              *source_content = SourceContent::Lines(lines);
+              matched
             }
-          } else {
-            false
+            SourceContent::Lines(lines) => {
+              check_content_at_position(lines, line, column, expected_chunk)
+            }
           }
         } else {
           false
@@ -599,8 +623,7 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
       },
       &mut |source_index, source, source_content| {
         let mut source_content_lines = source_content_lines.borrow_mut();
-        let lines = source_content
-          .map(|source_content| split_into_lines(source_content).collect());
+        let lines = source_content.map(SourceContent::Raw);
         source_content_lines.insert(source_index, lines);
         on_source(source_index, source, source_content);
       },
