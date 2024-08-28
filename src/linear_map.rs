@@ -13,6 +13,10 @@ impl<V: Default> LinearMap<V> {
     self.inner.get(*key as usize)
   }
 
+  pub fn get_mut(&mut self, key: &u32) -> Option<&mut V> {
+    self.inner.get_mut(*key as usize)
+  }
+
   pub fn insert(&mut self, key: u32, value: V) {
     let key = key as usize;
     if key >= self.inner.len() {
