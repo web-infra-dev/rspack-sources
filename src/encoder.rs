@@ -1,4 +1,27 @@
-use crate::{vlq::encode, Mapping};
+use crate::Mapping;
+
+const B64_CHARS: &[u8] =
+  b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+pub fn encode_vlq(out: &mut Vec<u8>, a: u32, b: u32) {
+  let mut num = if a >= b {
+    (a - b) << 1
+  } else {
+    ((b - a) << 1) + 1
+  };
+
+  loop {
+    let mut digit = num & 0b11111;
+    num >>= 5;
+    if num > 0 {
+      digit |= 1 << 5;
+    }
+    out.push(B64_CHARS[digit as usize]);
+    if num == 0 {
+      break;
+    }
+  }
+}
 
 pub(crate) trait MappingsEncoder {
   fn encode(&mut self, mapping: &Mapping);
@@ -77,7 +100,7 @@ impl MappingsEncoder for FullMappingsEncoder {
       self.mappings.push(b',');
     }
 
-    encode(
+    encode_vlq(
       &mut self.mappings,
       mapping.generated_column,
       self.current_column,
@@ -88,14 +111,14 @@ impl MappingsEncoder for FullMappingsEncoder {
       if original.source_index == self.current_source_index {
         self.mappings.push(b'A');
       } else {
-        encode(
+        encode_vlq(
           &mut self.mappings,
           original.source_index,
           self.current_source_index,
         );
         self.current_source_index = original.source_index;
       }
-      encode(
+      encode_vlq(
         &mut self.mappings,
         original.original_line,
         self.current_original_line,
@@ -104,7 +127,7 @@ impl MappingsEncoder for FullMappingsEncoder {
       if original.original_column == self.current_original_column {
         self.mappings.push(b'A');
       } else {
-        encode(
+        encode_vlq(
           &mut self.mappings,
           original.original_column,
           self.current_original_column,
@@ -112,7 +135,7 @@ impl MappingsEncoder for FullMappingsEncoder {
         self.current_original_column = original.original_column;
       }
       if let Some(name_index) = original.name_index {
-        encode(&mut self.mappings, name_index, self.current_name_index);
+        encode_vlq(&mut self.mappings, name_index, self.current_name_index);
         self.current_name_index = name_index;
         self.active_name = true;
       } else {
@@ -176,7 +199,7 @@ impl MappingsEncoder for LinesOnlyMappingsEncoder {
           self.mappings.extend(b"AACA");
         } else {
           self.mappings.extend(b"AA");
-          encode(
+          encode_vlq(
             &mut self.mappings,
             original.original_line,
             self.current_original_line,
@@ -186,13 +209,13 @@ impl MappingsEncoder for LinesOnlyMappingsEncoder {
         }
       } else {
         self.mappings.extend(b"A");
-        encode(
+        encode_vlq(
           &mut self.mappings,
           original.source_index,
           self.current_source_index,
         );
         self.current_source_index = original.source_index;
-        encode(
+        encode_vlq(
           &mut self.mappings,
           original.original_line,
           self.current_original_line,

@@ -4,16 +4,15 @@ use std::{
   rc::Rc,
 };
 
-use memchr::Memchr2;
 use rustc_hash::FxHashMap as HashMap;
 
 use crate::{
+  decoder::MappingsDecoder,
   encoder::create_encoder,
   linear_map::LinearMap,
   source::{Mapping, OriginalLocation},
-  vlq::decode,
   with_indices::WithIndices,
-  Error, MapOptions, SourceMap,
+  MapOptions, SourceMap,
 };
 
 // Adding this type because sourceContentLine not happy
@@ -118,143 +117,7 @@ pub struct GeneratedInfo {
 pub fn decode_mappings(
   source_map: &SourceMap,
 ) -> impl Iterator<Item = Mapping> + '_ {
-  SegmentIter::new(source_map.mappings())
-}
-
-pub struct SegmentIter<'a> {
-  mapping_str: &'a [u8],
-  mapping_iter: Memchr2<'a>,
-  generated_line: usize,
-  generated_column: u32,
-  source_index: u32,
-  original_line: u32,
-  original_column: u32,
-  name_index: u32,
-  tracing_index: usize,
-  tracing_newline: bool,
-}
-
-impl<'a> SegmentIter<'a> {
-  pub fn new(mapping_str: &'a str) -> Self {
-    let mapping_str = mapping_str.as_bytes();
-    let mapping_iter = Memchr2::new(b',', b';', mapping_str);
-    SegmentIter {
-      mapping_str,
-      mapping_iter,
-      source_index: 0,
-      original_line: 1,
-      original_column: 0,
-      name_index: 0,
-      generated_line: 1,
-      generated_column: 0,
-      tracing_index: 0,
-      tracing_newline: false,
-    }
-  }
-
-  fn next_segment(&mut self) -> Option<&'a [u8]> {
-    let mapping_str_len = self.mapping_str.len();
-
-    loop {
-      if self.tracing_newline {
-        self.generated_line += 1;
-        self.generated_column = 0;
-        self.tracing_newline = false;
-      }
-
-      match self.mapping_iter.next() {
-        Some(index) => match self.mapping_str[index] {
-          b',' => {
-            if self.tracing_index != index {
-              let segment = &self.mapping_str[self.tracing_index..index];
-              self.tracing_index = index + 1;
-              return Some(segment);
-            }
-            self.tracing_index = index + 1;
-          }
-          b';' => {
-            self.tracing_newline = true;
-            if self.tracing_index != index {
-              let segment = &self.mapping_str[self.tracing_index..index];
-              self.tracing_index = index + 1;
-              return Some(segment);
-            }
-            self.tracing_index = index + 1;
-          }
-          _ => unreachable!(),
-        },
-        None => {
-          if self.tracing_index != mapping_str_len {
-            let segment =
-              &self.mapping_str[self.tracing_index..mapping_str_len];
-            self.tracing_index = mapping_str_len;
-            return Some(segment);
-          }
-        }
-      }
-
-      if self.tracing_index == mapping_str_len {
-        return None;
-      }
-    }
-  }
-}
-
-impl<'a> Iterator for SegmentIter<'a> {
-  type Item = Mapping;
-
-  fn next(&mut self) -> Option<Self::Item> {
-    match self.next_segment() {
-      Some(segment) => {
-        let mut vlq = decode(segment);
-        let offset = vlq
-          .next()
-          .unwrap_or_else(|| Err(Error::VlqNoValues))
-          .unwrap();
-        self.generated_column =
-          (i64::from(self.generated_column) + offset) as u32;
-
-        let mut original_location = false;
-        let mut name = false;
-        if let Some(offset) = vlq.next() {
-          original_location = true;
-          let offset = offset.unwrap();
-          self.source_index = (i64::from(self.source_index) + offset) as u32;
-
-          let offset = vlq
-            .next()
-            .unwrap_or_else(|| Err(Error::VlqUnexpectedEof))
-            .unwrap();
-          self.original_line = (i64::from(self.original_line) + offset) as u32;
-
-          let offset = vlq
-            .next()
-            .unwrap_or_else(|| Err(Error::VlqUnexpectedEof))
-            .unwrap();
-          self.original_column =
-            (i64::from(self.original_column) + offset) as u32;
-
-          if let Some(offset) = vlq.next() {
-            let offset = offset.unwrap();
-            self.name_index = (i64::from(self.name_index) + offset) as u32;
-            name = true;
-          }
-        }
-
-        Some(Mapping {
-          generated_line: self.generated_line as u32,
-          generated_column: self.generated_column,
-          original: original_location.then(|| OriginalLocation {
-            source_index: self.source_index,
-            original_line: self.original_line,
-            original_column: self.original_column,
-            name_index: name.then_some(self.name_index),
-          }),
-        })
-      }
-      None => None,
-    }
-  }
+  MappingsDecoder::new(source_map.mappings())
 }
 
 pub struct PotentialTokens<'a> {
