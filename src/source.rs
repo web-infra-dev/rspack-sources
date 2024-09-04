@@ -480,7 +480,7 @@ pub struct Mapping {
 }
 
 /// Represent original position information of a [Mapping].
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Copy)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct OriginalLocation {
   /// Source index.
   pub source_index: u32,

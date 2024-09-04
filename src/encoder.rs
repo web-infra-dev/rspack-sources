@@ -70,7 +70,7 @@ impl MappingsEncoder for FullMappingsEncoder {
   fn encode(&mut self, mapping: &Mapping) {
     if self.active_mapping && self.current_line == mapping.generated_line {
       // A mapping is still active
-      if mapping.original.is_some_and(|original| {
+      if mapping.original.as_ref().is_some_and(|original| {
         original.source_index == self.current_source_index
           && original.original_line == self.current_original_line
           && original.original_column == self.current_original_column
