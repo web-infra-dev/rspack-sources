@@ -649,4 +649,48 @@ mod tests {
       .unwrap(),
     );
   }
+
+  #[test]
+  fn should_ignores_names_without_columns() {
+    let source = SourceMapSource::new(SourceMapSourceOptions {
+      value: "h",
+      name: "hello.txt",
+      source_map: SourceMap::from_json(
+        r#"{
+          "version": 3,
+          "sources": ["hello.txt"],
+          "mappings": "AAAAA",
+          "names": ["hello"]
+        }"#,
+      )
+      .unwrap(),
+      original_source: Some("hello".to_string()),
+      inner_source_map: Some(
+        SourceMap::from_json(
+          r#"{
+          "version": 3,
+          "sources": ["hello world.txt"],
+          "mappings": "AAAA",
+          "names": [],
+          "sourcesContent": ["hello, world!"]
+        }"#,
+        )
+        .unwrap(),
+      ),
+      remove_original_source: false,
+    });
+    assert_eq!(
+      source.map(&MapOptions::new(false)).unwrap(),
+      SourceMap::from_json(
+        r#"{
+          "mappings": "AAAA",
+          "names": [],
+          "sources": ["hello world.txt"],
+          "version": 3,
+          "sourcesContent": ["hello, world!"]
+        }"#
+      )
+      .unwrap()
+    );
+  }
 }

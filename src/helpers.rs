@@ -419,7 +419,7 @@ fn stream_chunks_of_source_map_full<'a>(
         tracking_generated_index = current_generated_index;
         tracking_generated_line = mapping.generated_line;
         tracking_generated_column = mapping.generated_column;
-        tracking_mapping_original = mapping.original;
+        tracking_mapping_original = mapping.original.clone();
 
         current_mapping = mappings_iter.next();
       }
@@ -497,7 +497,7 @@ fn stream_chunks_of_source_map_lines_final<'a>(
   let mut current_generated_line = 1;
 
   let mut on_mapping = |mut mapping: Mapping| {
-    if let Some(mut original) = mapping.original.filter(|_| {
+    if let Some(original) = mapping.original.as_mut().filter(|_| {
       current_generated_line <= mapping.generated_line
         && mapping.generated_line <= final_line
     }) {
@@ -556,8 +556,9 @@ fn stream_chunks_of_source_map_lines_full<'a>(
       }
       current_generated_line += 1;
     }
-    if let Some(mut original) = mapping
+    if let Some(original) = mapping
       .original
+      .as_mut()
       .filter(|_| mapping.generated_line as usize <= lines.len())
     {
       let chunk = lines[current_generated_line as usize - 1];
