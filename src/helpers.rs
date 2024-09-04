@@ -743,7 +743,8 @@ pub fn stream_chunks_of_combined_source_map<'a>(
                   });
                 if let Some(original_chunk) = original_chunk {
                   if original_chunk.len() <= inner_chunk.len()
-                    && &inner_chunk[..original_chunk.len()] == original_chunk
+                    && inner_chunk.get(..original_chunk.len())
+                      == Some(original_chunk)
                   {
                     inner_original_column += location_in_chunk;
                     inner_name_index = -1;
