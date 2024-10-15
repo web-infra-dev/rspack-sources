@@ -377,8 +377,7 @@ fn stream_chunks_of_source_map_full<'a>(
   on_name: OnName<'_, 'a>,
 ) -> GeneratedInfo {
   let lines = split_into_lines(source);
-  let line_with_indices_list =
-    lines.map(WithIndices::new).collect::<Vec<_>>();
+  let line_with_indices_list = lines.map(WithIndices::new).collect::<Vec<_>>();
 
   if line_with_indices_list.is_empty() {
     return GeneratedInfo {
@@ -462,7 +461,8 @@ fn stream_chunks_of_source_map_full<'a>(
     }
     while mapping.generated_line > current_generated_line {
       if current_generated_line as usize <= line_with_indices_list.len() {
-        let chunk = line_with_indices_list[(current_generated_line as usize) - 1].line;
+        let chunk =
+          line_with_indices_list[(current_generated_line as usize) - 1].line;
         on_chunk(
           Some(Cow::Owned(chunk.to_string())),
           Mapping {

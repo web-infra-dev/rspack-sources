@@ -18,14 +18,18 @@ impl<'a> WithIndices<'a> {
 
   /// substring::SubString with cache
   #[allow(unsafe_code)]
-  pub(crate) fn substring(&self, start_index: usize, end_index: usize) -> &'a str {
+  pub(crate) fn substring(
+    &self,
+    start_index: usize,
+    end_index: usize,
+  ) -> &'a str {
     if end_index <= start_index {
       return "";
     }
 
-    let indices_indexes = self
-      .indices_indexes
-      .get_or_init(|| self.line.char_indices().map(|(i, _)| i).collect::<Vec<_>>());
+    let indices_indexes = self.indices_indexes.get_or_init(|| {
+      self.line.char_indices().map(|(i, _)| i).collect::<Vec<_>>()
+    });
 
     let str_len = self.line.len();
     let start = *indices_indexes.get(start_index).unwrap_or(&str_len);
