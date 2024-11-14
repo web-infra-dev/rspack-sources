@@ -121,6 +121,12 @@ pub fn decode_mappings(
   MappingsDecoder::new(mappings)
 }
 
+pub fn encode_mappings(mappings: impl Iterator<Item = Mapping>) -> String {
+  let mut encoder = create_encoder(true);
+  mappings.for_each(|mapping| encoder.encode(&mapping));
+  encoder.drain()
+}
+
 pub struct PotentialTokens<'a> {
   bytes: &'a [u8],
   source: &'a str,
