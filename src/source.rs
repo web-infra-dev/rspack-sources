@@ -190,34 +190,34 @@ pub trait DecodableSourceMap:
   Sync + Send + Clone + PartialEq + Eq + Hash
 {
   /// Get the file field in [SourceMap].
-  fn file(&self) -> &Option<Arc<str>>;
+  fn file(&self) -> Option<&str>;
 
   /// Set the file field in [SourceMap].
-  fn set_file(&mut self, file: Option<Arc<str>>);
+  fn set_file<T: Into<Arc<str>>>(&mut self, file: Option<T>);
 
   /// Get the decoded mappings in [SourceMap].
   fn decoded_mappings<'a>(&'a self) -> Box<dyn Iterator<Item = Mapping> + 'a>;
 
   /// Get the mappings string in [SourceMap].
-  fn mappings(&self) -> &Arc<str>;
+  fn mappings(&self) -> &str;
 
   /// Get the sources field in [SourceMap].
-  fn sources(&self) -> &[Arc<str>];
+  fn sources<'a>(&'a self) -> Box<dyn Iterator<Item = &'a str> + 'a>;
 
   /// Get the mutable sources field in [SourceMap].
-  fn set_sources(&mut self, sources: Vec<Arc<str>>);
+  fn set_sources(&mut self, idx: u32, value: &str);
 
   /// Get the sourcesContent field in [SourceMap].
-  fn sources_content(&self) -> &[Arc<str>];
+  fn sources_content<'a>(&'a self) -> Box<dyn Iterator<Item = &'a str> + 'a>;
 
   /// Get the names field in [SourceMap].
-  fn names(&self) -> &[Arc<str>];
+  fn names<'a>(&'a self) -> Box<dyn Iterator<Item = &'a str> + 'a>;
 
   /// Get the source_root field in [SourceMap].
-  fn source_root(&self) -> &Option<Arc<str>>;
+  fn source_root(&self) -> Option<&str>;
 
   /// Set the source_root field in [SourceMap].
-  fn set_source_root(&mut self, source_root: Option<Arc<str>>);
+  fn set_source_root<T: Into<Arc<str>>>(&mut self, value: Option<T>);
 }
 
 /// The source map created by [Source::map].
@@ -313,44 +313,44 @@ impl SourceMap {
 }
 
 impl DecodableSourceMap for SourceMap {
-  fn file(&self) -> &Option<Arc<str>> {
-    &self.file
+  fn file(&self) -> Option<&str> {
+    self.file.as_deref()
   }
 
-  fn set_file(&mut self, file: Option<Arc<str>>) {
-    self.file = file;
+  fn set_file<T: Into<Arc<str>>>(&mut self, file: Option<T>) {
+    self.file = file.map(Into::into);
   }
 
   fn decoded_mappings<'a>(&'a self) -> Box<dyn Iterator<Item = Mapping> + 'a> {
     Box::new(decode_mappings(self))
   }
 
-  fn mappings(&self) -> &Arc<str> {
-    &self.mappings
+  fn mappings(&self) -> &str {
+    self.mappings.as_ref()
   }
 
-  fn sources(&self) -> &[Arc<str>] {
-    &self.sources
+  fn sources<'a>(&'a self) -> Box<dyn Iterator<Item = &'a str> + 'a> {
+    Box::new(self.sources.iter().map(|s| s.as_ref()))
   }
 
-  fn set_sources(&mut self, sources: Vec<Arc<str>>) {
-    self.sources = sources;
+  fn set_sources(&mut self, idx: u32, source: &str) {
+    self.sources[idx as usize] = source.into();
   }
 
-  fn sources_content(&self) -> &[Arc<str>] {
-    &self.sources_content
+  fn sources_content<'a>(&'a self) -> Box<dyn Iterator<Item = &'a str> + 'a> {
+    Box::new(self.sources_content.iter().map(|s| s.as_ref()))
   }
 
-  fn names(&self) -> &[Arc<str>] {
-    &self.names
+  fn names<'a>(&'a self) -> Box<dyn Iterator<Item = &'a str> + 'a> {
+    Box::new(self.names.iter().map(|s| s.as_ref()))
   }
 
-  fn source_root(&self) -> &Option<Arc<str>> {
-    &self.source_root
+  fn source_root(&self) -> Option<&str> {
+    self.source_root.as_deref()
   }
 
-  fn set_source_root(&mut self, source_root: Option<Arc<str>>) {
-    self.source_root = source_root;
+  fn set_source_root<T: Into<Arc<str>>>(&mut self, source_root: Option<T>) {
+    self.source_root = source_root.map(Into::into);
   }
 }
 

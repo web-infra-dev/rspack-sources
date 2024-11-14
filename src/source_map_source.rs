@@ -1,6 +1,7 @@
 use std::{
   borrow::Cow,
   hash::{Hash, Hasher},
+  sync::Arc,
 };
 
 use crate::{
@@ -107,11 +108,26 @@ impl<M1: DecodableSourceMap + 'static, M2: DecodableSourceMap + 'static> Source
   fn map(&self, options: &MapOptions) -> Option<SourceMap> {
     if self.inner_source_map.is_none() {
       return Some(SourceMap::new(
-        self.source_map.file().clone(),
-        self.source_map.mappings().clone(),
-        self.source_map.sources().to_vec(),
-        self.source_map.sources_content().to_vec(),
-        self.source_map.names().to_vec(),
+        self
+          .source_map
+          .file()
+          .map(|file| Arc::from(file.to_string())),
+        Arc::from(self.source_map.mappings().to_string()),
+        self
+          .source_map
+          .sources()
+          .map(|source| Arc::from(source.to_string()))
+          .collect::<Vec<_>>(),
+        self
+          .source_map
+          .sources_content()
+          .map(|content| Arc::from(content.to_string()))
+          .collect::<Vec<_>>(),
+        self
+          .source_map
+          .names()
+          .map(|name| Arc::from(name.to_string()))
+          .collect::<Vec<_>>(),
       ));
     }
     get_map(self, options)

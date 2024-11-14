@@ -329,15 +329,15 @@ fn stream_chunks_of_source_map_final<'a, M: DecodableSourceMap>(
   if result.generated_line == 1 && result.generated_column == 0 {
     return result;
   }
-  let source_content = source_map.sources_content();
-  for (i, source) in source_map.sources().iter().enumerate() {
+  let source_content = source_map.sources_content().collect::<Vec<_>>();
+  for (i, source) in source_map.sources().enumerate() {
     on_source(
       i as u32,
       get_source(source_map, source),
-      source_content.get(i).map(|s| s.as_ref()),
+      source_content.get(i).map(|s| *s),
     )
   }
-  for (i, name) in source_map.names().iter().enumerate() {
+  for (i, name) in source_map.names().enumerate() {
     on_name(i as u32, Cow::Borrowed(name));
   }
   let mut mapping_active_line = 0;
@@ -391,15 +391,15 @@ fn stream_chunks_of_source_map_full<'a, M: DecodableSourceMap>(
     };
   }
 
-  let source_content = source_map.sources_content();
-  for (i, source) in source_map.sources().iter().enumerate() {
+  let source_content = source_map.sources_content().collect::<Vec<_>>();
+  for (i, source) in source_map.sources().enumerate() {
     on_source(
       i as u32,
       get_source(source_map, source),
-      source_content.get(i).map(|s| s.as_ref()),
+      source_content.get(i).map(|s| *s),
     )
   }
-  for (i, name) in source_map.names().iter().enumerate() {
+  for (i, name) in source_map.names().enumerate() {
     on_name(i as u32, Cow::Borrowed(name));
   }
   let last_line = line_with_indices_list[line_with_indices_list.len() - 1].line;
@@ -538,12 +538,12 @@ fn stream_chunks_of_source_map_lines_final<'a, M: DecodableSourceMap>(
       generated_column: 0,
     };
   }
-  let source_content = source_map.sources_content();
-  for (i, source) in source_map.sources().iter().enumerate() {
+  let source_content = source_map.sources_content().collect::<Vec<_>>();
+  for (i, source) in source_map.sources().enumerate() {
     on_source(
       i as u32,
       get_source(source_map, source),
-      source_content.get(i).map(|s| s.as_ref()),
+      source_content.get(i).map(|s| *s),
     )
   }
   let final_line = if result.generated_column == 0 {
@@ -584,12 +584,12 @@ fn stream_chunks_of_source_map_lines_full<'a, M: DecodableSourceMap>(
       generated_column: 0,
     };
   }
-  for (i, source) in source_map.sources().iter().enumerate() {
-    let source_content = source_map.sources_content();
+  let sources_content = source_map.sources_content().collect::<Vec<_>>();
+  for (i, source) in source_map.sources().enumerate() {
     on_source(
       i as u32,
       get_source(source_map, source),
-      source_content.get(i).map(|s| s.as_ref()),
+      sources_content.get(i).map(|s| *s),
     )
   }
   let mut current_generated_line = 1;
