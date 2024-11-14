@@ -196,7 +196,9 @@ impl<'a> StreamChunks<'a> for RawSource {
 
 #[cfg(test)]
 mod tests {
-  use crate::{ConcatSource, OriginalSource, ReplaceSource, SourceExt};
+  use crate::{
+    ConcatSource, OriginalSource, ReplaceSource, SourceExt,
+  };
 
   use super::*;
 
@@ -208,6 +210,6 @@ mod tests {
     let source2 = OriginalSource::new("world".to_string(), "world.txt");
     let concat = ConcatSource::new([source1.boxed(), source2.boxed()]);
     let map = concat.map(&MapOptions::new(false)).unwrap();
-    assert_eq!(map.mappings(), ";;AAAA",);
+    assert_eq!(map.mappings().as_ref(), ";;AAAA",);
   }
 }

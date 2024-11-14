@@ -210,8 +210,8 @@ mod tests {
   use std::borrow::Borrow;
 
   use crate::{
-    ConcatSource, OriginalSource, RawSource, SourceExt, SourceMapSource,
-    WithoutOriginalOptions,
+    ConcatSource, OriginalSource, RawSource, SourceExt,
+    SourceMapSource, WithoutOriginalOptions,
   };
 
   use super::*;
@@ -225,7 +225,7 @@ mod tests {
         name: "index.js".to_string(),
         source_map: SourceMap::new(
           None,
-          ";AACA".to_string(),
+          Arc::from(";AACA"),
           vec!["index.js".into()],
           vec!["// DELETE IT\nconsole.log(1)".into()],
           vec![],
@@ -234,7 +234,7 @@ mod tests {
       .boxed(),
     ]);
     let map = source.map(&Default::default()).unwrap();
-    assert_eq!(map.mappings(), ";;AACA");
+    assert_eq!(map.mappings().as_ref(), ";;AACA");
   }
 
   #[test]

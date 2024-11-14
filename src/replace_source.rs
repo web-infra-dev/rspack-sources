@@ -731,8 +731,8 @@ impl<T: Eq> Eq for ReplaceSource<T> {}
 #[cfg(test)]
 mod tests {
   use crate::{
-    source_map_source::WithoutOriginalOptions, OriginalSource, RawSource,
-    ReplacementEnforce, SourceExt, SourceMapSource,
+    source_map_source::WithoutOriginalOptions, DecodableSourceMap,
+    OriginalSource, RawSource, ReplacementEnforce, SourceExt, SourceMapSource,
   };
 
   use super::*;
@@ -757,9 +757,10 @@ mod tests {
           token
             .original
             .as_ref()
-            .and_then(
-              |original| sourcemap.get_source(original.source_index as usize)
-            )
+            .and_then(|original| {
+              let sources = sourcemap.sources();
+              sources.get(original.source_index as usize)
+            })
             .map_or("".to_owned(), |source| format!(" [{source}]")),
           token
             .original
@@ -775,7 +776,10 @@ mod tests {
             .original
             .as_ref()
             .and_then(|original| original.name_index)
-            .and_then(|name_index| sourcemap.get_name(name_index as usize))
+            .and_then(|name_index| {
+              let names = sourcemap.names();
+              names.get(name_index as usize)
+            })
             .map_or("".to_owned(), |source| format!(" ({source})")),
         )
       })
@@ -879,8 +883,8 @@ World!"#
       r#"
 1:0 -> [file.txt] 1:0"#
     );
-    assert_eq!(result_map.mappings(), "AAAA,WAAE,GACE");
-    assert_eq!(result_list_map.mappings(), "AAAA");
+    assert_eq!(result_map.mappings().as_ref(), "AAAA,WAAE,GACE");
+    assert_eq!(result_list_map.mappings().as_ref(), "AAAA");
   }
 
   #[test]
@@ -1044,18 +1048,21 @@ function StaticPage(_ref) {
   });
 }"#
     );
-    assert_eq!(source_map.get_name(0).unwrap(), "StaticPage");
-    assert_eq!(source_map.get_name(1).unwrap(), "data");
-    assert_eq!(source_map.get_name(2).unwrap(), "foo");
+    let names = source_map.names();
+    let sources_content = source_map.sources_content();
+    let sources = source_map.sources();
+    assert_eq!(names[0].as_ref(), "StaticPage");
+    assert_eq!(names[1].as_ref(), "data");
+    assert_eq!(names[2].as_ref(), "foo");
     assert_eq!(
-      source_map.get_source_content(0).unwrap(),
+      sources_content[0].as_ref(),
       r#"export default function StaticPage({ data }) {
 return <div>{data.foo}</div>
 }
 "#
     );
     assert!(source_map.file().is_none());
-    assert_eq!(source_map.get_source(0).unwrap(), "abc");
+    assert_eq!(sources[0].as_ref(), "abc");
 
     assert_eq!(
       with_readable_mappings(&source_map),

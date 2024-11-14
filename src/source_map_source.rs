@@ -8,40 +8,42 @@ use crate::{
     get_map, stream_chunks_of_combined_source_map, stream_chunks_of_source_map,
     StreamChunks,
   },
-  MapOptions, Source, SourceMap,
+  DecodableSourceMap, MapOptions, Source, SourceMap,
 };
 
 /// Options for [SourceMapSource::new].
-#[derive(Debug, Clone, Default)]
-pub struct SourceMapSourceOptions<V, N> {
+#[derive(Debug)]
+pub struct SourceMapSourceOptions<V, N, M1, M2> {
   /// The source code.
   pub value: V,
   /// Name of the file.
   pub name: N,
   /// The source map of the source code.
-  pub source_map: SourceMap,
+  pub source_map: M1,
   /// The original source code.
   pub original_source: Option<String>,
   /// The original source map.
-  pub inner_source_map: Option<SourceMap>,
+  pub inner_source_map: Option<M2>,
   /// Whether remove the original source.
   pub remove_original_source: bool,
 }
 
 /// An convenient options for [SourceMapSourceOptions], `original_source` and
 /// `inner_source_map` will be `None`, `remove_original_source` will be false.
-#[derive(Debug, Clone)]
-pub struct WithoutOriginalOptions<V, N> {
+#[derive(Debug)]
+pub struct WithoutOriginalOptions<V, N, M> {
   /// The source code.
   pub value: V,
   /// Name of the file.
   pub name: N,
   /// The source map of the source code.
-  pub source_map: SourceMap,
+  pub source_map: M,
 }
 
-impl<V, N> From<WithoutOriginalOptions<V, N>> for SourceMapSourceOptions<V, N> {
-  fn from(options: WithoutOriginalOptions<V, N>) -> Self {
+impl<V, N, M> From<WithoutOriginalOptions<V, N, M>>
+  for SourceMapSourceOptions<V, N, M, M>
+{
+  fn from(options: WithoutOriginalOptions<V, N, M>) -> Self {
     Self {
       value: options.value,
       name: options.name,
@@ -58,22 +60,22 @@ impl<V, N> From<WithoutOriginalOptions<V, N>> for SourceMapSourceOptions<V, N> {
 ///
 /// - [webpack-sources docs](https://github.com/webpack/webpack-sources/#sourcemapsource).
 #[derive(Clone, Eq)]
-pub struct SourceMapSource {
+pub struct SourceMapSource<M1: DecodableSourceMap, M2: DecodableSourceMap> {
   value: String,
   name: String,
-  source_map: SourceMap,
+  source_map: M1,
   original_source: Option<String>,
-  inner_source_map: Option<SourceMap>,
+  inner_source_map: Option<M2>,
   remove_original_source: bool,
 }
 
-impl SourceMapSource {
+impl<M1: DecodableSourceMap, M2: DecodableSourceMap> SourceMapSource<M1, M2> {
   /// Create a [SourceMapSource] with [SourceMapSourceOptions].
   pub fn new<V, N, O>(options: O) -> Self
   where
     V: Into<String>,
     N: Into<String>,
-    O: Into<SourceMapSourceOptions<V, N>>,
+    O: Into<SourceMapSourceOptions<V, N, M1, M2>>,
   {
     let options = options.into();
     Self {
@@ -87,7 +89,9 @@ impl SourceMapSource {
   }
 }
 
-impl Source for SourceMapSource {
+impl<M1: DecodableSourceMap + 'static, M2: DecodableSourceMap + 'static> Source
+  for SourceMapSource<M1, M2>
+{
   fn source(&self) -> Cow<str> {
     Cow::Borrowed(&self.value)
   }
@@ -102,7 +106,13 @@ impl Source for SourceMapSource {
 
   fn map(&self, options: &MapOptions) -> Option<SourceMap> {
     if self.inner_source_map.is_none() {
-      return Some(self.source_map.clone());
+      return Some(SourceMap::new(
+        self.source_map.file().clone(),
+        self.source_map.mappings().clone(),
+        self.source_map.sources().to_vec(),
+        self.source_map.sources_content().to_vec(),
+        self.source_map.names().to_vec(),
+      ));
     }
     get_map(self, options)
   }
@@ -112,7 +122,9 @@ impl Source for SourceMapSource {
   }
 }
 
-impl Hash for SourceMapSource {
+impl<M1: DecodableSourceMap + 'static, M2: DecodableSourceMap + 'static> Hash
+  for SourceMapSource<M1, M2>
+{
   fn hash<H: Hasher>(&self, state: &mut H) {
     "SourceMapSource".hash(state);
     self.buffer().hash(state);
@@ -123,7 +135,9 @@ impl Hash for SourceMapSource {
   }
 }
 
-impl PartialEq for SourceMapSource {
+impl<M1: DecodableSourceMap, M2: DecodableSourceMap> PartialEq
+  for SourceMapSource<M1, M2>
+{
   fn eq(&self, other: &Self) -> bool {
     self.value == other.value
       && self.name == other.name
@@ -134,7 +148,9 @@ impl PartialEq for SourceMapSource {
   }
 }
 
-impl std::fmt::Debug for SourceMapSource {
+impl<M1: DecodableSourceMap, M2: DecodableSourceMap> std::fmt::Debug
+  for SourceMapSource<M1, M2>
+{
   fn fmt(
     &self,
     f: &mut std::fmt::Formatter<'_>,
@@ -146,7 +162,9 @@ impl std::fmt::Debug for SourceMapSource {
   }
 }
 
-impl<'a> StreamChunks<'a> for SourceMapSource {
+impl<'a, M1: DecodableSourceMap, M2: DecodableSourceMap> StreamChunks<'a>
+  for SourceMapSource<M1, M2>
+{
   fn stream_chunks(
     &'a self,
     options: &MapOptions,
@@ -182,6 +200,8 @@ impl<'a> StreamChunks<'a> for SourceMapSource {
 
 #[cfg(test)]
 mod tests {
+  use std::sync::Arc;
+
   use crate::{
     CachedSource, ConcatSource, OriginalSource, RawSource, ReplaceSource,
     SourceExt,
@@ -272,7 +292,7 @@ mod tests {
       name: "hello.txt",
       source_map: SourceMap::new(
         None,
-        "AAAA".to_string(),
+        Arc::from("AAAA"),
         vec!["".into()],
         vec!["".into()],
         vec![],
@@ -283,7 +303,7 @@ mod tests {
       name: "hello.txt",
       source_map: SourceMap::new(
         None,
-        "AAAA".to_string(),
+        Arc::from("AAAA"),
         vec![],
         vec![],
         vec![],
@@ -294,7 +314,7 @@ mod tests {
       name: "hello.txt",
       source_map: SourceMap::new(
         None,
-        "AAAA".to_string(),
+        Arc::from("AAAA"),
         vec!["hello-source.txt".into()],
         vec!["hello world\n".into()],
         vec![],
@@ -362,7 +382,7 @@ mod tests {
       name: "a",
       source_map: SourceMap::new(
         None,
-        "AAAA;AACA".to_string(),
+        Arc::from("AAAA;AACA"),
         vec!["hello1".into()],
         vec![],
         vec![],
@@ -373,7 +393,7 @@ mod tests {
       name: "b",
       source_map: SourceMap::new(
         None,
-        "AAAA,EAAE".to_string(),
+        Arc::from("AAAA,EAAE"),
         vec!["hello2".into()],
         vec![],
         vec![],
@@ -384,7 +404,7 @@ mod tests {
       name: "b",
       source_map: SourceMap::new(
         None,
-        "AAAA,EAAE".to_string(),
+        Arc::from("AAAA,EAAE"),
         vec!["hello3".into()],
         vec![],
         vec![],
@@ -395,7 +415,7 @@ mod tests {
       name: "c",
       source_map: SourceMap::new(
         None,
-        "AAAA".to_string(),
+        Arc::from("AAAA"),
         vec!["hello4".into()],
         vec![],
         vec![],
@@ -419,7 +439,7 @@ mod tests {
     ]);
     let map = source.map(&MapOptions::default()).unwrap();
     assert_eq!(
-      map.mappings(),
+      map.mappings().as_ref(),
       "AAAA;AAAA;ACAA,ICAA,EDAA,ECAA,EFAA;AEAA,EFAA;ACAA",
     );
 
@@ -595,7 +615,7 @@ mod tests {
       source.boxed(),
     ]);
     let map = source.map(&MapOptions::new(false)).unwrap();
-    assert_eq!(map.mappings(), ";;;AAAA");
+    assert_eq!(map.mappings().as_ref(), ";;;AAAA");
   }
 
   #[test]
@@ -621,7 +641,7 @@ mod tests {
     .unwrap();
     let inner_source_map =
       inner_source.map(&MapOptions::default()).map(|mut map| {
-        map.set_source_root(Some("/path/to/folder/".to_string()));
+        map.set_source_root(Some(Arc::from("/path/to/folder/")));
         map
       });
     let sms = SourceMapSource::new(SourceMapSourceOptions {

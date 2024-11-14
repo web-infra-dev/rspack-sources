@@ -8,7 +8,7 @@ pub use codspeed_criterion_compat::*;
 
 use rspack_sources::{
   CachedSource, ConcatSource, MapOptions, ReplaceSource, Source, SourceMap,
-  SourceMapSource, SourceMapSourceOptions,
+  SourceMapSource, SourceMapSourceOptions, WithoutOriginalOptions,
 };
 
 const HELLOWORLD_JS: &str = include_str!(concat!(
@@ -163,13 +163,10 @@ fn benchmark_concat_generate_base64_with_cache(b: &mut Bencher) {
 }
 
 fn benchmark_replace_large_minified_source(b: &mut Bencher) {
-  let antd_minify = SourceMapSource::new(SourceMapSourceOptions {
+  let antd_minify = SourceMapSource::new(WithoutOriginalOptions {
     value: ANTD_MIN_JS,
     name: "antd.min.js",
     source_map: SourceMap::from_json(ANTD_MIN_JS_MAP).unwrap(),
-    original_source: None,
-    inner_source_map: None,
-    remove_original_source: false,
   });
   let mut replace_source = ReplaceSource::new(antd_minify);
   replace_source.replace(107, 114, "exports", None);

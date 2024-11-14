@@ -1,6 +1,7 @@
 use std::{
   borrow::{BorrowMut, Cow},
   cell::{OnceCell, RefCell},
+  sync::Arc,
 };
 
 use rustc_hash::FxHashMap as HashMap;
@@ -11,7 +12,7 @@ use crate::{
   linear_map::LinearMap,
   source::{Mapping, OriginalLocation},
   with_indices::WithIndices,
-  MapOptions, SourceMap,
+  DecodableSourceMap, MapOptions, SourceMap,
 };
 
 // Adding this type because sourceContentLine not happy
@@ -23,9 +24,9 @@ pub fn get_map<'a, S: StreamChunks<'a>>(
   options: &'a MapOptions,
 ) -> Option<SourceMap> {
   let mut mappings_encoder = create_encoder(options.columns);
-  let mut sources: Vec<Cow<'static, str>> = Vec::new();
-  let mut sources_content: Vec<Cow<'static, str>> = Vec::new();
-  let mut names: Vec<Cow<'static, str>> = Vec::new();
+  let mut sources: Vec<Arc<str>> = Vec::new();
+  let mut sources_content: Vec<Arc<str>> = Vec::new();
+  let mut names: Vec<Arc<str>> = Vec::new();
 
   stream.stream_chunks(
     &MapOptions {
@@ -40,12 +41,12 @@ pub fn get_map<'a, S: StreamChunks<'a>>(
     &mut |source_index, source, source_content| {
       let source_index = source_index as usize;
       if sources.len() <= source_index {
-        sources.resize(source_index + 1, Cow::Borrowed(""));
+        sources.resize(source_index + 1, Arc::from("".to_string()));
       }
       sources[source_index] = source.to_string().into();
       if let Some(source_content) = source_content {
         if sources_content.len() <= source_index {
-          sources_content.resize(source_index + 1, Cow::Borrowed(""));
+          sources_content.resize(source_index + 1, Arc::from("".to_string()));
         }
         sources_content[source_index] = source_content.to_string().into();
       }
@@ -54,14 +55,15 @@ pub fn get_map<'a, S: StreamChunks<'a>>(
     &mut |name_index, name| {
       let name_index = name_index as usize;
       if names.len() <= name_index {
-        names.resize(name_index + 1, Cow::Borrowed(""));
+        names.resize(name_index + 1, Arc::from("".to_string()));
       }
       names[name_index] = name.to_string().into();
     },
   );
   let mappings = mappings_encoder.drain();
-  (!mappings.is_empty())
-    .then(|| SourceMap::new(None, mappings, sources, sources_content, names))
+  (!mappings.is_empty()).then(|| {
+    SourceMap::new(None, Arc::from(mappings), sources, sources_content, names)
+  })
 }
 
 /// [StreamChunks] abstraction, see [webpack-sources source.streamChunks](https://github.com/webpack/webpack-sources/blob/9f98066311d53a153fdc7c633422a1d086528027/lib/helpers/streamChunks.js#L13).
@@ -265,9 +267,9 @@ pub fn stream_chunks_of_raw_source<'a>(
   }
 }
 
-pub fn stream_chunks_of_source_map<'a>(
+pub fn stream_chunks_of_source_map<'a, M: DecodableSourceMap>(
   source: &'a str,
-  source_map: &'a SourceMap,
+  source_map: &'a M,
   on_chunk: OnChunk<'_, 'a>,
   on_source: OnSource<'_, 'a>,
   on_name: OnName<'_, 'a>,
@@ -301,7 +303,10 @@ pub fn stream_chunks_of_source_map<'a>(
   }
 }
 
-fn get_source<'a>(source_map: &SourceMap, source: &'a str) -> Cow<'a, str> {
+fn get_source<'a, M: DecodableSourceMap>(
+  source_map: &M,
+  source: &'a str,
+) -> Cow<'a, str> {
   let source_root = source_map.source_root();
   match source_root {
     Some(root) if root.is_empty() => Cow::Borrowed(source),
@@ -313,9 +318,9 @@ fn get_source<'a>(source_map: &SourceMap, source: &'a str) -> Cow<'a, str> {
   }
 }
 
-fn stream_chunks_of_source_map_final<'a>(
+fn stream_chunks_of_source_map_final<'a, M: DecodableSourceMap>(
   source: &'a str,
-  source_map: &'a SourceMap,
+  source_map: &'a M,
   on_chunk: OnChunk,
   on_source: OnSource<'_, 'a>,
   on_name: OnName<'_, 'a>,
@@ -324,11 +329,12 @@ fn stream_chunks_of_source_map_final<'a>(
   if result.generated_line == 1 && result.generated_column == 0 {
     return result;
   }
+  let source_content = source_map.sources_content();
   for (i, source) in source_map.sources().iter().enumerate() {
     on_source(
       i as u32,
       get_source(source_map, source),
-      source_map.get_source_content(i),
+      source_content.get(i).map(|s| s.as_ref()),
     )
   }
   for (i, name) in source_map.names().iter().enumerate() {
@@ -369,18 +375,19 @@ fn stream_chunks_of_source_map_final<'a>(
   result
 }
 
-fn stream_chunks_of_source_map_full<'a>(
+fn stream_chunks_of_source_map_full<'a, M: DecodableSourceMap>(
   source: &'a str,
-  source_map: &'a SourceMap,
+  source_map: &'a M,
   on_chunk: OnChunk<'_, 'a>,
   on_source: OnSource<'_, 'a>,
   on_name: OnName<'_, 'a>,
 ) -> GeneratedInfo {
+  let source_content = source_map.sources_content();
   for (i, source) in source_map.sources().iter().enumerate() {
     on_source(
       i as u32,
       get_source(source_map, source),
-      source_map.get_source_content(i),
+      source_content.get(i).map(|s| s.as_ref()),
     )
   }
 
@@ -468,9 +475,9 @@ fn stream_chunks_of_source_map_full<'a>(
   }
 }
 
-fn stream_chunks_of_source_map_lines_final<'a>(
+fn stream_chunks_of_source_map_lines_final<'a, M: DecodableSourceMap>(
   source: &'a str,
-  source_map: &'a SourceMap,
+  source_map: &'a M,
   on_chunk: OnChunk,
   on_source: OnSource<'_, 'a>,
   _on_name: OnName,
@@ -482,11 +489,12 @@ fn stream_chunks_of_source_map_lines_final<'a>(
       generated_column: 0,
     };
   }
+  let source_content = source_map.sources_content();
   for (i, source) in source_map.sources().iter().enumerate() {
     on_source(
       i as u32,
       get_source(source_map, source),
-      source_map.get_source_content(i),
+      source_content.get(i).map(|s| s.as_ref()),
     )
   }
   let final_line = if result.generated_column == 0 {
@@ -513,9 +521,9 @@ fn stream_chunks_of_source_map_lines_final<'a>(
   result
 }
 
-fn stream_chunks_of_source_map_lines_full<'a>(
+fn stream_chunks_of_source_map_lines_full<'a, M: DecodableSourceMap>(
   source: &'a str,
-  source_map: &'a SourceMap,
+  source_map: &'a M,
   on_chunk: OnChunk<'_, 'a>,
   on_source: OnSource<'_, 'a>,
   _on_name: OnName,
@@ -528,10 +536,11 @@ fn stream_chunks_of_source_map_lines_full<'a>(
     };
   }
   for (i, source) in source_map.sources().iter().enumerate() {
+    let source_content = source_map.sources_content();
     on_source(
       i as u32,
       get_source(source_map, source),
-      source_map.get_source_content(i),
+      source_content.get(i).map(|s| s.as_ref()),
     )
   }
   let mut current_generated_line = 1;
@@ -607,12 +616,16 @@ type InnerSourceIndexValueMapping<'a> =
   LinearMap<(Cow<'a, str>, Option<&'a str>)>;
 
 #[allow(clippy::too_many_arguments)]
-pub fn stream_chunks_of_combined_source_map<'a>(
+pub fn stream_chunks_of_combined_source_map<
+  'a,
+  M1: DecodableSourceMap,
+  M2: DecodableSourceMap,
+>(
   source: &'a str,
-  source_map: &'a SourceMap,
+  source_map: &'a M1,
   inner_source_name: &'a str,
   inner_source: Option<&'a str>,
-  inner_source_map: &'a SourceMap,
+  inner_source_map: &'a M2,
   remove_inner_source: bool,
   on_chunk: OnChunk<'_, 'a>,
   on_source: OnSource<'_, 'a>,
@@ -1091,9 +1104,9 @@ pub fn stream_and_get_source_and_map<'a, S: StreamChunks<'a>>(
   on_name: OnName<'_, 'a>,
 ) -> (GeneratedInfo, Option<SourceMap>) {
   let mut mappings_encoder = create_encoder(options.columns);
-  let mut sources: Vec<Cow<'static, str>> = Vec::new();
-  let mut sources_content: Vec<Cow<'static, str>> = Vec::new();
-  let mut names: Vec<Cow<'static, str>> = Vec::new();
+  let mut sources: Vec<Arc<str>> = Vec::new();
+  let mut sources_content: Vec<Arc<str>> = Vec::new();
+  let mut names: Vec<Arc<str>> = Vec::new();
 
   let generated_info = input_source.stream_chunks(
     options,
@@ -1131,7 +1144,7 @@ pub fn stream_and_get_source_and_map<'a, S: StreamChunks<'a>>(
   } else {
     Some(SourceMap::new(
       None,
-      mappings,
+      Arc::from(mappings),
       sources,
       sources_content,
       names,
