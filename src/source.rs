@@ -256,6 +256,14 @@ impl Hash for BoxDecodableSourceMap {
   }
 }
 
+impl Debug for BoxDecodableSourceMap {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    f.debug_struct("BoxDecodableSourceMap")
+      .field("file", &self.file())
+      .finish()
+  }
+}
+
 pub trait DecodableSourceMapExt {
   /// An alias for [BoxDecodableSourceMap::from].
   fn boxed(self) -> BoxDecodableSourceMap;
@@ -349,8 +357,8 @@ impl SourceMap {
   }
 
   /// Get the source_root field in [SourceMap].
-  pub fn source_root(&self) -> &Option<Arc<str>> {
-    &self.source_root
+  pub fn source_root(&self) -> Option<&str> {
+    self.source_root.as_deref()
   }
 
   /// Set the source_root field in [SourceMap].
