@@ -210,8 +210,8 @@ mod tests {
   use std::borrow::Borrow;
 
   use crate::{
-    ConcatSource, OriginalSource, RawSource, SourceExt,
-    SourceMapSource, WithoutOriginalOptions,
+    ConcatSource, OriginalSource, RawSource, SourceExt, SourceMapSource,
+    WithoutOriginalOptions,
   };
 
   use super::*;

@@ -196,9 +196,7 @@ impl<'a> StreamChunks<'a> for RawSource {
 
 #[cfg(test)]
 mod tests {
-  use crate::{
-    ConcatSource, OriginalSource, ReplaceSource, SourceExt,
-  };
+  use crate::{ConcatSource, OriginalSource, ReplaceSource, SourceExt};
 
   use super::*;
 

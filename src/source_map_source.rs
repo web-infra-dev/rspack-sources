@@ -713,4 +713,45 @@ mod tests {
       .unwrap()
     );
   }
+
+  #[test]
+  fn should_not_panic_when_check_for_an_identity_mapping() {
+    let source = SourceMapSource::new(SourceMapSourceOptions {
+      value: "hello world",
+      name: "hello.txt",
+      source_map: SourceMap::from_json(
+        r#"{
+          "version": 3,
+          "sources": ["hello.txt"],
+          "mappings": "AAAA,MAAG"
+        }"#,
+      )
+      .unwrap(),
+      original_source: Some("你好 世界".to_string()),
+      inner_source_map: Some(
+        SourceMap::from_json(
+          r#"{
+          "version": 3,
+          "sources": ["hello world.txt"],
+          "mappings": "AAAA,EAAE",
+          "sourcesContent": ["你好✋世界"]
+        }"#,
+        )
+        .unwrap(),
+      ),
+      remove_original_source: false,
+    });
+    assert_eq!(
+      source.map(&MapOptions::default()).unwrap(),
+      SourceMap::from_json(
+        r#"{
+          "version": 3,
+          "mappings": "AAAA,MAAE",
+          "sources": ["hello world.txt"],
+          "sourcesContent": ["你好✋世界"]
+        }"#
+      )
+      .unwrap()
+    );
+  }
 }

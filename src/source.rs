@@ -302,7 +302,7 @@ impl SourceMap {
   }
 
   /// Get the source_root field in [SourceMap].
-  pub   fn source_root(&self) -> &Option<Arc<str>> {
+  pub fn source_root(&self) -> &Option<Arc<str>> {
     &self.source_root
   }
 
