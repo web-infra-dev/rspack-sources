@@ -205,6 +205,9 @@ pub trait DecodableSourceMap: Sync + Send {
 
   /// Get the source_root field in [SourceMap].
   fn source_root(&self) -> Option<&str>;
+
+  /// Generate source map to a json string.
+  fn to_json(self) -> Result<String>;
 }
 
 pub type BoxDecodableSourceMap = Box<dyn DecodableSourceMap>;
@@ -402,6 +405,10 @@ impl DecodableSourceMap for SourceMap {
 
   fn source_root(&self) -> Option<&str> {
     self.source_root.as_deref()
+  }
+  
+  fn to_json(self) -> Result<String> {
+    self.to_json()
   }
 
   // fn set_source_root<T: Into<Arc<str>>>(&mut self, source_root: Option<T>) {
