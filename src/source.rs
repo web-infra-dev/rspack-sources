@@ -197,11 +197,20 @@ pub trait DecodableMap: Sync + Send {
   /// Get the sources field in [SourceMap].
   fn sources<'a>(&'a self) -> Box<dyn Iterator<Item = &'a str> + 'a>;
 
+  /// Get the sources field in [SourceMap].
+  fn source(&self, index: usize) -> Option<&str>;
+
   /// Get the sourcesContent field in [SourceMap].
   fn sources_content<'a>(&'a self) -> Box<dyn Iterator<Item = &'a str> + 'a>;
 
+  /// Get the sourcesContent field in [SourceMap].
+  fn source_content(&self, index: usize) -> Option<&str>;
+
   /// Get the names field in [SourceMap].
   fn names<'a>(&'a self) -> Box<dyn Iterator<Item = &'a str> + 'a>;
+
+  /// Get the names field in [SourceMap].
+  fn name(&self, index: usize) -> Option<&str>;
 
   /// Get the source_root field in [SourceMap].
   fn source_root(&self) -> Option<&str>;
@@ -388,15 +397,27 @@ impl DecodableMap for SourceMap {
   }
 
   fn sources<'a>(&'a self) -> Box<dyn Iterator<Item = &'a str> + 'a> {
-    Box::new(self.sources.iter().map(|s| s.as_ref()))
+    Box::new(self.sources.iter().map(|source| source.as_ref()))
+  }
+
+  fn source(&self, index: usize) -> Option<&str> {
+    self.sources.get(index).map(|source| source.as_ref())
   }
 
   fn sources_content<'a>(&'a self) -> Box<dyn Iterator<Item = &'a str> + 'a> {
-    Box::new(self.sources_content.iter().map(|s| s.as_ref()))
+    Box::new(self.sources_content.iter().map(|content| content.as_ref()))
+  }
+
+  fn source_content(&self, index: usize) -> Option<&str> {
+    self.sources_content.get(index).map(|content| content.as_ref())
   }
 
   fn names<'a>(&'a self) -> Box<dyn Iterator<Item = &'a str> + 'a> {
-    Box::new(self.names.iter().map(|s| s.as_ref()))
+    Box::new(self.names.iter().map(|name| name.as_ref()))
+  }
+
+  fn name(&self, index: usize) -> Option<&str> {
+    self.names.get(index).map(|name| name.as_ref())
   }
 
   fn source_root(&self) -> Option<&str> {
