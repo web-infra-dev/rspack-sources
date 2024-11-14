@@ -35,3 +35,5 @@ pub mod stream_chunks {
     StreamChunks,
   };
 }
+
+pub use helpers::decode_mappings;

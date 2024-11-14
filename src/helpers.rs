@@ -116,9 +116,9 @@ pub struct GeneratedInfo {
 }
 
 pub fn decode_mappings(
-  source_map: &SourceMap,
+  mappings: &str,
 ) -> impl Iterator<Item = Mapping> + '_ {
-  MappingsDecoder::new(source_map.mappings())
+  MappingsDecoder::new(mappings)
 }
 
 pub struct PotentialTokens<'a> {

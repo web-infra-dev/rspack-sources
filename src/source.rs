@@ -384,7 +384,7 @@ impl DecodableSourceMap for SourceMap {
   // }
 
   fn decoded_mappings<'a>(&'a self) -> Box<dyn Iterator<Item = Mapping> + 'a> {
-    Box::new(decode_mappings(self))
+    Box::new(decode_mappings(&self.mappings))
   }
 
   fn mappings(&self) -> &str {
