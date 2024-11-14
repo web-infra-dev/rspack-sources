@@ -334,7 +334,7 @@ fn stream_chunks_of_source_map_final<'a, M: DecodableSourceMap>(
     on_source(
       i as u32,
       get_source(source_map, source),
-      source_content.get(i).map(|s| *s),
+      source_content.get(i).copied(),
     )
   }
   for (i, name) in source_map.names().enumerate() {
@@ -396,7 +396,7 @@ fn stream_chunks_of_source_map_full<'a, M: DecodableSourceMap>(
     on_source(
       i as u32,
       get_source(source_map, source),
-      source_content.get(i).map(|s| *s),
+      source_content.get(i).copied(),
     )
   }
   for (i, name) in source_map.names().enumerate() {
@@ -543,7 +543,7 @@ fn stream_chunks_of_source_map_lines_final<'a, M: DecodableSourceMap>(
     on_source(
       i as u32,
       get_source(source_map, source),
-      source_content.get(i).map(|s| *s),
+      source_content.get(i).copied(),
     )
   }
   let final_line = if result.generated_column == 0 {
@@ -589,7 +589,7 @@ fn stream_chunks_of_source_map_lines_full<'a, M: DecodableSourceMap>(
     on_source(
       i as u32,
       get_source(source_map, source),
-      sources_content.get(i).map(|s| *s),
+      sources_content.get(i).copied(),
     )
   }
   let mut current_generated_line = 1;
