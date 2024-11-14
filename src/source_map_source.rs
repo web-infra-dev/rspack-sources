@@ -60,7 +60,7 @@ impl<V, N, M> From<WithoutOriginalOptions<V, N, M>>
 /// source map for the original source.
 ///
 /// - [webpack-sources docs](https://github.com/webpack/webpack-sources/#sourcemapsource).
-#[derive(Clone, Eq)]
+#[derive(Clone)]
 pub struct SourceMapSource<M1: DecodableSourceMap, M2: DecodableSourceMap> {
   value: String,
   name: String,
@@ -148,19 +148,6 @@ impl<M1: DecodableSourceMap + 'static, M2: DecodableSourceMap + 'static> Hash
     self.original_source.hash(state);
     self.inner_source_map.hash(state);
     self.remove_original_source.hash(state);
-  }
-}
-
-impl<M1: DecodableSourceMap, M2: DecodableSourceMap> PartialEq
-  for SourceMapSource<M1, M2>
-{
-  fn eq(&self, other: &Self) -> bool {
-    self.value == other.value
-      && self.name == other.name
-      && self.source_map == other.source_map
-      && self.original_source == other.original_source
-      && self.inner_source_map == other.inner_source_map
-      && self.remove_original_source == other.remove_original_source
   }
 }
 

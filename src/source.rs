@@ -23,7 +23,6 @@ pub trait Source:
   for<'a> StreamChunks<'a>
   + DynHash
   + AsAny
-  + DynEq
   + DynClone
   + Debug
   + Sync
@@ -134,17 +133,6 @@ impl<E: Eq + Any> DynEq for E {
   }
 }
 
-impl PartialEq for dyn Source {
-  fn eq(&self, other: &Self) -> bool {
-    if self.as_any().type_id() != other.as_any().type_id() {
-      return false;
-    }
-    self.dyn_eq(other.as_any())
-  }
-}
-
-impl Eq for dyn Source {}
-
 /// Extension methods for [Source].
 pub trait SourceExt {
   /// An alias for [BoxSource::from].
@@ -187,7 +175,7 @@ impl MapOptions {
 
 /// The `DecodableSourceMap` trait provides function for obtaining the decoded mappings
 pub trait DecodableSourceMap:
-  Sync + Send + Clone + PartialEq + Eq + Hash
+  Sync + Send + Clone + Hash
 {
   /// Get the file field in [SourceMap].
   fn file(&self) -> Option<&str>;
