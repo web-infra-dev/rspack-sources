@@ -21,8 +21,8 @@ pub use original_source::OriginalSource;
 pub use raw_source::RawSource;
 pub use replace_source::{ReplaceSource, ReplacementEnforce};
 pub use source::{
-  BoxDecodableSourceMap, BoxSource, DecodableSourceMap, DecodableSourceMapExt,
-  MapOptions, Mapping, OriginalLocation, Source, SourceExt, SourceMap,
+  BoxDecodableMap, BoxSource, DecodableMap, DecodableMapExt, MapOptions,
+  Mapping, OriginalLocation, Source, SourceExt, SourceMap,
 };
 pub use source_map_source::{
   SourceMapSource, SourceMapSourceOptions, WithoutOriginalOptions,

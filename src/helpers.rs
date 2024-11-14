@@ -12,7 +12,7 @@ use crate::{
   linear_map::LinearMap,
   source::{Mapping, OriginalLocation},
   with_indices::WithIndices,
-  DecodableSourceMap, MapOptions, SourceMap,
+  DecodableMap, MapOptions, SourceMap,
 };
 
 // Adding this type because sourceContentLine not happy
@@ -115,9 +115,7 @@ pub struct GeneratedInfo {
   pub generated_column: u32,
 }
 
-pub fn decode_mappings(
-  mappings: &str,
-) -> impl Iterator<Item = Mapping> + '_ {
+pub fn decode_mappings(mappings: &str) -> impl Iterator<Item = Mapping> + '_ {
   MappingsDecoder::new(mappings)
 }
 
@@ -275,7 +273,7 @@ pub fn stream_chunks_of_raw_source<'a>(
 
 pub fn stream_chunks_of_source_map<'a>(
   source: &'a str,
-  source_map: &'a dyn DecodableSourceMap,
+  source_map: &'a dyn DecodableMap,
   on_chunk: OnChunk<'_, 'a>,
   on_source: OnSource<'_, 'a>,
   on_name: OnName<'_, 'a>,
@@ -310,7 +308,7 @@ pub fn stream_chunks_of_source_map<'a>(
 }
 
 fn get_source<'a>(
-  source_map: &dyn DecodableSourceMap,
+  source_map: &dyn DecodableMap,
   source: &'a str,
 ) -> Cow<'a, str> {
   let source_root = source_map.source_root();
@@ -326,7 +324,7 @@ fn get_source<'a>(
 
 fn stream_chunks_of_source_map_final<'a>(
   source: &'a str,
-  source_map: &'a dyn DecodableSourceMap,
+  source_map: &'a dyn DecodableMap,
   on_chunk: OnChunk,
   on_source: OnSource<'_, 'a>,
   on_name: OnName<'_, 'a>,
@@ -383,7 +381,7 @@ fn stream_chunks_of_source_map_final<'a>(
 
 fn stream_chunks_of_source_map_full<'a>(
   source: &'a str,
-  source_map: &'a dyn DecodableSourceMap,
+  source_map: &'a dyn DecodableMap,
   on_chunk: OnChunk<'_, 'a>,
   on_source: OnSource<'_, 'a>,
   on_name: OnName<'_, 'a>,
@@ -532,7 +530,7 @@ fn stream_chunks_of_source_map_full<'a>(
 
 fn stream_chunks_of_source_map_lines_final<'a>(
   source: &'a str,
-  source_map: &'a dyn DecodableSourceMap,
+  source_map: &'a dyn DecodableMap,
   on_chunk: OnChunk,
   on_source: OnSource<'_, 'a>,
   _on_name: OnName,
@@ -578,7 +576,7 @@ fn stream_chunks_of_source_map_lines_final<'a>(
 
 fn stream_chunks_of_source_map_lines_full<'a>(
   source: &'a str,
-  source_map: &'a dyn DecodableSourceMap,
+  source_map: &'a dyn DecodableMap,
   on_chunk: OnChunk<'_, 'a>,
   on_source: OnSource<'_, 'a>,
   _on_name: OnName,
@@ -673,10 +671,10 @@ type InnerSourceIndexValueMapping<'a> =
 #[allow(clippy::too_many_arguments)]
 pub fn stream_chunks_of_combined_source_map<'a>(
   source: &'a str,
-  source_map: &'a dyn DecodableSourceMap,
+  source_map: &'a dyn DecodableMap,
   inner_source_name: &'a str,
   inner_source: Option<&'a str>,
-  inner_source_map: &'a dyn DecodableSourceMap,
+  inner_source_map: &'a dyn DecodableMap,
   remove_inner_source: bool,
   on_chunk: OnChunk<'_, 'a>,
   on_source: OnSource<'_, 'a>,

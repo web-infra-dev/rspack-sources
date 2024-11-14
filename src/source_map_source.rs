@@ -9,38 +9,45 @@ use crate::{
     get_map, stream_chunks_of_combined_source_map, stream_chunks_of_source_map,
     StreamChunks,
   },
-  DecodableSourceMap, MapOptions, Source, SourceMap,
+  BoxDecodableMap, DecodableMap, MapOptions, Source, SourceMap,
 };
 
 /// Options for [SourceMapSource::new].
-pub struct SourceMapSourceOptions<V, N> {
+pub struct SourceMapSourceOptions<
+  V,
+  N,
+  M1: Into<BoxDecodableMap>,
+  M2: Into<BoxDecodableMap>,
+> {
   /// The source code.
   pub value: V,
   /// Name of the file.
   pub name: N,
   /// The source map of the source code.
-  pub source_map: Box<dyn DecodableSourceMap>,
+  pub source_map: M1,
   /// The original source code.
   pub original_source: Option<String>,
   /// The original source map.
-  pub inner_source_map: Option<Box<dyn DecodableSourceMap>>,
+  pub inner_source_map: Option<M2>,
   /// Whether remove the original source.
   pub remove_original_source: bool,
 }
 
 /// An convenient options for [SourceMapSourceOptions], `original_source` and
 /// `inner_source_map` will be `None`, `remove_original_source` will be false.
-pub struct WithoutOriginalOptions<V, N> {
+pub struct WithoutOriginalOptions<V, N, M: Into<BoxDecodableMap>> {
   /// The source code.
   pub value: V,
   /// Name of the file.
   pub name: N,
   /// The source map of the source code.
-  pub source_map: Box<dyn DecodableSourceMap>,
+  pub source_map: M,
 }
 
-impl<V, N> From<WithoutOriginalOptions<V, N>> for SourceMapSourceOptions<V, N> {
-  fn from(options: WithoutOriginalOptions<V, N>) -> Self {
+impl<V, N, M: Into<BoxDecodableMap>> From<WithoutOriginalOptions<V, N, M>>
+  for SourceMapSourceOptions<V, N, M, M>
+{
+  fn from(options: WithoutOriginalOptions<V, N, M>) -> Self {
     Self {
       value: options.value,
       name: options.name,
@@ -59,27 +66,29 @@ impl<V, N> From<WithoutOriginalOptions<V, N>> for SourceMapSourceOptions<V, N> {
 pub struct SourceMapSource {
   value: String,
   name: String,
-  source_map: Box<dyn DecodableSourceMap>,
+  source_map: Box<dyn DecodableMap>,
   original_source: Option<String>,
-  inner_source_map: Option<Box<dyn DecodableSourceMap>>,
+  inner_source_map: Option<Box<dyn DecodableMap>>,
   remove_original_source: bool,
 }
 
 impl SourceMapSource {
   /// Create a [SourceMapSource] with [SourceMapSourceOptions].
-  pub fn new<V, N, O>(options: O) -> Self
+  pub fn new<V, N, M1, M2, O>(options: O) -> Self
   where
     V: Into<String>,
     N: Into<String>,
-    O: Into<SourceMapSourceOptions<V, N>>,
+    M1: Into<BoxDecodableMap>,
+    M2: Into<BoxDecodableMap>,
+    O: Into<SourceMapSourceOptions<V, N, M1, M2>>,
   {
     let options = options.into();
     Self {
       value: options.value.into(),
       name: options.name.into(),
-      source_map: options.source_map,
+      source_map: options.source_map.into(),
       original_source: options.original_source,
-      inner_source_map: options.inner_source_map,
+      inner_source_map: options.inner_source_map.map(Into::into),
       remove_original_source: options.remove_original_source,
     }
   }
@@ -163,7 +172,7 @@ impl Clone for SourceMapSource {
       source_map: self.source_map.clone(),
       original_source: self.original_source.clone(),
       inner_source_map: self.inner_source_map.clone(),
-      remove_original_source: self.remove_original_source.clone(),
+      remove_original_source: self.remove_original_source,
     }
   }
 }
@@ -219,7 +228,7 @@ mod tests {
   use std::sync::Arc;
 
   use crate::{
-    source::DecodableSourceMapExt, CachedSource, ConcatSource, OriginalSource,
+    source::DecodableMapExt, CachedSource, ConcatSource, OriginalSource,
     RawSource, ReplaceSource, SourceExt,
   };
 
@@ -249,21 +258,21 @@ mod tests {
     let sms1 = SourceMapSource::new(SourceMapSourceOptions {
       value: source_r_code,
       name: "text",
-      source_map: Box::new(source_r_map.clone()),
+      source_map: source_r_map.clone(),
       original_source: Some(inner_source.source().to_string()),
       inner_source_map: inner_source
         .map(&MapOptions::default())
-        .map(|source_map| Box::new(source_map) as Box<dyn DecodableSourceMap>),
+        .map(|source_map| Box::new(source_map) as Box<dyn DecodableMap>),
       remove_original_source: false,
     });
     let sms2 = SourceMapSource::new(SourceMapSourceOptions {
       value: source_r_code,
       name: "text",
-      source_map: Box::new(source_r_map),
+      source_map: source_r_map,
       original_source: Some(inner_source.source().to_string()),
       inner_source_map: inner_source
         .map(&MapOptions::default())
-        .map(|source_map| Box::new(source_map) as Box<dyn DecodableSourceMap>),
+        .map(|source_map| Box::new(source_map) as Box<dyn DecodableMap>),
       remove_original_source: true,
     });
     let expected_content =
@@ -302,7 +311,7 @@ mod tests {
 
     let mut hasher = twox_hash::XxHash64::default();
     sms1.hash(&mut hasher);
-    assert_eq!(format!("{:x}", hasher.finish()), "d136621583d4618c");
+    assert_eq!(format!("{:x}", hasher.finish()), "adeae438c02c143a");
   }
 
   #[test]
@@ -310,39 +319,36 @@ mod tests {
     let a = SourceMapSource::new(WithoutOriginalOptions {
       value: "hello world\n",
       name: "hello.txt",
-      source_map: Box::new(SourceMap::new(
+      source_map: SourceMap::new(
         None,
         Arc::from("AAAA"),
         vec!["".into()],
         vec!["".into()],
         vec![],
-      )),
-    })
-    .boxed();
+      ),
+    });
     let b = SourceMapSource::new(WithoutOriginalOptions {
       value: "hello world\n",
       name: "hello.txt",
-      source_map: Box::new(SourceMap::new(
+      source_map: SourceMap::new(
         None,
         Arc::from("AAAA"),
         vec![],
         vec![],
         vec![],
-      )),
-    })
-    .boxed();
+      ),
+    });
     let c = SourceMapSource::new(WithoutOriginalOptions {
       value: "hello world\n",
       name: "hello.txt",
-      source_map: Box::new(SourceMap::new(
+      source_map: SourceMap::new(
         None,
         Arc::from("AAAA"),
         vec!["hello-source.txt".into()],
         vec!["hello world\n".into()],
         vec![],
-      )),
-    })
-    .boxed();
+      ),
+    });
     let sources = [a, b, c].into_iter().map(|s| {
       let mut r = ReplaceSource::new(s);
       r.replace(1, 5, "i", None);
@@ -388,8 +394,7 @@ mod tests {
       env!("CARGO_MANIFEST_DIR"),
       "/tests/fixtures/es6-promise.map"
     )))
-    .unwrap()
-    .boxed();
+    .unwrap();
     let source = ConcatSource::new([
       SourceMapSource::new(WithoutOriginalOptions {
         value: code,
@@ -416,10 +421,8 @@ mod tests {
         vec!["hello1".into()],
         vec![],
         vec![],
-      )
-      .boxed(),
-    })
-    .boxed();
+      ),
+    });
     let b = SourceMapSource::new(WithoutOriginalOptions {
       value: "hi",
       name: "b",
@@ -429,10 +432,8 @@ mod tests {
         vec!["hello2".into()],
         vec![],
         vec![],
-      )
-      .boxed(),
-    })
-    .boxed();
+      ),
+    });
     let b2 = SourceMapSource::new(WithoutOriginalOptions {
       value: "hi",
       name: "b",
@@ -442,10 +443,8 @@ mod tests {
         vec!["hello3".into()],
         vec![],
         vec![],
-      )
-      .boxed(),
-    })
-    .boxed();
+      ),
+    });
     let c = SourceMapSource::new(WithoutOriginalOptions {
       value: "",
       name: "c",
@@ -455,10 +454,8 @@ mod tests {
         vec!["hello4".into()],
         vec![],
         vec![],
-      )
-      .boxed(),
-    })
-    .boxed();
+      ),
+    });
     let source = ConcatSource::new([
       a.clone(),
       a.clone(),
@@ -474,11 +471,10 @@ mod tests {
       c,
       a,
       b,
-    ])
-    .boxed();
-    let map = source.map(&MapOptions::default()).unwrap().boxed();
+    ]);
+    let map = source.map(&MapOptions::default()).unwrap();
     assert_eq!(
-      map.mappings(),
+      map.mappings().as_ref(),
       "AAAA;AAAA;ACAA,ICAA,EDAA,ECAA,EFAA;AEAA,EFAA;ACAA",
     );
 
@@ -514,8 +510,7 @@ mod tests {
           "names": ["hello"]
         }"#,
       )
-      .unwrap()
-      .boxed(),
+      .unwrap(),
       original_source: Some("hello".to_string()),
       inner_source_map: Some(
         SourceMap::from_json(
@@ -525,8 +520,7 @@ mod tests {
           "mappings": "AAAA"
         }"#,
         )
-        .unwrap()
-        .boxed(),
+        .unwrap(),
       ),
       remove_original_source: false,
     });
@@ -557,8 +551,7 @@ mod tests {
           "names": ["Message", "hello", "world"]
         }"#,
       )
-      .unwrap()
-      .boxed(),
+      .unwrap(),
       original_source: Some("HELLO WORLD".to_string()),
       inner_source_map: Some(
         SourceMap::from_json(
@@ -569,8 +562,7 @@ mod tests {
             "sourcesContent": ["hello world"]
           }"#,
         )
-        .unwrap()
-        .boxed(),
+        .unwrap(),
       ),
       remove_original_source: false,
     });
@@ -603,7 +595,7 @@ mod tests {
           "mappings": "CAAC,IAAM,CAEL,SAASA,GAAK,CACZ,GAAG,MAAM,CACX,CAGA,SAASC,GAAK,CACZD,EAAG,MAAM,CACX,CACAC,EAAG,CACL,GAAG",
           "names": ["b0", "a0"]
         }"#,
-      ).unwrap().boxed(),
+      ).unwrap(),
       original_source: Some(r#"(() => {
   // b.js
   function b0() {
@@ -625,7 +617,7 @@ mod tests {
           "mappings": ";;AAAO,WAAS,KAAK;AACpB,OAAG,MAAM;AAAA,EACV;;;ACDA,WAAS,KAAK;AACb,OAAG,MAAM;AAAA,EACV;AACA,KAAG;",
           "names": []
         }"#
-      ).unwrap().boxed()),
+      ).unwrap()),
       remove_original_source: true,
     });
     let map = source.map(&MapOptions::default()).unwrap();
@@ -681,15 +673,11 @@ mod tests {
         "sourcesContent": [ "Hello World\nis a test string\n" ]
       }"#,
     )
-    .unwrap()
-    .boxed();
+    .unwrap();
     let inner_source_map =
       inner_source.map(&MapOptions::default()).map(|mut map| {
-        {
-          *map.source_root_mut() = Some(Arc::from("/path/to/folder/"));
-          map
-        }
-        .boxed()
+        *map.source_root_mut() = Some(Arc::from("/path/to/folder/"));
+        map
       });
     let sms = SourceMapSource::new(SourceMapSourceOptions {
       value: source_r_code,
@@ -730,8 +718,7 @@ mod tests {
           "names": ["hello"]
         }"#,
       )
-      .unwrap()
-      .boxed(),
+      .unwrap(),
       original_source: Some("hello".to_string()),
       inner_source_map: Some(
         SourceMap::from_json(
@@ -743,8 +730,7 @@ mod tests {
           "sourcesContent": ["hello, world!"]
         }"#,
         )
-        .unwrap()
-        .boxed(),
+        .unwrap(),
       ),
       remove_original_source: false,
     });
@@ -775,8 +761,7 @@ mod tests {
           "mappings": "AAAA,MAAG"
         }"#,
       )
-      .unwrap()
-      .boxed(),
+      .unwrap(),
       original_source: Some("你好 世界".to_string()),
       inner_source_map: Some(
         SourceMap::from_json(
@@ -787,8 +772,7 @@ mod tests {
           "sourcesContent": ["你好✋世界"]
         }"#,
         )
-        .unwrap()
-        .boxed(),
+        .unwrap(),
       ),
       remove_original_source: false,
     });

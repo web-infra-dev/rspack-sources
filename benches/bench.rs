@@ -54,13 +54,10 @@ fn benchmark_concat_generate_string(b: &mut Bencher) {
     remove_original_source: false,
   });
 
-  let sms_rollup = SourceMapSource::new(SourceMapSourceOptions {
+  let sms_rollup = SourceMapSource::new(WithoutOriginalOptions {
     value: BUNDLE_JS,
     name: "bundle.js",
     source_map: SourceMap::from_json(BUNDLE_JS_MAP).unwrap(),
-    original_source: None,
-    inner_source_map: None,
-    remove_original_source: false,
   });
 
   let concat = ConcatSource::new([sms_minify, sms_rollup]);
@@ -83,13 +80,10 @@ fn benchmark_concat_generate_string_with_cache(b: &mut Bencher) {
     inner_source_map: Some(SourceMap::from_json(HELLOWORLD_JS_MAP).unwrap()),
     remove_original_source: false,
   });
-  let sms_rollup = SourceMapSource::new(SourceMapSourceOptions {
+  let sms_rollup = SourceMapSource::new(WithoutOriginalOptions {
     value: BUNDLE_JS,
     name: "bundle.js",
     source_map: SourceMap::from_json(BUNDLE_JS_MAP).unwrap(),
-    original_source: None,
-    inner_source_map: None,
-    remove_original_source: false,
   });
   let concat = ConcatSource::new([sms_minify, sms_rollup]);
   let cached = CachedSource::new(concat);
@@ -112,13 +106,10 @@ fn benchmark_concat_generate_base64(b: &mut Bencher) {
     inner_source_map: Some(SourceMap::from_json(HELLOWORLD_JS_MAP).unwrap()),
     remove_original_source: false,
   });
-  let sms_rollup = SourceMapSource::new(SourceMapSourceOptions {
+  let sms_rollup = SourceMapSource::new(WithoutOriginalOptions {
     value: BUNDLE_JS,
     name: "bundle.js",
     source_map: SourceMap::from_json(BUNDLE_JS_MAP).unwrap(),
-    original_source: None,
-    inner_source_map: None,
-    remove_original_source: false,
   });
   let concat = ConcatSource::new([sms_minify, sms_rollup]);
 
@@ -141,13 +132,10 @@ fn benchmark_concat_generate_base64_with_cache(b: &mut Bencher) {
     inner_source_map: Some(SourceMap::from_json(HELLOWORLD_JS_MAP).unwrap()),
     remove_original_source: false,
   });
-  let sms_rollup = SourceMapSource::new(SourceMapSourceOptions {
+  let sms_rollup = SourceMapSource::new(WithoutOriginalOptions {
     value: BUNDLE_JS,
     name: "bundle.js",
     source_map: SourceMap::from_json(BUNDLE_JS_MAP).unwrap(),
-    original_source: None,
-    inner_source_map: None,
-    remove_original_source: false,
   });
   let concat = ConcatSource::new([sms_minify, sms_rollup]);
   let cached = CachedSource::new(concat);

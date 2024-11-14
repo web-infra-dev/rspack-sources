@@ -12,7 +12,7 @@ use crate::{
     stream_and_get_source_and_map, stream_chunks_of_raw_source,
     stream_chunks_of_source_map, StreamChunks,
   },
-  BoxSource, MapOptions, Source, SourceMap,
+  BoxSource, MapOptions, Source, SourceExt, SourceMap,
 };
 
 /// It tries to reused cached results from other methods to avoid calculations,
@@ -59,9 +59,9 @@ pub struct CachedSource {
 
 impl CachedSource {
   /// Create a [CachedSource] with the original [Source].
-  pub fn new(inner: BoxSource) -> Self {
+  pub fn new<T: Source + 'static>(inner: T) -> Self {
     Self {
-      inner: Arc::new(inner),
+      inner: SourceExt::boxed(inner),
       cached_buffer: Default::default(),
       cached_source: Default::default(),
       cached_size: Default::default(),
@@ -183,7 +183,7 @@ impl Hash for CachedSource {
 
 impl PartialEq for CachedSource {
   fn eq(&self, other: &Self) -> bool {
-    &self.inner == &other.inner
+    self.inner.as_ref() == other.inner.as_ref()
   }
 }
 
@@ -217,17 +217,17 @@ mod tests {
   #[test]
   fn line_number_should_not_add_one() {
     let source = ConcatSource::new([
-      CachedSource::new(RawSource::from("\n").boxed()).boxed(),
+      CachedSource::new(RawSource::from("\n")).boxed(),
       SourceMapSource::new(WithoutOriginalOptions {
         value: "\nconsole.log(1);\n".to_string(),
         name: "index.js".to_string(),
-        source_map: Box::new(SourceMap::new(
+        source_map: SourceMap::new(
           None,
           Arc::from(";AACA"),
           vec!["index.js".into()],
           vec!["// DELETE IT\nconsole.log(1)".into()],
           vec![],
-        )),
+        ),
       })
       .boxed(),
     ]);
