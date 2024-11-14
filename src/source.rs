@@ -409,7 +409,10 @@ impl DecodableMap for SourceMap {
   }
 
   fn source_content(&self, index: usize) -> Option<&str> {
-    self.sources_content.get(index).map(|content| content.as_ref())
+    self
+      .sources_content
+      .get(index)
+      .map(|content| content.as_ref())
   }
 
   fn names<'a>(&'a self) -> Box<dyn Iterator<Item = &'a str> + 'a> {

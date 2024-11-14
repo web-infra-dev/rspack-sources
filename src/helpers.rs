@@ -337,7 +337,7 @@ fn stream_chunks_of_source_map_final<'a>(
     on_source(
       i as u32,
       get_source(source_map, source),
-      source_map.source_content(i)
+      source_map.source_content(i),
     )
   }
   for (i, name) in source_map.names().enumerate() {
@@ -398,7 +398,7 @@ fn stream_chunks_of_source_map_full<'a>(
     on_source(
       i as u32,
       get_source(source_map, source),
-      source_map.source_content(i)
+      source_map.source_content(i),
     )
   }
   for (i, name) in source_map.names().enumerate() {
@@ -544,7 +544,7 @@ fn stream_chunks_of_source_map_lines_final<'a>(
     on_source(
       i as u32,
       get_source(source_map, source),
-      source_map.source_content(i)
+      source_map.source_content(i),
     )
   }
   let final_line = if result.generated_column == 0 {
@@ -589,7 +589,7 @@ fn stream_chunks_of_source_map_lines_full<'a>(
     on_source(
       i as u32,
       get_source(source_map, source),
-      source_map.source_content(i)
+      source_map.source_content(i),
     )
   }
   let mut current_generated_line = 1;
