@@ -686,7 +686,7 @@ mod tests {
     let inner_source_map =
       inner_source.map(&MapOptions::default()).map(|mut map| {
         {
-          map.set_source_root(Some(Arc::from("/path/to/folder/")));
+          *map.source_root_mut() = Some(Arc::from("/path/to/folder/"));
           map
         }
         .boxed()

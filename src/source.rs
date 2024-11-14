@@ -325,8 +325,8 @@ impl SourceMap {
   }
 
   /// Set the file field in [SourceMap].
-  pub fn set_file(&mut self, file: Option<Arc<str>>) {
-    self.file = file;
+  pub fn file_mut(&mut self) -> &mut Option<Arc<str>> {
+    &mut self.file
   }
 
   /// Get the mappings string in [SourceMap].
@@ -340,13 +340,17 @@ impl SourceMap {
   }
 
   /// Set sources field in [SourceMap].
-  pub fn set_sources(&mut self, sources: Vec<Arc<str>>) {
-    self.sources = sources;
+  pub fn sources_mut(&mut self) -> &mut Vec<Arc<str>> {
+    &mut self.sources
   }
 
   /// Get the sourcesContent field in [SourceMap].
   pub fn sources_content(&self) -> &[Arc<str>] {
     &self.sources_content
+  }
+
+  pub fn sources_content_mut(&mut self) -> &mut Vec<Arc<str>> {
+    &mut self.sources_content
   }
 
   /// Get the names field in [SourceMap].
@@ -365,8 +369,8 @@ impl SourceMap {
   }
 
   /// Set the source_root field in [SourceMap].
-  pub fn set_source_root(&mut self, source_root: Option<Arc<str>>) {
-    self.source_root = source_root;
+  pub fn source_root_mut(&mut self) -> &mut Option<Arc<str>> {
+    &mut self.source_root
   }
 }
 
