@@ -13,7 +13,7 @@ use rustc_hash::FxHashMap as HashMap;
 use crate::{
   helpers::{get_map, split_into_lines, GeneratedInfo, StreamChunks},
   linear_map::LinearMap,
-  MapOptions, Mapping, OriginalLocation, Source, SourceMap,
+  BoxSource, MapOptions, Mapping, OriginalLocation, Source, SourceMap,
 };
 
 /// Decorates a Source with replacements and insertions of source code,
@@ -35,8 +35,8 @@ use crate::{
 ///
 /// assert_eq!(source.source(), "start1\nstart2\nreplaced!\nend1\nend2");
 /// ```
-pub struct ReplaceSource<T> {
-  inner: Arc<T>,
+pub struct ReplaceSource {
+  inner: BoxSource,
   inner_source_code: OnceLock<Box<str>>,
   replacements: Mutex<Vec<Replacement>>,
   /// Whether `replacements` is sorted.
@@ -82,9 +82,9 @@ impl Replacement {
   }
 }
 
-impl<T> ReplaceSource<T> {
+impl ReplaceSource {
   /// Create a [ReplaceSource].
-  pub fn new(source: T) -> Self {
+  pub fn new(source: BoxSource) -> Self {
     Self {
       inner: Arc::new(source),
       inner_source_code: OnceLock::new(),
@@ -94,7 +94,7 @@ impl<T> ReplaceSource<T> {
   }
 
   /// Get the original [Source].
-  pub fn original(&self) -> &T {
+  pub fn original(&self) -> &BoxSource {
     &self.inner
   }
 
@@ -113,7 +113,7 @@ impl<T> ReplaceSource<T> {
   }
 }
 
-impl<T: Source> ReplaceSource<T> {
+impl ReplaceSource {
   fn get_inner_source_code(&self) -> &str {
     self
       .inner_source_code
@@ -174,7 +174,7 @@ impl<T: Source> ReplaceSource<T> {
   }
 }
 
-impl<T: Source + Hash + PartialEq + Eq + 'static> Source for ReplaceSource<T> {
+impl Source for ReplaceSource {
   fn source(&self) -> Cow<str> {
     self.sort_replacement();
 
@@ -233,13 +233,13 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for ReplaceSource<T> {
   }
 }
 
-impl<T: std::fmt::Debug> std::fmt::Debug for ReplaceSource<T> {
+impl std::fmt::Debug for ReplaceSource {
   fn fmt(
     &self,
     f: &mut std::fmt::Formatter<'_>,
   ) -> Result<(), std::fmt::Error> {
     f.debug_struct("ReplaceSource")
-      .field("inner", self.inner.as_ref())
+      .field("inner", &self.inner)
       .field(
         "inner_source_code",
         &self
@@ -283,7 +283,7 @@ fn check_content_at_position(
   }
 }
 
-impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
+impl<'a> StreamChunks<'a> for ReplaceSource {
   fn stream_chunks(
     &'a self,
     options: &crate::MapOptions,
@@ -698,7 +698,7 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
   }
 }
 
-impl<T: Source> Clone for ReplaceSource<T> {
+impl Clone for ReplaceSource {
   fn clone(&self) -> Self {
     Self {
       inner: self.inner.clone(),
@@ -709,7 +709,7 @@ impl<T: Source> Clone for ReplaceSource<T> {
   }
 }
 
-impl<T: Hash> Hash for ReplaceSource<T> {
+impl Hash for ReplaceSource {
   fn hash<H: Hasher>(&self, state: &mut H) {
     self.sort_replacement();
     "ReplaceSource".hash(state);
@@ -720,13 +720,13 @@ impl<T: Hash> Hash for ReplaceSource<T> {
   }
 }
 
-impl<T: PartialEq> PartialEq for ReplaceSource<T> {
+impl PartialEq for ReplaceSource {
   fn eq(&self, other: &Self) -> bool {
-    self.inner == other.inner && *self.replacements() == *other.replacements()
+    &self.inner == &other.inner && *self.replacements() == *other.replacements()
   }
 }
 
-impl<T: Eq> Eq for ReplaceSource<T> {}
+impl Eq for ReplaceSource {}
 
 #[cfg(test)]
 mod tests {
@@ -794,8 +794,9 @@ mod tests {
     let line4 = "Line 4";
     let line5 = "Line 5";
     let code = [line1, line2, line3, line4, line5, "Last", "Line"].join("\n");
-    let mut source =
-      ReplaceSource::new(OriginalSource::new(code.as_str(), "file.txt"));
+    let mut source = ReplaceSource::new(
+      OriginalSource::new(code.as_str(), "file.txt").boxed(),
+    );
 
     let start_line3 = (line1.len() + line2.len() + 2) as u32;
     let start_line6 =
@@ -856,10 +857,10 @@ Last Line"#
   #[test]
   fn should_replace_multiple_items_correctly() {
     let line1 = "Hello";
-    let mut source = ReplaceSource::new(OriginalSource::new(
-      ["Hello", "World!"].join("\n").as_str(),
-      "file.txt",
-    ));
+    let mut source = ReplaceSource::new(
+      OriginalSource::new(["Hello", "World!"].join("\n").as_str(), "file.txt")
+        .boxed(),
+    );
     let original_code = source.source().to_string();
     source.insert(0, "Message: ", None);
     source.replace(2, (line1.len() + 5) as u32, "y A", None);
@@ -890,7 +891,7 @@ World!"#
   #[test]
   fn should_prepend_items_correctly() {
     let mut source =
-      ReplaceSource::new(OriginalSource::new("Line 1", "file.txt"));
+      ReplaceSource::new(OriginalSource::new("Line 1", "file.txt").boxed());
     source.insert(0, "Line -1\n", None);
     source.insert(0, "Line 0\n", None);
 
@@ -917,10 +918,10 @@ World!"#
 
   #[test]
   fn should_prepend_items_with_replace_at_start_correctly() {
-    let mut source = ReplaceSource::new(OriginalSource::new(
-      ["Line 1", "Line 2"].join("\n").as_str(),
-      "file.txt",
-    ));
+    let mut source = ReplaceSource::new(
+      OriginalSource::new(["Line 1", "Line 2"].join("\n").as_str(), "file.txt")
+        .boxed(),
+    );
     source.insert(0, "Line 0\n", None);
     source.replace(0, 6, "Hello", None);
     let result_text = source.source();
@@ -946,7 +947,8 @@ Line 2"#
   #[test]
   fn should_append_items_correctly() {
     let line1 = "Line 1\n";
-    let mut source = ReplaceSource::new(OriginalSource::new(line1, "file.txt"));
+    let mut source =
+      ReplaceSource::new(OriginalSource::new(line1, "file.txt").boxed());
     source.insert((line1.len() + 1) as u32, "Line 2\n", None);
     let result_text = source.source();
     let result_map = source.map(&MapOptions::default()).unwrap();
@@ -966,8 +968,9 @@ Line 2"#
   #[test]
   fn should_produce_correct_source_map() {
     let bootstrap_code = "   var hello\n   var world\n";
-    let mut source =
-      ReplaceSource::new(OriginalSource::new(bootstrap_code, "file.js"));
+    let mut source = ReplaceSource::new(
+      OriginalSource::new(bootstrap_code, "file.js").boxed(),
+    );
     source.replace(7, 12, "h", Some("hello"));
     source.replace(20, 25, "w", Some("world"));
     let result_map = source.map(&MapOptions::default()).expect("failed");
@@ -1018,12 +1021,14 @@ export default function StaticPage(_ref) {
       8:0 -> [abc] 3:1
     */
 
-    let mut source =
-      ReplaceSource::new(SourceMapSource::new(WithoutOriginalOptions {
+    let mut source = ReplaceSource::new(
+      SourceMapSource::new(WithoutOriginalOptions {
         value: code,
         name: "source.js",
-        source_map: map,
-      }));
+        source_map: Box::new(map),
+      })
+      .boxed(),
+    );
     source.replace(0, 48, "", None);
     source.replace(49, 56, "", None);
     source.replace(76, 91, "", None);
@@ -1079,12 +1084,15 @@ return <div>{data.foo}</div>
   #[test]
   fn should_not_generate_invalid_mappings_when_replacing_multiple_lines_of_code(
   ) {
-    let mut source = ReplaceSource::new(OriginalSource::new(
-      r#"if (a;b;c) {
+    let mut source = ReplaceSource::new(
+      OriginalSource::new(
+        r#"if (a;b;c) {
   a; b; c;
 }"#,
-      "document.js",
-    ));
+        "document.js",
+      )
+      .boxed(),
+    );
     source.replace(4, 9, "false", None);
     source.replace(12, 24, "", None);
 
@@ -1106,7 +1114,8 @@ return <div>{data.foo}</div>
   #[test]
   fn test_edge_case() {
     let line1 = "hello world\n";
-    let mut source = ReplaceSource::new(OriginalSource::new(line1, "file.txt"));
+    let mut source =
+      ReplaceSource::new(OriginalSource::new(line1, "file.txt").boxed());
 
     source.insert(0, "start1\n", None);
     source.replace(0, 0, "start2\n", None);

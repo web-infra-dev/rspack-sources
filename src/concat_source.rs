@@ -139,6 +139,13 @@ impl Hash for ConcatSource {
   }
 }
 
+impl PartialEq for ConcatSource {
+  fn eq(&self, other: &Self) -> bool {
+    self.children() == other.children()
+  }
+}
+impl Eq for ConcatSource {}
+
 impl<'a> StreamChunks<'a> for ConcatSource {
   fn stream_chunks(
     &'a self,

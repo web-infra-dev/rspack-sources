@@ -338,7 +338,7 @@ mod tests {
   #[test]
   fn fix_rspack_issue_6793() {
     let code1 = "hello\n\n";
-    let source1 = OriginalSource::new(code1, "hello.txt");
+    let source1 = OriginalSource::new(code1, "hello.txt").boxed();
     let source1 = ReplaceSource::new(source1);
 
     let code2 = "world";

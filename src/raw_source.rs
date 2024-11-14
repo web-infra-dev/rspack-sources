@@ -203,7 +203,7 @@ mod tests {
   // Fix https://github.com/web-infra-dev/rspack/issues/6793
   #[test]
   fn fix_rspack_issue_6793() {
-    let source1 = RawSource::from("hello\n\n".to_string());
+    let source1 = RawSource::from("hello\n\n".to_string()).boxed();
     let source1 = ReplaceSource::new(source1);
     let source2 = OriginalSource::new("world".to_string(), "world.txt");
     let concat = ConcatSource::new([source1.boxed(), source2.boxed()]);

@@ -12,7 +12,7 @@ use crate::{
     stream_and_get_source_and_map, stream_chunks_of_raw_source,
     stream_chunks_of_source_map, StreamChunks,
   },
-  MapOptions, Source, SourceMap,
+  BoxSource, MapOptions, Source, SourceMap,
 };
 
 /// It tries to reused cached results from other methods to avoid calculations,
@@ -48,8 +48,8 @@ use crate::{
 ///   "Hello World\nconsole.log('test');\nconsole.log('test2');\nHello2\n"
 /// );
 /// ```
-pub struct CachedSource<T> {
-  inner: Arc<T>,
+pub struct CachedSource {
+  inner: BoxSource,
   cached_buffer: Arc<OnceLock<Vec<u8>>>,
   cached_source: Arc<OnceLock<Arc<str>>>,
   cached_size: Arc<OnceLock<usize>>,
@@ -57,9 +57,9 @@ pub struct CachedSource<T> {
     Arc<DashMap<MapOptions, Option<SourceMap>, BuildHasherDefault<FxHasher>>>,
 }
 
-impl<T> CachedSource<T> {
+impl CachedSource {
   /// Create a [CachedSource] with the original [Source].
-  pub fn new(inner: T) -> Self {
+  pub fn new(inner: BoxSource) -> Self {
     Self {
       inner: Arc::new(inner),
       cached_buffer: Default::default(),
@@ -70,12 +70,12 @@ impl<T> CachedSource<T> {
   }
 
   /// Get the original [Source].
-  pub fn original(&self) -> &T {
+  pub fn original(&self) -> &BoxSource {
     &self.inner
   }
 }
 
-impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
+impl Source for CachedSource {
   fn source(&self) -> Cow<str> {
     let cached = self
       .cached_source
@@ -116,9 +116,7 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
   }
 }
 
-impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks<'_>
-  for CachedSource<T>
-{
+impl StreamChunks<'_> for CachedSource {
   fn stream_chunks<'a>(
     &'a self,
     options: &MapOptions,
@@ -152,7 +150,7 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks<'_>
       }
       Entry::Vacant(entry) => {
         let (generated_info, map) = stream_and_get_source_and_map(
-          &self.inner as &T,
+          &self.inner,
           options,
           on_chunk,
           on_source,
@@ -165,7 +163,7 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks<'_>
   }
 }
 
-impl<T: Source> Clone for CachedSource<T> {
+impl Clone for CachedSource {
   fn clone(&self) -> Self {
     Self {
       inner: self.inner.clone(),
@@ -177,27 +175,27 @@ impl<T: Source> Clone for CachedSource<T> {
   }
 }
 
-impl<T: Hash> Hash for CachedSource<T> {
+impl Hash for CachedSource {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
     self.inner.hash(state);
   }
 }
 
-impl<T: PartialEq> PartialEq for CachedSource<T> {
+impl PartialEq for CachedSource {
   fn eq(&self, other: &Self) -> bool {
-    self.inner == other.inner
+    &self.inner == &other.inner
   }
 }
 
-impl<T: Eq> Eq for CachedSource<T> {}
+impl Eq for CachedSource {}
 
-impl<T: std::fmt::Debug> std::fmt::Debug for CachedSource<T> {
+impl std::fmt::Debug for CachedSource {
   fn fmt(
     &self,
     f: &mut std::fmt::Formatter<'_>,
   ) -> Result<(), std::fmt::Error> {
     f.debug_struct("CachedSource")
-      .field("inner", self.inner.as_ref())
+      .field("inner", &self.inner)
       .field("cached_buffer", &self.cached_buffer.get().is_some())
       .field("cached_source", &self.cached_source.get().is_some())
       .field("cached_maps", &(!self.cached_maps.is_empty()))
@@ -219,17 +217,17 @@ mod tests {
   #[test]
   fn line_number_should_not_add_one() {
     let source = ConcatSource::new([
-      CachedSource::new(RawSource::from("\n")).boxed(),
+      CachedSource::new(RawSource::from("\n").boxed()).boxed(),
       SourceMapSource::new(WithoutOriginalOptions {
         value: "\nconsole.log(1);\n".to_string(),
         name: "index.js".to_string(),
-        source_map: SourceMap::new(
+        source_map: Box::new(SourceMap::new(
           None,
           Arc::from(";AACA"),
           vec!["index.js".into()],
           vec!["// DELETE IT\nconsole.log(1)".into()],
           vec![],
-        ),
+        )),
       })
       .boxed(),
     ]);
@@ -239,7 +237,7 @@ mod tests {
 
   #[test]
   fn should_allow_to_store_and_share_cached_data() {
-    let original = OriginalSource::new("Hello World", "test.txt");
+    let original = OriginalSource::new("Hello World", "test.txt").boxed();
     let source = CachedSource::new(original);
     let clone = source.clone();
 
@@ -267,7 +265,8 @@ mod tests {
     let source = OriginalSource::new(
       String::from_utf8(vec![0; 256]).unwrap(),
       "file.wasm",
-    );
+    )
+    .boxed();
     let cached_source = CachedSource::new(source);
 
     assert_eq!(cached_source.size(), 256);
@@ -279,7 +278,8 @@ mod tests {
     let source = OriginalSource::new(
       String::from_utf8(vec![0; 256]).unwrap(),
       "file.wasm",
-    );
+    )
+    .boxed();
     let cached_source = CachedSource::new(source);
 
     cached_source.source();
@@ -289,7 +289,7 @@ mod tests {
 
   #[test]
   fn should_return_the_correct_size_for_text_files() {
-    let source = OriginalSource::new("TestTestTest", "file.js");
+    let source = OriginalSource::new("TestTestTest", "file.js").boxed();
     let cached_source = CachedSource::new(source);
 
     assert_eq!(cached_source.size(), 12);
@@ -298,7 +298,7 @@ mod tests {
 
   #[test]
   fn should_return_the_correct_size_for_cached_text_files() {
-    let source = OriginalSource::new("TestTestTest", "file.js");
+    let source = OriginalSource::new("TestTestTest", "file.js").boxed();
     let cached_source = CachedSource::new(source);
 
     cached_source.source();
@@ -313,7 +313,7 @@ mod tests {
       final_source: true,
     };
 
-    let source = RawSource::from("Test\nTest\nTest\n");
+    let source = RawSource::from("Test\nTest\nTest\n").boxed();
     let mut on_chunk_count = 0;
     let mut on_source_count = 0;
     let mut on_name_count = 0;
@@ -363,7 +363,7 @@ mod tests {
   #[test]
   fn should_have_correct_buffer_if_cache_buffer_from_cache_source() {
     let buf = vec![128u8];
-    let source = CachedSource::new(RawSource::from(buf.clone()));
+    let source = CachedSource::new(RawSource::from(buf.clone()).boxed());
 
     source.source();
     assert_eq!(source.buffer(), buf.as_slice());

@@ -23,6 +23,7 @@ pub trait Source:
   for<'a> StreamChunks<'a>
   + DynHash
   + AsAny
+  + DynEq
   + DynClone
   + Debug
   + Sync
@@ -70,8 +71,6 @@ impl Source for BoxSource {
     self.as_ref().to_writer(writer)
   }
 }
-
-dyn_clone::clone_trait_object!(Source);
 
 impl<'a> StreamChunks<'a> for BoxSource {
   fn stream_chunks(
@@ -133,6 +132,17 @@ impl<E: Eq + Any> DynEq for E {
   }
 }
 
+impl PartialEq for dyn Source {
+  fn eq(&self, other: &Self) -> bool {
+    if self.as_any().type_id() != other.as_any().type_id() {
+      return false;
+    }
+    self.dyn_eq(other.as_any())
+  }
+}
+
+impl Eq for dyn Source {}
+
 /// Extension methods for [Source].
 pub trait SourceExt {
   /// An alias for [BoxSource::from].
@@ -174,14 +184,9 @@ impl MapOptions {
 }
 
 /// The `DecodableSourceMap` trait provides function for obtaining the decoded mappings
-pub trait DecodableSourceMap:
-  Sync + Send + Clone + Hash
-{
+pub trait DecodableSourceMap: Sync + Send {
   /// Get the file field in [SourceMap].
   fn file(&self) -> Option<&str>;
-
-  /// Set the file field in [SourceMap].
-  fn set_file<T: Into<Arc<str>>>(&mut self, file: Option<T>);
 
   /// Get the decoded mappings in [SourceMap].
   fn decoded_mappings<'a>(&'a self) -> Box<dyn Iterator<Item = Mapping> + 'a>;
@@ -192,9 +197,6 @@ pub trait DecodableSourceMap:
   /// Get the sources field in [SourceMap].
   fn sources<'a>(&'a self) -> Box<dyn Iterator<Item = &'a str> + 'a>;
 
-  /// Get the mutable sources field in [SourceMap].
-  fn set_sources(&mut self, idx: u32, value: &str);
-
   /// Get the sourcesContent field in [SourceMap].
   fn sources_content<'a>(&'a self) -> Box<dyn Iterator<Item = &'a str> + 'a>;
 
@@ -203,9 +205,66 @@ pub trait DecodableSourceMap:
 
   /// Get the source_root field in [SourceMap].
   fn source_root(&self) -> Option<&str>;
+}
 
-  /// Set the source_root field in [SourceMap].
-  fn set_source_root<T: Into<Arc<str>>>(&mut self, value: Option<T>);
+pub type BoxDecodableSourceMap = Box<dyn DecodableSourceMap>;
+
+impl PartialEq for BoxDecodableSourceMap {
+  fn eq(&self, other: &Self) -> bool {
+    self.file() == other.file()
+      && self.mappings() == other.mappings()
+      && self.sources().collect::<Vec<&str>>()
+        == other.sources().collect::<Vec<&str>>()
+      && self.sources_content().collect::<Vec<&str>>()
+        == other.sources_content().collect::<Vec<&str>>()
+      && self.names().collect::<Vec<&str>>()
+        == other.names().collect::<Vec<&str>>()
+      && self.source_root() == other.source_root()
+  }
+}
+
+impl Eq for BoxDecodableSourceMap {}
+
+impl Clone for BoxDecodableSourceMap {
+  fn clone(&self) -> Self {
+    Box::new(SourceMap::new(
+      self.file().map(|file| Arc::from(file.to_string())),
+      Arc::from(self.mappings().to_string()),
+      self
+        .sources()
+        .map(|source| Arc::from(source))
+        .collect::<Vec<_>>(),
+      self
+        .sources_content()
+        .map(|content| Arc::from(content))
+        .collect::<Vec<_>>(),
+      self.names().map(|name| Arc::from(name)).collect::<Vec<_>>(),
+    ))
+  }
+}
+
+impl Hash for BoxDecodableSourceMap {
+  fn hash<H: Hasher>(&self, state: &mut H) {
+    self.file().hash(state);
+    self.mappings().hash(state);
+    self.sources().for_each(|source| source.hash(state));
+    self
+      .sources_content()
+      .for_each(|content| content.hash(state));
+    self.names().for_each(|name| name.hash(state));
+    self.source_root().hash(state);
+  }
+}
+
+pub trait DecodableSourceMapExt {
+  /// An alias for [BoxDecodableSourceMap::from].
+  fn boxed(self) -> BoxDecodableSourceMap;
+}
+
+impl<T: DecodableSourceMap + 'static> DecodableSourceMapExt for T {
+  fn boxed(self) -> BoxDecodableSourceMap {
+    Box::new(self)
+  }
 }
 
 /// The source map created by [Source::map].
@@ -305,9 +364,9 @@ impl DecodableSourceMap for SourceMap {
     self.file.as_deref()
   }
 
-  fn set_file<T: Into<Arc<str>>>(&mut self, file: Option<T>) {
-    self.file = file.map(Into::into);
-  }
+  // fn set_file<T: Into<Arc<str>>>(&mut self, file: Option<T>) {
+  //   self.file = file.map(Into::into);
+  // }
 
   fn decoded_mappings<'a>(&'a self) -> Box<dyn Iterator<Item = Mapping> + 'a> {
     Box::new(decode_mappings(self))
@@ -321,9 +380,9 @@ impl DecodableSourceMap for SourceMap {
     Box::new(self.sources.iter().map(|s| s.as_ref()))
   }
 
-  fn set_sources(&mut self, idx: u32, source: &str) {
-    self.sources[idx as usize] = source.into();
-  }
+  // fn set_sources(&mut self, idx: u32, source: &str) {
+  //   self.sources[idx as usize] = source.into();
+  // }
 
   fn sources_content<'a>(&'a self) -> Box<dyn Iterator<Item = &'a str> + 'a> {
     Box::new(self.sources_content.iter().map(|s| s.as_ref()))
@@ -337,9 +396,9 @@ impl DecodableSourceMap for SourceMap {
     self.source_root.as_deref()
   }
 
-  fn set_source_root<T: Into<Arc<str>>>(&mut self, source_root: Option<T>) {
-    self.source_root = source_root.map(Into::into);
-  }
+  // fn set_source_root<T: Into<Arc<str>>>(&mut self, source_root: Option<T>) {
+  //   self.source_root = source_root.map(Into::into);
+  // }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -583,12 +642,14 @@ mod tests {
     SourceMapSource::new(WithoutOriginalOptions {
       value: "c",
       name: "",
-      source_map: SourceMap::from_json("{\"mappings\": \";\"}").unwrap(),
+      source_map: SourceMap::from_json("{\"mappings\": \";\"}")
+        .unwrap()
+        .boxed(),
     })
     .hash(&mut state);
     ConcatSource::new([RawSource::from("d")]).hash(&mut state);
-    CachedSource::new(RawSource::from("e")).hash(&mut state);
-    ReplaceSource::new(RawSource::from("f")).hash(&mut state);
+    CachedSource::new(RawSource::from("e").boxed()).hash(&mut state);
+    ReplaceSource::new(RawSource::from("f").boxed()).hash(&mut state);
     RawSource::from("g").boxed().hash(&mut state);
     (&RawSource::from("h") as &dyn Source).hash(&mut state);
     ReplaceSource::new(RawSource::from("i").boxed()).hash(&mut state);
@@ -603,12 +664,16 @@ mod tests {
       SourceMapSource::new(WithoutOriginalOptions {
         value: "c",
         name: "",
-        source_map: SourceMap::from_json("{\"mappings\": \";\"}").unwrap(),
+        source_map: SourceMap::from_json("{\"mappings\": \";\"}")
+          .unwrap()
+          .boxed(),
       }),
       SourceMapSource::new(WithoutOriginalOptions {
         value: "c",
         name: "",
-        source_map: SourceMap::from_json("{\"mappings\": \";\"}").unwrap(),
+        source_map: SourceMap::from_json("{\"mappings\": \";\"}")
+          .unwrap()
+          .boxed(),
       })
     );
     assert_eq!(
@@ -616,12 +681,12 @@ mod tests {
       ConcatSource::new([RawSource::from("d")])
     );
     assert_eq!(
-      CachedSource::new(RawSource::from("e")),
-      CachedSource::new(RawSource::from("e"))
+      CachedSource::new(RawSource::from("e").boxed()),
+      CachedSource::new(RawSource::from("e").boxed())
     );
     assert_eq!(
-      ReplaceSource::new(RawSource::from("f")),
-      ReplaceSource::new(RawSource::from("f"))
+      ReplaceSource::new(RawSource::from("f").boxed()),
+      ReplaceSource::new(RawSource::from("f").boxed())
     );
     assert_eq!(&RawSource::from("g").boxed(), &RawSource::from("g").boxed());
     assert_eq!(
@@ -648,14 +713,16 @@ mod tests {
     let c = SourceMapSource::new(WithoutOriginalOptions {
       value: "c",
       name: "",
-      source_map: SourceMap::from_json("{\"mappings\": \";\"}").unwrap(),
+      source_map: SourceMap::from_json("{\"mappings\": \";\"}")
+        .unwrap()
+        .boxed(),
     });
     assert_eq!(c, c.clone());
     let d = ConcatSource::new([RawSource::from("d")]);
     assert_eq!(d, d.clone());
-    let e = CachedSource::new(RawSource::from("e"));
+    let e = CachedSource::new(RawSource::from("e").boxed());
     assert_eq!(e, e.clone());
-    let f = ReplaceSource::new(RawSource::from("f"));
+    let f = ReplaceSource::new(RawSource::from("f").boxed());
     assert_eq!(f, f.clone());
     let g = RawSource::from("g").boxed();
     assert_eq!(&g, &g.clone());
