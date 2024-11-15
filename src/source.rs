@@ -674,8 +674,7 @@ mod tests {
     SourceMapSource::new(WithoutOriginalOptions {
       value: "c",
       name: "",
-      source_map: SourceMap::from_json("{\"mappings\": \";\"}")
-        .unwrap(),
+      source_map: SourceMap::from_json("{\"mappings\": \";\"}").unwrap(),
     })
     .hash(&mut state);
     ConcatSource::new([RawSource::from("d")]).hash(&mut state);
@@ -695,14 +694,12 @@ mod tests {
       SourceMapSource::new(WithoutOriginalOptions {
         value: "c",
         name: "",
-        source_map: SourceMap::from_json("{\"mappings\": \";\"}")
-          .unwrap(),
+        source_map: SourceMap::from_json("{\"mappings\": \";\"}").unwrap(),
       }),
       SourceMapSource::new(WithoutOriginalOptions {
         value: "c",
         name: "",
-        source_map: SourceMap::from_json("{\"mappings\": \";\"}")
-          .unwrap(),
+        source_map: SourceMap::from_json("{\"mappings\": \";\"}").unwrap(),
       })
     );
     assert_eq!(
@@ -742,8 +739,7 @@ mod tests {
     let c = SourceMapSource::new(WithoutOriginalOptions {
       value: "c",
       name: "",
-      source_map: SourceMap::from_json("{\"mappings\": \";\"}")
-        .unwrap(),
+      source_map: SourceMap::from_json("{\"mappings\": \";\"}").unwrap(),
     });
     assert_eq!(c, c.clone());
     let d = ConcatSource::new([RawSource::from("d")]);

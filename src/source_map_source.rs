@@ -151,12 +151,11 @@ impl Hash for SourceMapSource {
   }
 }
 
-#[allow(clippy::op_ref)]
 impl PartialEq for SourceMapSource {
   fn eq(&self, other: &Self) -> bool {
     self.value == other.value
       && self.name == other.name
-      && &self.source_map == &other.source_map
+      && self.source_map.eq(&other.source_map)
       && self.original_source == other.original_source
       && self.inner_source_map == other.inner_source_map
       && self.remove_original_source == other.remove_original_source

@@ -723,8 +723,7 @@ impl Hash for ReplaceSource {
 
 impl PartialEq for ReplaceSource {
   fn eq(&self, other: &Self) -> bool {
-    self.inner.as_ref() == other.inner.as_ref()
-      && *self.replacements() == *other.replacements()
+    *self.inner == *other.inner && *self.replacements() == *other.replacements()
   }
 }
 

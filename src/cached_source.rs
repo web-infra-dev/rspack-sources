@@ -11,7 +11,8 @@ use crate::{
   helpers::{
     stream_and_get_source_and_map, stream_chunks_of_raw_source,
     stream_chunks_of_source_map, StreamChunks,
-  }, BoxSource, MapOptions, Source, SourceExt, SourceMap
+  },
+  BoxSource, MapOptions, Source, SourceExt, SourceMap,
 };
 
 /// It tries to reused cached results from other methods to avoid calculations,
@@ -115,9 +116,7 @@ impl Source for CachedSource {
   }
 }
 
-impl StreamChunks<'_>
-  for CachedSource
-{
+impl StreamChunks<'_> for CachedSource {
   fn stream_chunks<'a>(
     &'a self,
     options: &MapOptions,
@@ -184,7 +183,7 @@ impl Hash for CachedSource {
 
 impl PartialEq for CachedSource {
   fn eq(&self, other: &Self) -> bool {
-    self.inner.as_ref() == other.inner.as_ref()
+    *self.inner == *other.inner
   }
 }
 
