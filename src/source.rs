@@ -221,7 +221,7 @@ pub trait DecodableMap: Sync + Send {
 
 pub type BoxDecodableMap = Box<dyn DecodableMap>;
 
-impl PartialEq for BoxDecodableMap {
+impl PartialEq for dyn DecodableMap {
   fn eq(&self, other: &Self) -> bool {
     self.file() == other.file()
       && self.mappings() == other.mappings()
@@ -235,7 +235,7 @@ impl PartialEq for BoxDecodableMap {
   }
 }
 
-impl Eq for BoxDecodableMap {}
+impl Eq for dyn DecodableMap {}
 
 impl Clone for BoxDecodableMap {
   fn clone(&self) -> Self {
@@ -249,7 +249,7 @@ impl Clone for BoxDecodableMap {
   }
 }
 
-impl Hash for BoxDecodableMap {
+impl Hash for dyn DecodableMap {
   fn hash<H: Hasher>(&self, state: &mut H) {
     self.file().hash(state);
     self.mappings().hash(state);
@@ -262,7 +262,7 @@ impl Hash for BoxDecodableMap {
   }
 }
 
-impl Debug for BoxDecodableMap {
+impl Debug for dyn DecodableMap {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     f.debug_struct("BoxDecodableMap")
       .field("file", &self.file())
