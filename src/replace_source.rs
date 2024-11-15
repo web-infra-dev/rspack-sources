@@ -734,7 +734,7 @@ impl Eq for ReplaceSource {}
 mod tests {
   use crate::{
     source_map_source::WithoutOriginalOptions, DecodableMap, OriginalSource,
-    RawSource, ReplacementEnforce, SourceExt, SourceMapSource,
+    RawSource, ReplacementEnforce, SourceMapSource,
   };
 
   use super::*;

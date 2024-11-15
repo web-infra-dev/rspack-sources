@@ -12,7 +12,7 @@ use crate::{
     stream_and_get_source_and_map, stream_chunks_of_raw_source,
     stream_chunks_of_source_map, StreamChunks,
   },
-  BoxSource, MapOptions, Source, SourceExt, SourceMap,
+  MapOptions, Source, SourceMap,
 };
 
 /// It tries to reused cached results from other methods to avoid calculations,
@@ -48,8 +48,8 @@ use crate::{
 ///   "Hello World\nconsole.log('test');\nconsole.log('test2');\nHello2\n"
 /// );
 /// ```
-pub struct CachedSource {
-  inner: BoxSource,
+pub struct CachedSource<T> {
+  inner: Arc<T>,
   cached_buffer: Arc<OnceLock<Vec<u8>>>,
   cached_source: Arc<OnceLock<Arc<str>>>,
   cached_size: Arc<OnceLock<usize>>,
@@ -57,11 +57,11 @@ pub struct CachedSource {
     Arc<DashMap<MapOptions, Option<SourceMap>, BuildHasherDefault<FxHasher>>>,
 }
 
-impl CachedSource {
+impl<T> CachedSource<T> {
   /// Create a [CachedSource] with the original [Source].
-  pub fn new<T: Source + 'static>(inner: T) -> Self {
+  pub fn new(inner: T) -> Self {
     Self {
-      inner: SourceExt::boxed(inner),
+      inner: Arc::new(inner),
       cached_buffer: Default::default(),
       cached_source: Default::default(),
       cached_size: Default::default(),
@@ -70,12 +70,12 @@ impl CachedSource {
   }
 
   /// Get the original [Source].
-  pub fn original(&self) -> &BoxSource {
+  pub fn original(&self) -> &T {
     &self.inner
   }
 }
 
-impl Source for CachedSource {
+impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
   fn source(&self) -> Cow<str> {
     let cached = self
       .cached_source
@@ -116,7 +116,9 @@ impl Source for CachedSource {
   }
 }
 
-impl StreamChunks<'_> for CachedSource {
+impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks<'_>
+  for CachedSource<T>
+{
   fn stream_chunks<'a>(
     &'a self,
     options: &MapOptions,
@@ -150,7 +152,7 @@ impl StreamChunks<'_> for CachedSource {
       }
       Entry::Vacant(entry) => {
         let (generated_info, map) = stream_and_get_source_and_map(
-          &self.inner,
+          self.inner.as_ref(),
           options,
           on_chunk,
           on_source,
@@ -163,7 +165,7 @@ impl StreamChunks<'_> for CachedSource {
   }
 }
 
-impl Clone for CachedSource {
+impl<T: Source> Clone for CachedSource<T> {
   fn clone(&self) -> Self {
     Self {
       inner: self.inner.clone(),
@@ -175,21 +177,21 @@ impl Clone for CachedSource {
   }
 }
 
-impl Hash for CachedSource {
+impl<T: Hash> Hash for CachedSource<T> {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
     self.inner.hash(state);
   }
 }
 
-impl PartialEq for CachedSource {
+impl<T: PartialEq> PartialEq for CachedSource<T> {
   fn eq(&self, other: &Self) -> bool {
     self.inner.as_ref() == other.inner.as_ref()
   }
 }
 
-impl Eq for CachedSource {}
+impl<T: Eq> Eq for CachedSource<T> {}
 
-impl std::fmt::Debug for CachedSource {
+impl<T: std::fmt::Debug> std::fmt::Debug for CachedSource<T> {
   fn fmt(
     &self,
     f: &mut std::fmt::Formatter<'_>,
@@ -237,7 +239,7 @@ mod tests {
 
   #[test]
   fn should_allow_to_store_and_share_cached_data() {
-    let original = OriginalSource::new("Hello World", "test.txt").boxed();
+    let original = OriginalSource::new("Hello World", "test.txt");
     let source = CachedSource::new(original);
     let clone = source.clone();
 
@@ -265,8 +267,7 @@ mod tests {
     let source = OriginalSource::new(
       String::from_utf8(vec![0; 256]).unwrap(),
       "file.wasm",
-    )
-    .boxed();
+    );
     let cached_source = CachedSource::new(source);
 
     assert_eq!(cached_source.size(), 256);
@@ -278,8 +279,7 @@ mod tests {
     let source = OriginalSource::new(
       String::from_utf8(vec![0; 256]).unwrap(),
       "file.wasm",
-    )
-    .boxed();
+    );
     let cached_source = CachedSource::new(source);
 
     cached_source.source();
@@ -289,7 +289,7 @@ mod tests {
 
   #[test]
   fn should_return_the_correct_size_for_text_files() {
-    let source = OriginalSource::new("TestTestTest", "file.js").boxed();
+    let source = OriginalSource::new("TestTestTest", "file.js");
     let cached_source = CachedSource::new(source);
 
     assert_eq!(cached_source.size(), 12);
@@ -298,7 +298,7 @@ mod tests {
 
   #[test]
   fn should_return_the_correct_size_for_cached_text_files() {
-    let source = OriginalSource::new("TestTestTest", "file.js").boxed();
+    let source = OriginalSource::new("TestTestTest", "file.js");
     let cached_source = CachedSource::new(source);
 
     cached_source.source();
@@ -313,7 +313,7 @@ mod tests {
       final_source: true,
     };
 
-    let source = RawSource::from("Test\nTest\nTest\n").boxed();
+    let source = RawSource::from("Test\nTest\nTest\n");
     let mut on_chunk_count = 0;
     let mut on_source_count = 0;
     let mut on_name_count = 0;
@@ -363,7 +363,7 @@ mod tests {
   #[test]
   fn should_have_correct_buffer_if_cache_buffer_from_cache_source() {
     let buf = vec![128u8];
-    let source = CachedSource::new(RawSource::from(buf.clone()).boxed());
+    let source = CachedSource::new(RawSource::from(buf.clone()));
 
     source.source();
     assert_eq!(source.buffer(), buf.as_slice());
