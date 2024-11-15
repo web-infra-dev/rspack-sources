@@ -185,7 +185,7 @@ impl<T: Hash> Hash for CachedSource<T> {
 
 impl<T: PartialEq> PartialEq for CachedSource<T> {
   fn eq(&self, other: &Self) -> bool {
-    self.inner.as_ref() == other.inner.as_ref()
+    self.inner == other.inner
   }
 }
 

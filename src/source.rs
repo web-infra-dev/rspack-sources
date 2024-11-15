@@ -675,16 +675,15 @@ mod tests {
       value: "c",
       name: "",
       source_map: SourceMap::from_json("{\"mappings\": \";\"}")
-        .unwrap()
-        .boxed(),
+        .unwrap(),
     })
     .hash(&mut state);
     ConcatSource::new([RawSource::from("d")]).hash(&mut state);
-    CachedSource::new(RawSource::from("e").boxed()).hash(&mut state);
-    ReplaceSource::new(RawSource::from("f").boxed()).hash(&mut state);
+    CachedSource::new(RawSource::from("e")).hash(&mut state);
+    ReplaceSource::new(RawSource::from("f")).hash(&mut state);
     RawSource::from("g").boxed().hash(&mut state);
     (&RawSource::from("h") as &dyn Source).hash(&mut state);
-    ReplaceSource::new(RawSource::from("i").boxed()).hash(&mut state);
+    ReplaceSource::new(RawSource::from("i")).hash(&mut state);
     assert_eq!(format!("{:x}", state.finish()), "537e65c8b3655fc6");
   }
 
@@ -697,15 +696,13 @@ mod tests {
         value: "c",
         name: "",
         source_map: SourceMap::from_json("{\"mappings\": \";\"}")
-          .unwrap()
-          .boxed(),
+          .unwrap(),
       }),
       SourceMapSource::new(WithoutOriginalOptions {
         value: "c",
         name: "",
         source_map: SourceMap::from_json("{\"mappings\": \";\"}")
-          .unwrap()
-          .boxed(),
+          .unwrap(),
       })
     );
     assert_eq!(
@@ -713,12 +710,12 @@ mod tests {
       ConcatSource::new([RawSource::from("d")])
     );
     assert_eq!(
-      CachedSource::new(RawSource::from("e").boxed()),
-      CachedSource::new(RawSource::from("e").boxed())
+      CachedSource::new(RawSource::from("e")),
+      CachedSource::new(RawSource::from("e"))
     );
     assert_eq!(
-      ReplaceSource::new(RawSource::from("f").boxed()),
-      ReplaceSource::new(RawSource::from("f").boxed())
+      ReplaceSource::new(RawSource::from("f")),
+      ReplaceSource::new(RawSource::from("f"))
     );
     assert_eq!(&RawSource::from("g").boxed(), &RawSource::from("g").boxed());
     assert_eq!(
@@ -746,15 +743,14 @@ mod tests {
       value: "c",
       name: "",
       source_map: SourceMap::from_json("{\"mappings\": \";\"}")
-        .unwrap()
-        .boxed(),
+        .unwrap(),
     });
     assert_eq!(c, c.clone());
     let d = ConcatSource::new([RawSource::from("d")]);
     assert_eq!(d, d.clone());
-    let e = CachedSource::new(RawSource::from("e").boxed());
+    let e = CachedSource::new(RawSource::from("e"));
     assert_eq!(e, e.clone());
-    let f = ReplaceSource::new(RawSource::from("f").boxed());
+    let f = ReplaceSource::new(RawSource::from("f"));
     assert_eq!(f, f.clone());
     let g = RawSource::from("g").boxed();
     assert_eq!(&g, &g.clone());
