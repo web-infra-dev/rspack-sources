@@ -11,8 +11,7 @@ use crate::{
   helpers::{
     stream_and_get_source_and_map, stream_chunks_of_raw_source,
     stream_chunks_of_source_map, StreamChunks,
-  },
-  MapOptions, Source, SourceMap,
+  }, BoxSource, MapOptions, Source, SourceExt, SourceMap
 };
 
 /// It tries to reused cached results from other methods to avoid calculations,
@@ -48,8 +47,8 @@ use crate::{
 ///   "Hello World\nconsole.log('test');\nconsole.log('test2');\nHello2\n"
 /// );
 /// ```
-pub struct CachedSource<T> {
-  inner: Arc<T>,
+pub struct CachedSource {
+  inner: BoxSource,
   cached_buffer: Arc<OnceLock<Vec<u8>>>,
   cached_source: Arc<OnceLock<Arc<str>>>,
   cached_size: Arc<OnceLock<usize>>,
@@ -57,11 +56,11 @@ pub struct CachedSource<T> {
     Arc<DashMap<MapOptions, Option<SourceMap>, BuildHasherDefault<FxHasher>>>,
 }
 
-impl<T> CachedSource<T> {
+impl CachedSource {
   /// Create a [CachedSource] with the original [Source].
-  pub fn new(inner: T) -> Self {
+  pub fn new<T: Source + 'static>(inner: T) -> Self {
     Self {
-      inner: Arc::new(inner),
+      inner: SourceExt::boxed(inner),
       cached_buffer: Default::default(),
       cached_source: Default::default(),
       cached_size: Default::default(),
@@ -70,12 +69,12 @@ impl<T> CachedSource<T> {
   }
 
   /// Get the original [Source].
-  pub fn original(&self) -> &T {
+  pub fn original(&self) -> &BoxSource {
     &self.inner
   }
 }
 
-impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
+impl Source for CachedSource {
   fn source(&self) -> Cow<str> {
     let cached = self
       .cached_source
@@ -116,8 +115,8 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
   }
 }
 
-impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks<'_>
-  for CachedSource<T>
+impl StreamChunks<'_>
+  for CachedSource
 {
   fn stream_chunks<'a>(
     &'a self,
@@ -152,7 +151,7 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks<'_>
       }
       Entry::Vacant(entry) => {
         let (generated_info, map) = stream_and_get_source_and_map(
-          self.inner.as_ref(),
+          &self.inner,
           options,
           on_chunk,
           on_source,
@@ -165,7 +164,7 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks<'_>
   }
 }
 
-impl<T: Source> Clone for CachedSource<T> {
+impl Clone for CachedSource {
   fn clone(&self) -> Self {
     Self {
       inner: self.inner.clone(),
@@ -177,21 +176,21 @@ impl<T: Source> Clone for CachedSource<T> {
   }
 }
 
-impl<T: Hash> Hash for CachedSource<T> {
+impl Hash for CachedSource {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
     self.inner.hash(state);
   }
 }
 
-impl<T: PartialEq> PartialEq for CachedSource<T> {
+impl PartialEq for CachedSource {
   fn eq(&self, other: &Self) -> bool {
-    self.inner == other.inner
+    self.inner.as_ref() == other.inner.as_ref()
   }
 }
 
-impl<T: Eq> Eq for CachedSource<T> {}
+impl Eq for CachedSource {}
 
-impl<T: std::fmt::Debug> std::fmt::Debug for CachedSource<T> {
+impl std::fmt::Debug for CachedSource {
   fn fmt(
     &self,
     f: &mut std::fmt::Formatter<'_>,
