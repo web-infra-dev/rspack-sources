@@ -727,6 +727,10 @@ mod tests {
       CachedSource::new(RawSource::from("j").boxed()),
       CachedSource::new(RawSource::from("j").boxed())
     );
+    let source = CachedSource::new(ConcatSource::new([ReplaceSource::new(
+      RawSource::from("// Entry point for tests\n"),
+    )]));
+    assert_eq!(source == source, true);
   }
 
   #[test]

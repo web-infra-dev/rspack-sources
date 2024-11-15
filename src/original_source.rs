@@ -82,6 +82,9 @@ impl Hash for OriginalSource {
 
 impl PartialEq for OriginalSource {
   fn eq(&self, other: &Self) -> bool {
+    if std::ptr::eq(self, other) {
+      return true
+    }
     self.value == other.value && self.name == other.name
   }
 }

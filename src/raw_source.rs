@@ -137,6 +137,9 @@ impl Hash for RawSource {
 
 impl PartialEq for RawSource {
   fn eq(&self, other: &Self) -> bool {
+    if std::ptr::eq(self, other) {
+      return true
+    }
     match (&self.value, &other.value) {
       (RawValue::Buffer(l0), RawValue::Buffer(r0)) => l0 == r0,
       (RawValue::String(l0), RawValue::String(r0)) => l0 == r0,

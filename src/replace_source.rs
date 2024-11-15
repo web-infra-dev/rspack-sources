@@ -723,6 +723,9 @@ impl Hash for ReplaceSource {
 
 impl PartialEq for ReplaceSource {
   fn eq(&self, other: &Self) -> bool {
+    if std::ptr::eq(self, other) {
+      return true
+    }
     *self.inner == *other.inner && *self.replacements() == *other.replacements()
   }
 }

@@ -183,6 +183,9 @@ impl Hash for CachedSource {
 
 impl PartialEq for CachedSource {
   fn eq(&self, other: &Self) -> bool {
+    if std::ptr::eq(self, other) {
+      return true
+    }
     *self.inner == *other.inner
   }
 }

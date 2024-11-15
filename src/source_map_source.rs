@@ -153,6 +153,9 @@ impl Hash for SourceMapSource {
 
 impl PartialEq for SourceMapSource {
   fn eq(&self, other: &Self) -> bool {
+    if std::ptr::eq(self, other) {
+      return true
+    }
     self.value == other.value
       && self.name == other.name
       && *self.source_map == *other.source_map
