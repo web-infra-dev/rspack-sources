@@ -4,7 +4,7 @@ use std::{
   hash::{Hash, Hasher},
   sync::{
     atomic::{AtomicBool, Ordering},
-    Mutex, MutexGuard, OnceLock,
+    Arc, Mutex, MutexGuard, OnceLock,
   },
 };
 
@@ -13,8 +13,7 @@ use rustc_hash::FxHashMap as HashMap;
 use crate::{
   helpers::{get_map, split_into_lines, GeneratedInfo, StreamChunks},
   linear_map::LinearMap,
-  BoxSource, MapOptions, Mapping, OriginalLocation, Source, SourceExt,
-  SourceMap,
+  MapOptions, Mapping, OriginalLocation, Source, SourceMap,
 };
 
 /// Decorates a Source with replacements and insertions of source code,
@@ -36,8 +35,8 @@ use crate::{
 ///
 /// assert_eq!(source.source(), "start1\nstart2\nreplaced!\nend1\nend2");
 /// ```
-pub struct ReplaceSource {
-  inner: BoxSource,
+pub struct ReplaceSource<T> {
+  inner: Arc<T>,
   inner_source_code: OnceLock<Box<str>>,
   replacements: Mutex<Vec<Replacement>>,
   /// Whether `replacements` is sorted.
@@ -83,11 +82,11 @@ impl Replacement {
   }
 }
 
-impl ReplaceSource {
+impl<T> ReplaceSource<T> {
   /// Create a [ReplaceSource].
-  pub fn new<T: Source + 'static>(source: T) -> Self {
+  pub fn new(source: T) -> Self {
     Self {
-      inner: SourceExt::boxed(source),
+      inner: Arc::new(source),
       inner_source_code: OnceLock::new(),
       replacements: Mutex::new(Vec::new()),
       is_sorted: AtomicBool::new(true),
@@ -95,7 +94,7 @@ impl ReplaceSource {
   }
 
   /// Get the original [Source].
-  pub fn original(&self) -> &BoxSource {
+  pub fn original(&self) -> &T {
     &self.inner
   }
 
@@ -114,7 +113,7 @@ impl ReplaceSource {
   }
 }
 
-impl ReplaceSource {
+impl<T: Source> ReplaceSource<T> {
   fn get_inner_source_code(&self) -> &str {
     self
       .inner_source_code
@@ -175,7 +174,7 @@ impl ReplaceSource {
   }
 }
 
-impl Source for ReplaceSource {
+impl<T: Source + Hash + PartialEq + Eq + 'static> Source for ReplaceSource<T> {
   fn source(&self) -> Cow<str> {
     self.sort_replacement();
 
@@ -234,7 +233,7 @@ impl Source for ReplaceSource {
   }
 }
 
-impl std::fmt::Debug for ReplaceSource {
+impl<T: std::fmt::Debug> std::fmt::Debug for ReplaceSource<T> {
   fn fmt(
     &self,
     f: &mut std::fmt::Formatter<'_>,
@@ -284,7 +283,7 @@ fn check_content_at_position(
   }
 }
 
-impl<'a> StreamChunks<'a> for ReplaceSource {
+impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
   fn stream_chunks(
     &'a self,
     options: &crate::MapOptions,
@@ -699,7 +698,7 @@ impl<'a> StreamChunks<'a> for ReplaceSource {
   }
 }
 
-impl Clone for ReplaceSource {
+impl<T: Source> Clone for ReplaceSource<T> {
   fn clone(&self) -> Self {
     Self {
       inner: self.inner.clone(),
@@ -710,7 +709,7 @@ impl Clone for ReplaceSource {
   }
 }
 
-impl Hash for ReplaceSource {
+impl<T: Hash> Hash for ReplaceSource<T> {
   fn hash<H: Hasher>(&self, state: &mut H) {
     self.sort_replacement();
     "ReplaceSource".hash(state);
@@ -721,7 +720,7 @@ impl Hash for ReplaceSource {
   }
 }
 
-impl PartialEq for ReplaceSource {
+impl<T: PartialEq> PartialEq for ReplaceSource<T> {
   fn eq(&self, other: &Self) -> bool {
     if std::ptr::eq(self, other) {
       return true;
@@ -730,7 +729,7 @@ impl PartialEq for ReplaceSource {
   }
 }
 
-impl Eq for ReplaceSource {}
+impl<T: Eq> Eq for ReplaceSource<T> {}
 
 #[cfg(test)]
 mod tests {
@@ -761,10 +760,9 @@ mod tests {
           token
             .original
             .as_ref()
-            .and_then(|original| {
-              let sources = sourcemap.sources();
-              sources.get(original.source_index as usize)
-            })
+            .and_then(
+              |original| sourcemap.get_source(original.source_index as usize)
+            )
             .map_or("".to_owned(), |source| format!(" [{source}]")),
           token
             .original
@@ -780,10 +778,7 @@ mod tests {
             .original
             .as_ref()
             .and_then(|original| original.name_index)
-            .and_then(|name_index| {
-              let names = sourcemap.names();
-              names.get(name_index as usize)
-            })
+            .and_then(|name_index| sourcemap.get_name(name_index as usize))
             .map_or("".to_owned(), |source| format!(" ({source})")),
         )
       })
@@ -1052,21 +1047,18 @@ function StaticPage(_ref) {
   });
 }"#
     );
-    let names = source_map.names();
-    let sources_content = source_map.sources_content();
-    let sources = source_map.sources();
-    assert_eq!(names[0].as_ref(), "StaticPage");
-    assert_eq!(names[1].as_ref(), "data");
-    assert_eq!(names[2].as_ref(), "foo");
+    assert_eq!(source_map.get_name(0).unwrap(), "StaticPage");
+    assert_eq!(source_map.get_name(1).unwrap(), "data");
+    assert_eq!(source_map.get_name(2).unwrap(), "foo");
     assert_eq!(
-      sources_content[0].as_ref(),
+      source_map.get_source_content(0).unwrap(),
       r#"export default function StaticPage({ data }) {
 return <div>{data.foo}</div>
 }
 "#
     );
     assert!(source_map.file().is_none());
-    assert_eq!(sources[0].as_ref(), "abc");
+    assert_eq!(source_map.get_source(0).unwrap(), "abc");
 
     assert_eq!(
       with_readable_mappings(&source_map),
@@ -1133,7 +1125,7 @@ return <div>{data.foo}</div>
 
   #[test]
   fn replace_source_over_a_box_source() {
-    let mut source = ReplaceSource::new(RawSource::from("boxed"));
+    let mut source = ReplaceSource::new(RawSource::from("boxed").boxed());
     source.replace(3, 5, "", None);
     assert_eq!(source.size(), 3);
     assert_eq!(source.source(), "box");
@@ -1153,7 +1145,7 @@ return <div>{data.foo}</div>
 "👨‍👩‍👧‍👧"; url(__PUBLIC_PATH__logo.png);
 "#;
     let mut source =
-      ReplaceSource::new(OriginalSource::new(content, "file.css"));
+      ReplaceSource::new(OriginalSource::new(content, "file.css").boxed());
     for mat in regex::Regex::new("__PUBLIC_PATH__")
       .unwrap()
       .find_iter(content)
@@ -1184,7 +1176,7 @@ return <div>{data.foo}</div>
   fn replace_same_position_with_enforce() {
     // Enforce sort HarmonyExportExpressionDependency after PureExpressionDependency, to generate valid code
     let mut source =
-      ReplaceSource::new(RawSource::from("export default foo;aaa"));
+      ReplaceSource::new(RawSource::from("export default foo;aaa").boxed());
     let mut source2 = source.clone();
     source.replace(18, 19, ");", None);
     source.replace(18, 19, "))", None);
