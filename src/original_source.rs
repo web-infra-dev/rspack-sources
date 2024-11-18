@@ -26,11 +26,11 @@ use crate::{
 /// let source = OriginalSource::new(input, "file.js");
 /// assert_eq!(source.source(), input);
 /// assert_eq!(
-///   source.map(&MapOptions::default()).unwrap().mappings().as_ref(),
+///   source.map(&MapOptions::default()).unwrap().mappings(),
 ///   "AAAA,eAAe,SAAS,MAAM,WAAW;AACzC,eAAe,SAAS,MAAM,WAAW",
 /// );
 /// assert_eq!(
-///   source.map(&MapOptions::new(false)).unwrap().mappings().as_ref(),
+///   source.map(&MapOptions::new(false)).unwrap().mappings(),
 ///   "AAAA;AACA",
 /// );
 /// ```

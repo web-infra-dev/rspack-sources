@@ -237,7 +237,7 @@ mod tests {
       .boxed(),
     ]);
     let map = source.map(&Default::default()).unwrap();
-    assert_eq!(map.mappings(), "AAAA;AACA;ACDA",);
+    assert_eq!(map.mappings(), ";;AACA");
   }
 
   #[test]

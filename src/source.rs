@@ -219,6 +219,7 @@ pub trait DecodableMap: Sync + Send {
   fn to_json(self: Box<Self>) -> Result<String>;
 }
 
+/// An alias for `Box<dyn DecodableMap>`.
 pub type BoxDecodableMap = Box<dyn DecodableMap>;
 
 impl PartialEq for dyn DecodableMap {
@@ -285,6 +286,7 @@ impl<T: DecodableMap + 'static> From<T> for BoxDecodableMap {
   }
 }
 
+/// Extension methods for [DecodableMap].
 pub trait DecodableMapExt {
   /// An alias for [BoxDecodableMap::from].
   fn boxed(self) -> BoxDecodableMap;
@@ -357,7 +359,7 @@ impl SourceMap {
     &self.sources
   }
 
-  /// Set sources field in [SourceMap].
+  /// Get the mutable sources field in [SourceMap].
   pub fn sources_mut(&mut self) -> &mut [Cow<'static, str>] {
     &mut self.sources
   }
@@ -378,6 +380,16 @@ impl SourceMap {
   /// Get the sourcesContent field in [SourceMap].
   pub fn sources_content(&self) -> &[Cow<'static, str>] {
     &self.sources_content
+  }
+
+  /// Get the mutable sourcesContent field in [SourceMap].
+  pub fn sources_content_mut(&mut self) -> &mut [Cow<'static, str>] {
+    &mut self.sources_content
+  }
+
+  /// Get the source content by index from sourcesContent field in [SourceMap].
+  pub fn get_source_content(&self, index: usize) -> Option<&str> {
+    self.sources_content.get(index).map(|s| s.as_ref())
   }
 
   /// Get the mutable source content by index from sourcesContent field in [SourceMap].
