@@ -1125,7 +1125,7 @@ return <div>{data.foo}</div>
 
   #[test]
   fn replace_source_over_a_box_source() {
-    let mut source = ReplaceSource::new(RawSource::from("boxed").boxed());
+    let mut source = ReplaceSource::new(RawSource::from("boxed"));
     source.replace(3, 5, "", None);
     assert_eq!(source.size(), 3);
     assert_eq!(source.source(), "box");
@@ -1145,7 +1145,7 @@ return <div>{data.foo}</div>
 "👨‍👩‍👧‍👧"; url(__PUBLIC_PATH__logo.png);
 "#;
     let mut source =
-      ReplaceSource::new(OriginalSource::new(content, "file.css").boxed());
+      ReplaceSource::new(OriginalSource::new(content, "file.css"));
     for mat in regex::Regex::new("__PUBLIC_PATH__")
       .unwrap()
       .find_iter(content)
@@ -1176,7 +1176,7 @@ return <div>{data.foo}</div>
   fn replace_same_position_with_enforce() {
     // Enforce sort HarmonyExportExpressionDependency after PureExpressionDependency, to generate valid code
     let mut source =
-      ReplaceSource::new(RawSource::from("export default foo;aaa").boxed());
+      ReplaceSource::new(RawSource::from("export default foo;aaa"));
     let mut source2 = source.clone();
     source.replace(18, 19, ");", None);
     source.replace(18, 19, "))", None);
