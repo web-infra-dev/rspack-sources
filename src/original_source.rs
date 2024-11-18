@@ -83,7 +83,7 @@ impl Hash for OriginalSource {
 impl PartialEq for OriginalSource {
   fn eq(&self, other: &Self) -> bool {
     if std::ptr::eq(self, other) {
-      return true
+      return true;
     }
     self.value == other.value && self.name == other.name
   }
@@ -276,8 +276,8 @@ mod tests {
         .collect::<Vec<_>>(),
       ["Line1\n\nLine3\n"],
     );
-    assert_eq!(result_map.mappings().as_ref(), "AAAA;;AAEA");
-    assert_eq!(result_list_map.mappings().as_ref(), "AAAA;AACA;AACA");
+    assert_eq!(result_map.mappings(), "AAAA;;AAEA");
+    assert_eq!(result_list_map.mappings(), "AAAA;AACA;AACA");
   }
 
   #[test]
@@ -296,7 +296,7 @@ mod tests {
   fn should_omit_mappings_for_columns_with_node() {
     let source = OriginalSource::new("Line1\n\nLine3\n", "file.js");
     let result_map = source.map(&MapOptions::new(false)).unwrap();
-    assert_eq!(result_map.mappings().as_ref(), "AAAA;AACA;AACA");
+    assert_eq!(result_map.mappings(), "AAAA;AACA;AACA");
   }
 
   #[test]
@@ -320,19 +320,11 @@ mod tests {
     let source = OriginalSource::new(input, "file.js");
     assert_eq!(source.source(), input);
     assert_eq!(
-      source
-        .map(&MapOptions::default())
-        .unwrap()
-        .mappings()
-        .as_ref(),
+      source.map(&MapOptions::default()).unwrap().mappings(),
       "AAAA,eAAe,SAAS,MAAM,WAAW;AACzC,eAAe,SAAS,MAAM,WAAW",
     );
     assert_eq!(
-      source
-        .map(&MapOptions::new(false))
-        .unwrap()
-        .mappings()
-        .as_ref(),
+      source.map(&MapOptions::new(false)).unwrap().mappings(),
       "AAAA;AACA",
     );
   }
@@ -349,6 +341,6 @@ mod tests {
 
     let concat = ConcatSource::new([source1.boxed(), source2.boxed()]);
     let map = concat.map(&MapOptions::new(false)).unwrap();
-    assert_eq!(map.mappings().as_ref(), "AAAA;AACA;ACDA",);
+    assert_eq!(map.mappings(), "AAAA;AACA;ACDA",);
   }
 }

@@ -240,11 +240,20 @@ impl Eq for dyn DecodableMap {}
 impl Clone for BoxDecodableMap {
   fn clone(&self) -> Self {
     Box::new(SourceMap::new(
-      self.file().map(|file| Arc::from(file.to_string())),
-      Arc::from(self.mappings().to_string()),
-      self.sources().map(Arc::from).collect::<Vec<_>>(),
-      self.sources_content().map(Arc::from).collect::<Vec<_>>(),
-      self.names().map(Arc::from).collect::<Vec<_>>(),
+      self.file().map(|file| file.to_string()),
+      self.mappings().to_string(),
+      self
+        .sources()
+        .map(|source| Cow::Owned(source.to_string()))
+        .collect::<Vec<_>>(),
+      self
+        .sources_content()
+        .map(|content| Cow::Owned(content.to_string()))
+        .collect::<Vec<_>>(),
+      self
+        .names()
+        .map(|name| Cow::Owned(name.to_string()))
+        .collect::<Vec<_>>(),
     ))
   }
 }
@@ -288,14 +297,14 @@ impl<T: DecodableMap + 'static> DecodableMapExt for T {
 }
 
 /// The source map created by [Source::map].
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SourceMap {
-  file: Option<Arc<str>>,
-  mappings: Arc<str>,
-  sources: Vec<Arc<str>>,
-  sources_content: Vec<Arc<str>>,
-  names: Vec<Arc<str>>,
-  source_root: Option<Arc<str>>,
+  file: Option<String>,
+  mappings: String,
+  sources: Vec<Cow<'static, str>>,
+  sources_content: Vec<Cow<'static, str>>,
+  names: Vec<Cow<'static, str>>,
+  source_root: Option<String>,
 }
 
 impl Hash for SourceMap {
@@ -312,11 +321,11 @@ impl Hash for SourceMap {
 impl SourceMap {
   /// Create a [SourceMap].
   pub fn new(
-    file: Option<Arc<str>>,
-    mappings: Arc<str>,
-    sources: Vec<Arc<str>>,
-    sources_content: Vec<Arc<str>>,
-    names: Vec<Arc<str>>,
+    file: Option<String>,
+    mappings: String,
+    sources: Vec<Cow<'static, str>>,
+    sources_content: Vec<Cow<'static, str>>,
+    names: Vec<Cow<'static, str>>,
   ) -> Self {
     Self {
       file,
@@ -329,47 +338,77 @@ impl SourceMap {
   }
 
   /// Get the file field in [SourceMap].
-  pub fn file(&self) -> &Option<Arc<str>> {
-    &self.file
+  pub fn file(&self) -> Option<&str> {
+    self.file.as_deref()
   }
 
   /// Set the file field in [SourceMap].
-  pub fn file_mut(&mut self) -> &mut Option<Arc<str>> {
-    &mut self.file
+  pub fn set_file(&mut self, file: Option<String>) {
+    self.file = file;
   }
 
   /// Get the mappings string in [SourceMap].
-  pub fn mappings(&self) -> &Arc<str> {
+  pub fn mappings(&self) -> &str {
     &self.mappings
   }
 
   /// Get the sources field in [SourceMap].
-  pub fn sources(&self) -> &[Arc<str>] {
+  pub fn sources(&self) -> &[Cow<'static, str>] {
     &self.sources
   }
 
   /// Set sources field in [SourceMap].
-  pub fn sources_mut(&mut self) -> &mut Vec<Arc<str>> {
+  pub fn sources_mut(&mut self) -> &mut [Cow<'static, str>] {
     &mut self.sources
   }
 
+  /// Get the source by index from sources field in [SourceMap].
+  pub fn get_source(&self, index: usize) -> Option<&str> {
+    self.sources.get(index).map(|s| s.as_ref())
+  }
+
+  /// Get the mutable source by index from sources field in [SourceMap].
+  pub fn get_source_mut(
+    &mut self,
+    index: usize,
+  ) -> Option<&mut Cow<'static, str>> {
+    self.sources.get_mut(index)
+  }
+
   /// Get the sourcesContent field in [SourceMap].
-  pub fn sources_content(&self) -> &[Arc<str>] {
+  pub fn sources_content(&self) -> &[Cow<'static, str>] {
     &self.sources_content
   }
 
-  pub fn sources_content_mut(&mut self) -> &mut Vec<Arc<str>> {
-    &mut self.sources_content
+  /// Get the mutable source content by index from sourcesContent field in [SourceMap].
+  pub fn get_source_content_mut(
+    &mut self,
+    index: usize,
+  ) -> Option<&mut Cow<'static, str>> {
+    self.sources_content.get_mut(index)
   }
 
   /// Get the names field in [SourceMap].
-  pub fn names(&self) -> &[Arc<str>] {
+  pub fn names(&self) -> &[Cow<'static, str>] {
     &self.names
+  }
+
+  /// Get the names field in [SourceMap].
+  pub fn names_mut(&mut self) -> &mut [Cow<'static, str>] {
+    &mut self.names
   }
 
   /// Get the name by index from names field in [SourceMap].
   pub fn get_name(&self, index: usize) -> Option<&str> {
     self.names.get(index).map(|s| s.as_ref())
+  }
+
+  /// Get the mutable name by index from names field in [SourceMap].
+  pub fn get_name_mut(
+    &mut self,
+    index: usize,
+  ) -> Option<&mut Cow<'static, str>> {
+    self.names.get_mut(index)
   }
 
   /// Get the source_root field in [SourceMap].
@@ -378,8 +417,8 @@ impl SourceMap {
   }
 
   /// Set the source_root field in [SourceMap].
-  pub fn source_root_mut(&mut self) -> &mut Option<Arc<str>> {
-    &mut self.source_root
+  pub fn set_source_root(&mut self, source_root: Option<String>) {
+    self.source_root = source_root;
   }
 }
 
@@ -437,15 +476,15 @@ impl DecodableMap for SourceMap {
 struct RawSourceMap {
   pub version: Option<u8>,
   #[serde(skip_serializing_if = "Option::is_none")]
-  pub file: Option<Arc<str>>,
-  pub sources: Option<Vec<Option<Arc<str>>>>,
+  pub file: Option<String>,
+  pub sources: Option<Vec<Option<Cow<'static, str>>>>,
   #[serde(rename = "sourceRoot", skip_serializing_if = "Option::is_none")]
-  pub source_root: Option<Arc<str>>,
+  pub source_root: Option<String>,
   #[serde(rename = "sourcesContent", skip_serializing_if = "Option::is_none")]
-  pub sources_content: Option<Vec<Option<Arc<str>>>>,
+  pub sources_content: Option<Vec<Option<Cow<'static, str>>>>,
   #[serde(skip_serializing_if = "Option::is_none")]
-  pub names: Option<Vec<Option<Arc<str>>>>,
-  pub mappings: Arc<str>,
+  pub names: Option<Vec<Option<Cow<'static, str>>>>,
+  pub mappings: String,
 }
 
 impl RawSourceMap {
@@ -514,30 +553,22 @@ impl TryFrom<RawSourceMap> for SourceMap {
       .sources
       .unwrap_or_default()
       .into_iter()
-      .map(|source| match source {
-        Some(s) => s,
-        None => Arc::from(""),
-      })
+      .map(Option::unwrap_or_default)
+      .map(Cow::from)
       .collect();
     let sources_content = raw
       .sources_content
       .unwrap_or_default()
       .into_iter()
-      .map(|content| match content {
-        Some(c) => c,
-        None => Arc::from(""),
-      })
-      .map(Arc::from)
+      .map(Option::unwrap_or_default)
+      .map(Cow::from)
       .collect();
     let names = raw
       .names
       .unwrap_or_default()
       .into_iter()
-      .map(|name| match name {
-        Some(n) => n,
-        None => Arc::from(""),
-      })
-      .map(Arc::from)
+      .map(Option::unwrap_or_default)
+      .map(Cow::from)
       .collect();
     Ok(Self {
       file: raw.file,
@@ -656,7 +687,7 @@ mod tests {
   fn should_not_have_sources_content_field_when_it_is_empty() {
     let map = SourceMap::new(
       None,
-      Arc::from(";;"),
+      ";;".to_string(),
       vec!["a.js".into()],
       vec!["".into(), "".into(), "".into()],
       vec!["".into(), "".into()],

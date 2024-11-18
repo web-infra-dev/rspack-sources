@@ -1,7 +1,6 @@
 use std::{
   borrow::Cow,
   hash::{Hash, Hasher},
-  sync::Arc,
 };
 
 use crate::{
@@ -110,25 +109,22 @@ impl Source for SourceMapSource {
   fn map(&self, options: &MapOptions) -> Option<SourceMap> {
     if self.inner_source_map.is_none() {
       return Some(SourceMap::new(
-        self
-          .source_map
-          .file()
-          .map(|file| Arc::from(file.to_string())),
-        Arc::from(self.source_map.mappings().to_string()),
+        self.source_map.file().map(|file| file.to_string()),
+        self.source_map.mappings().to_string(),
         self
           .source_map
           .sources()
-          .map(|source| Arc::from(source.to_string()))
+          .map(|source| Cow::from(source.to_string()))
           .collect::<Vec<_>>(),
         self
           .source_map
           .sources_content()
-          .map(|content| Arc::from(content.to_string()))
+          .map(|content| Cow::from(content.to_string()))
           .collect::<Vec<_>>(),
         self
           .source_map
           .names()
-          .map(|name| Arc::from(name.to_string()))
+          .map(|name| Cow::from(name.to_string()))
           .collect::<Vec<_>>(),
       ));
     }
@@ -154,7 +150,7 @@ impl Hash for SourceMapSource {
 impl PartialEq for SourceMapSource {
   fn eq(&self, other: &Self) -> bool {
     if std::ptr::eq(self, other) {
-      return true
+      return true;
     }
     self.value == other.value
       && self.name == other.name
@@ -228,8 +224,6 @@ impl<'a> StreamChunks<'a> for SourceMapSource {
 
 #[cfg(test)]
 mod tests {
-  use std::sync::Arc;
-
   use crate::{
     source::DecodableMapExt, CachedSource, ConcatSource, OriginalSource,
     RawSource, ReplaceSource, SourceExt,
@@ -324,7 +318,7 @@ mod tests {
       name: "hello.txt",
       source_map: SourceMap::new(
         None,
-        Arc::from("AAAA"),
+        "AAAA".to_string(),
         vec!["".into()],
         vec!["".into()],
         vec![],
@@ -335,7 +329,7 @@ mod tests {
       name: "hello.txt",
       source_map: SourceMap::new(
         None,
-        Arc::from("AAAA"),
+        "AAAA".to_string(),
         vec![],
         vec![],
         vec![],
@@ -346,7 +340,7 @@ mod tests {
       name: "hello.txt",
       source_map: SourceMap::new(
         None,
-        Arc::from("AAAA"),
+        "AAAA".to_string(),
         vec!["hello-source.txt".into()],
         vec!["hello world\n".into()],
         vec![],
@@ -420,7 +414,7 @@ mod tests {
       name: "a",
       source_map: SourceMap::new(
         None,
-        Arc::from("AAAA;AACA"),
+        "AAAA;AACA".to_string(),
         vec!["hello1".into()],
         vec![],
         vec![],
@@ -431,7 +425,7 @@ mod tests {
       name: "b",
       source_map: SourceMap::new(
         None,
-        Arc::from("AAAA,EAAE"),
+        "AAAA,EAAE".to_string(),
         vec!["hello2".into()],
         vec![],
         vec![],
@@ -442,7 +436,7 @@ mod tests {
       name: "b",
       source_map: SourceMap::new(
         None,
-        Arc::from("AAAA,EAAE"),
+        "AAAA,EAAE".to_string(),
         vec!["hello3".into()],
         vec![],
         vec![],
@@ -453,7 +447,7 @@ mod tests {
       name: "c",
       source_map: SourceMap::new(
         None,
-        Arc::from("AAAA"),
+        "AAAA".to_string(),
         vec!["hello4".into()],
         vec![],
         vec![],
@@ -477,7 +471,7 @@ mod tests {
     ]);
     let map = source.map(&MapOptions::default()).unwrap();
     assert_eq!(
-      map.mappings().as_ref(),
+      map.mappings(),
       "AAAA;AAAA;ACAA,ICAA,EDAA,ECAA,EFAA;AEAA,EFAA;ACAA",
     );
 
@@ -653,7 +647,7 @@ mod tests {
       source.boxed(),
     ]);
     let map = source.map(&MapOptions::new(false)).unwrap();
-    assert_eq!(map.mappings().as_ref(), ";;;AAAA");
+    assert_eq!(map.mappings(), ";;;AAAA");
   }
 
   #[test]
@@ -679,7 +673,7 @@ mod tests {
     .unwrap();
     let inner_source_map =
       inner_source.map(&MapOptions::default()).map(|mut map| {
-        *map.source_root_mut() = Some(Arc::from("/path/to/folder/"));
+        map.set_source_root(Some("/path/to/folder/".to_string()));
         map
       });
     let sms = SourceMapSource::new(SourceMapSourceOptions {

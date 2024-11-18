@@ -138,7 +138,7 @@ impl Hash for RawSource {
 impl PartialEq for RawSource {
   fn eq(&self, other: &Self) -> bool {
     if std::ptr::eq(self, other) {
-      return true
+      return true;
     }
     match (&self.value, &other.value) {
       (RawValue::Buffer(l0), RawValue::Buffer(r0)) => l0 == r0,
@@ -211,6 +211,6 @@ mod tests {
     let source2 = OriginalSource::new("world".to_string(), "world.txt");
     let concat = ConcatSource::new([source1.boxed(), source2.boxed()]);
     let map = concat.map(&MapOptions::new(false)).unwrap();
-    assert_eq!(map.mappings().as_ref(), ";;AAAA",);
+    assert_eq!(map.mappings(), ";;AAAA",);
   }
 }

@@ -724,7 +724,7 @@ impl Hash for ReplaceSource {
 impl PartialEq for ReplaceSource {
   fn eq(&self, other: &Self) -> bool {
     if std::ptr::eq(self, other) {
-      return true
+      return true;
     }
     *self.inner == *other.inner && *self.replacements() == *other.replacements()
   }
@@ -887,8 +887,8 @@ World!"#
       r#"
 1:0 -> [file.txt] 1:0"#
     );
-    assert_eq!(result_map.mappings().as_ref(), "AAAA,WAAE,GACE");
-    assert_eq!(result_list_map.mappings().as_ref(), "AAAA");
+    assert_eq!(result_map.mappings(), "AAAA,WAAE,GACE");
+    assert_eq!(result_list_map.mappings(), "AAAA");
   }
 
   #[test]

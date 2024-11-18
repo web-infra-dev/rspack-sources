@@ -142,7 +142,7 @@ impl Hash for ConcatSource {
 impl PartialEq for ConcatSource {
   fn eq(&self, other: &Self) -> bool {
     if std::ptr::eq(self, other) {
-      return true
+      return true;
     }
     self.children() == other.children()
   }
