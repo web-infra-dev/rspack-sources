@@ -189,10 +189,10 @@ pub trait DecodableMap: Sync + Send {
   fn file(&self) -> Option<&str>;
 
   /// Get the decoded mappings in [SourceMap].
-  fn decoded_mappings<'a>(&'a self) -> Box<dyn Iterator<Item = Mapping> + 'a>;
+  fn decoded_mappings(&self) -> Vec<Mapping>;
 
   /// Get the mappings string in [SourceMap].
-  fn mappings(&self) -> &str;
+  fn mappings(&self) -> String;
 
   /// Get the sources field in [SourceMap].
   fn sources<'a>(&'a self) -> Box<dyn Iterator<Item = &'a str> + 'a>;
@@ -439,12 +439,12 @@ impl DecodableMap for SourceMap {
     self.file.as_deref()
   }
 
-  fn decoded_mappings<'a>(&'a self) -> Box<dyn Iterator<Item = Mapping> + 'a> {
-    Box::new(decode_mappings(&self.mappings))
+  fn decoded_mappings(&self) -> Vec<Mapping> {
+    decode_mappings(&self.mappings).collect::<Vec<_>>()
   }
 
-  fn mappings(&self) -> &str {
-    self.mappings.as_ref()
+  fn mappings(&self) -> String {
+    self.mappings.to_string()
   }
 
   fn sources<'a>(&'a self) -> Box<dyn Iterator<Item = &'a str> + 'a> {
