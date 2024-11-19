@@ -82,6 +82,9 @@ impl Hash for OriginalSource {
 
 impl PartialEq for OriginalSource {
   fn eq(&self, other: &Self) -> bool {
+    if std::ptr::eq(self, other) {
+      return true;
+    }
     self.value == other.value && self.name == other.name
   }
 }
@@ -241,15 +244,37 @@ mod tests {
     let result_list_map = source.map(&MapOptions::new(false)).unwrap();
 
     assert_eq!(result_text, "Line1\n\nLine3\n");
-    assert_eq!(result_map.sources(), &["file.js".to_string()]);
-    assert_eq!(result_list_map.sources(), ["file.js".to_string()]);
     assert_eq!(
-      result_map.sources_content(),
-      ["Line1\n\nLine3\n".to_string()],
+      result_map
+        .sources()
+        .into_iter()
+        .map(|s| s.as_ref())
+        .collect::<Vec<_>>(),
+      &["file.js"]
     );
     assert_eq!(
-      result_list_map.sources_content(),
-      ["Line1\n\nLine3\n".to_string()],
+      result_list_map
+        .sources()
+        .into_iter()
+        .map(|s| s.as_ref())
+        .collect::<Vec<_>>(),
+      ["file.js"]
+    );
+    assert_eq!(
+      result_map
+        .sources_content()
+        .into_iter()
+        .map(|s| s.as_ref())
+        .collect::<Vec<_>>(),
+      ["Line1\n\nLine3\n"],
+    );
+    assert_eq!(
+      result_list_map
+        .sources_content()
+        .into_iter()
+        .map(|s| s.as_ref())
+        .collect::<Vec<_>>(),
+      ["Line1\n\nLine3\n"],
     );
     assert_eq!(result_map.mappings(), "AAAA;;AAEA");
     assert_eq!(result_list_map.mappings(), "AAAA;AACA;AACA");
@@ -308,7 +333,7 @@ mod tests {
   #[test]
   fn fix_rspack_issue_6793() {
     let code1 = "hello\n\n";
-    let source1 = OriginalSource::new(code1, "hello.txt");
+    let source1 = OriginalSource::new(code1, "hello.txt").boxed();
     let source1 = ReplaceSource::new(source1);
 
     let code2 = "world";

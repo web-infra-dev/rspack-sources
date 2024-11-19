@@ -239,7 +239,7 @@ impl<T: std::fmt::Debug> std::fmt::Debug for ReplaceSource<T> {
     f: &mut std::fmt::Formatter<'_>,
   ) -> Result<(), std::fmt::Error> {
     f.debug_struct("ReplaceSource")
-      .field("inner", self.inner.as_ref())
+      .field("inner", &self.inner)
       .field(
         "inner_source_code",
         &self
@@ -722,7 +722,10 @@ impl<T: Hash> Hash for ReplaceSource<T> {
 
 impl<T: PartialEq> PartialEq for ReplaceSource<T> {
   fn eq(&self, other: &Self) -> bool {
-    self.inner == other.inner && *self.replacements() == *other.replacements()
+    if std::ptr::eq(self, other) {
+      return true;
+    }
+    *self.inner == *other.inner && *self.replacements() == *other.replacements()
   }
 }
 
@@ -731,8 +734,8 @@ impl<T: Eq> Eq for ReplaceSource<T> {}
 #[cfg(test)]
 mod tests {
   use crate::{
-    source_map_source::WithoutOriginalOptions, OriginalSource, RawSource,
-    ReplacementEnforce, SourceExt, SourceMapSource,
+    source_map_source::WithoutOriginalOptions, DecodableMap, OriginalSource,
+    RawSource, ReplacementEnforce, SourceMapSource,
   };
 
   use super::*;
@@ -1122,7 +1125,7 @@ return <div>{data.foo}</div>
 
   #[test]
   fn replace_source_over_a_box_source() {
-    let mut source = ReplaceSource::new(RawSource::from("boxed").boxed());
+    let mut source = ReplaceSource::new(RawSource::from("boxed"));
     source.replace(3, 5, "", None);
     assert_eq!(source.size(), 3);
     assert_eq!(source.source(), "box");
@@ -1142,7 +1145,7 @@ return <div>{data.foo}</div>
 "👨‍👩‍👧‍👧"; url(__PUBLIC_PATH__logo.png);
 "#;
     let mut source =
-      ReplaceSource::new(OriginalSource::new(content, "file.css").boxed());
+      ReplaceSource::new(OriginalSource::new(content, "file.css"));
     for mat in regex::Regex::new("__PUBLIC_PATH__")
       .unwrap()
       .find_iter(content)
@@ -1173,7 +1176,7 @@ return <div>{data.foo}</div>
   fn replace_same_position_with_enforce() {
     // Enforce sort HarmonyExportExpressionDependency after PureExpressionDependency, to generate valid code
     let mut source =
-      ReplaceSource::new(RawSource::from("export default foo;aaa").boxed());
+      ReplaceSource::new(RawSource::from("export default foo;aaa"));
     let mut source2 = source.clone();
     source.replace(18, 19, ");", None);
     source.replace(18, 19, "))", None);

@@ -2,7 +2,7 @@ use std::{
   any::{Any, TypeId},
   borrow::Cow,
   convert::{TryFrom, TryInto},
-  fmt,
+  fmt::Debug,
   hash::{Hash, Hasher},
   sync::Arc,
 };
@@ -25,7 +25,7 @@ pub trait Source:
   + AsAny
   + DynEq
   + DynClone
-  + fmt::Debug
+  + Debug
   + Sync
   + Send
 {
@@ -71,8 +71,6 @@ impl Source for BoxSource {
     self.as_ref().to_writer(writer)
   }
 }
-
-dyn_clone::clone_trait_object!(Source);
 
 impl<'a> StreamChunks<'a> for BoxSource {
   fn stream_chunks(
@@ -185,6 +183,121 @@ impl MapOptions {
   }
 }
 
+/// The `DecodableMap` trait provides function for obtaining the decoded mappings
+pub trait DecodableMap: Sync + Send {
+  /// Get the file field in [SourceMap].
+  fn file(&self) -> Option<&str>;
+
+  /// Get the decoded mappings in [SourceMap].
+  fn decoded_mappings(&self) -> Vec<Mapping>;
+
+  /// Get the mappings string in [SourceMap].
+  fn mappings(&self) -> String;
+
+  /// Get the sources field in [SourceMap].
+  fn sources<'a>(&'a self) -> Box<dyn Iterator<Item = &'a str> + 'a>;
+
+  /// Get the sources field in [SourceMap].
+  fn source(&self, index: usize) -> Option<&str>;
+
+  /// Get the sourcesContent field in [SourceMap].
+  fn sources_content<'a>(&'a self) -> Box<dyn Iterator<Item = &'a str> + 'a>;
+
+  /// Get the sourcesContent field in [SourceMap].
+  fn source_content(&self, index: usize) -> Option<&str>;
+
+  /// Get the names field in [SourceMap].
+  fn names<'a>(&'a self) -> Box<dyn Iterator<Item = &'a str> + 'a>;
+
+  /// Get the names field in [SourceMap].
+  fn name(&self, index: usize) -> Option<&str>;
+
+  /// Get the source_root field in [SourceMap].
+  fn source_root(&self) -> Option<&str>;
+
+  /// Generate source map to a json string.
+  fn to_json(self: Box<Self>) -> Result<String>;
+}
+
+/// An alias for `Box<dyn DecodableMap>`.
+pub type BoxDecodableMap = Box<dyn DecodableMap>;
+
+impl PartialEq for dyn DecodableMap {
+  fn eq(&self, other: &Self) -> bool {
+    self.file() == other.file()
+      && self.mappings() == other.mappings()
+      && self.sources().collect::<Vec<&str>>()
+        == other.sources().collect::<Vec<&str>>()
+      && self.sources_content().collect::<Vec<&str>>()
+        == other.sources_content().collect::<Vec<&str>>()
+      && self.names().collect::<Vec<&str>>()
+        == other.names().collect::<Vec<&str>>()
+      && self.source_root() == other.source_root()
+  }
+}
+
+impl Eq for dyn DecodableMap {}
+
+impl Clone for BoxDecodableMap {
+  fn clone(&self) -> Self {
+    Box::new(SourceMap::new(
+      self.file().map(|file| file.to_string()),
+      self.mappings().to_string(),
+      self
+        .sources()
+        .map(|source| Cow::Owned(source.to_string()))
+        .collect::<Vec<_>>(),
+      self
+        .sources_content()
+        .map(|content| Cow::Owned(content.to_string()))
+        .collect::<Vec<_>>(),
+      self
+        .names()
+        .map(|name| Cow::Owned(name.to_string()))
+        .collect::<Vec<_>>(),
+    ))
+  }
+}
+
+impl Hash for dyn DecodableMap {
+  fn hash<H: Hasher>(&self, state: &mut H) {
+    self.file().hash(state);
+    self.mappings().hash(state);
+    self.sources().for_each(|source| source.hash(state));
+    self
+      .sources_content()
+      .for_each(|content| content.hash(state));
+    self.names().for_each(|name| name.hash(state));
+    self.source_root().hash(state);
+  }
+}
+
+impl Debug for dyn DecodableMap {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    f.debug_struct("BoxDecodableMap")
+      .field("file", &self.file())
+      .finish()
+  }
+}
+
+impl<T: DecodableMap + 'static> From<T> for BoxDecodableMap {
+  fn from(value: T) -> Self {
+    Box::new(value)
+  }
+}
+
+/// Extension methods for [DecodableMap].
+pub trait DecodableMapExt {
+  /// An alias for [BoxDecodableMap::from].
+  fn boxed(self) -> BoxDecodableMap;
+}
+
+impl<T: DecodableMap + 'static> DecodableMapExt for T {
+  fn boxed(self) -> BoxDecodableMap {
+    Box::new(self)
+  }
+}
+
 /// The source map created by [Source::map].
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SourceMap {
@@ -234,11 +347,6 @@ impl SourceMap {
   /// Set the file field in [SourceMap].
   pub fn set_file(&mut self, file: Option<String>) {
     self.file = file;
-  }
-
-  /// Get the decoded mappings in [SourceMap].
-  pub fn decoded_mappings(&self) -> impl Iterator<Item = Mapping> + '_ {
-    decode_mappings(self)
   }
 
   /// Get the mappings string in [SourceMap].
@@ -326,7 +434,57 @@ impl SourceMap {
   }
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+impl DecodableMap for SourceMap {
+  fn file(&self) -> Option<&str> {
+    self.file.as_deref()
+  }
+
+  fn decoded_mappings(&self) -> Vec<Mapping> {
+    decode_mappings(&self.mappings).collect::<Vec<_>>()
+  }
+
+  fn mappings(&self) -> String {
+    self.mappings.to_string()
+  }
+
+  fn sources<'a>(&'a self) -> Box<dyn Iterator<Item = &'a str> + 'a> {
+    Box::new(self.sources.iter().map(|source| source.as_ref()))
+  }
+
+  fn source(&self, index: usize) -> Option<&str> {
+    self.sources.get(index).map(|source| source.as_ref())
+  }
+
+  fn sources_content<'a>(&'a self) -> Box<dyn Iterator<Item = &'a str> + 'a> {
+    Box::new(self.sources_content.iter().map(|content| content.as_ref()))
+  }
+
+  fn source_content(&self, index: usize) -> Option<&str> {
+    self
+      .sources_content
+      .get(index)
+      .map(|content| content.as_ref())
+  }
+
+  fn names<'a>(&'a self) -> Box<dyn Iterator<Item = &'a str> + 'a> {
+    Box::new(self.names.iter().map(|name| name.as_ref()))
+  }
+
+  fn name(&self, index: usize) -> Option<&str> {
+    self.names.get(index).map(|name| name.as_ref())
+  }
+
+  fn source_root(&self) -> Option<&str> {
+    self.source_root.as_deref()
+  }
+
+  fn to_json(self: Box<Self>) -> Result<String> {
+    let raw = RawSourceMap::from(*self);
+    raw.to_json()
+  }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 struct RawSourceMap {
   pub version: Option<u8>,
   #[serde(skip_serializing_if = "Option::is_none")]
@@ -414,14 +572,14 @@ impl TryFrom<RawSourceMap> for SourceMap {
       .sources_content
       .unwrap_or_default()
       .into_iter()
-      .map(|v| v.unwrap_or_default())
+      .map(Option::unwrap_or_default)
       .map(Cow::from)
       .collect();
     let names = raw
       .names
       .unwrap_or_default()
       .into_iter()
-      .map(|v| v.unwrap_or_default())
+      .map(Option::unwrap_or_default)
       .map(Cow::from)
       .collect();
     Ok(Self {
@@ -567,8 +725,8 @@ mod tests {
     ReplaceSource::new(RawSource::from("f")).hash(&mut state);
     RawSource::from("g").boxed().hash(&mut state);
     (&RawSource::from("h") as &dyn Source).hash(&mut state);
-    ReplaceSource::new(RawSource::from("i").boxed()).hash(&mut state);
-    assert_eq!(format!("{:x}", state.finish()), "8163b42b7cb1d8f0");
+    ReplaceSource::new(RawSource::from("i")).hash(&mut state);
+    assert_eq!(format!("{:x}", state.finish()), "537e65c8b3655fc6");
   }
 
   #[test]
@@ -612,6 +770,10 @@ mod tests {
       CachedSource::new(RawSource::from("j").boxed()),
       CachedSource::new(RawSource::from("j").boxed())
     );
+    let source = CachedSource::new(ConcatSource::new([ReplaceSource::new(
+      RawSource::from("// Entry point for tests\n"),
+    )]));
+    assert_eq!(source == source, true);
   }
 
   #[test]

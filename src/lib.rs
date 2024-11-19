@@ -21,8 +21,8 @@ pub use original_source::OriginalSource;
 pub use raw_source::RawSource;
 pub use replace_source::{ReplaceSource, ReplacementEnforce};
 pub use source::{
-  BoxSource, MapOptions, Mapping, OriginalLocation, Source, SourceExt,
-  SourceMap,
+  BoxDecodableMap, BoxSource, DecodableMap, DecodableMapExt, MapOptions,
+  Mapping, OriginalLocation, Source, SourceExt, SourceMap,
 };
 pub use source_map_source::{
   SourceMapSource, SourceMapSourceOptions, WithoutOriginalOptions,
@@ -35,3 +35,5 @@ pub mod stream_chunks {
     StreamChunks,
   };
 }
+
+pub use helpers::{decode_mappings, encode_mappings};

@@ -8,40 +8,45 @@ use crate::{
     get_map, stream_chunks_of_combined_source_map, stream_chunks_of_source_map,
     StreamChunks,
   },
-  MapOptions, Source, SourceMap,
+  BoxDecodableMap, DecodableMap, MapOptions, Source, SourceMap,
 };
 
 /// Options for [SourceMapSource::new].
-#[derive(Debug, Clone, Default)]
-pub struct SourceMapSourceOptions<V, N> {
+pub struct SourceMapSourceOptions<
+  V,
+  N,
+  M1: Into<BoxDecodableMap>,
+  M2: Into<BoxDecodableMap>,
+> {
   /// The source code.
   pub value: V,
   /// Name of the file.
   pub name: N,
   /// The source map of the source code.
-  pub source_map: SourceMap,
+  pub source_map: M1,
   /// The original source code.
   pub original_source: Option<String>,
   /// The original source map.
-  pub inner_source_map: Option<SourceMap>,
+  pub inner_source_map: Option<M2>,
   /// Whether remove the original source.
   pub remove_original_source: bool,
 }
 
 /// An convenient options for [SourceMapSourceOptions], `original_source` and
 /// `inner_source_map` will be `None`, `remove_original_source` will be false.
-#[derive(Debug, Clone)]
-pub struct WithoutOriginalOptions<V, N> {
+pub struct WithoutOriginalOptions<V, N, M: Into<BoxDecodableMap>> {
   /// The source code.
   pub value: V,
   /// Name of the file.
   pub name: N,
   /// The source map of the source code.
-  pub source_map: SourceMap,
+  pub source_map: M,
 }
 
-impl<V, N> From<WithoutOriginalOptions<V, N>> for SourceMapSourceOptions<V, N> {
-  fn from(options: WithoutOriginalOptions<V, N>) -> Self {
+impl<V, N, M: Into<BoxDecodableMap>> From<WithoutOriginalOptions<V, N, M>>
+  for SourceMapSourceOptions<V, N, M, M>
+{
+  fn from(options: WithoutOriginalOptions<V, N, M>) -> Self {
     Self {
       value: options.value,
       name: options.name,
@@ -57,31 +62,32 @@ impl<V, N> From<WithoutOriginalOptions<V, N>> for SourceMapSourceOptions<V, N> {
 /// source map for the original source.
 ///
 /// - [webpack-sources docs](https://github.com/webpack/webpack-sources/#sourcemapsource).
-#[derive(Clone, Eq)]
 pub struct SourceMapSource {
   value: String,
   name: String,
-  source_map: SourceMap,
+  source_map: Box<dyn DecodableMap>,
   original_source: Option<String>,
-  inner_source_map: Option<SourceMap>,
+  inner_source_map: Option<Box<dyn DecodableMap>>,
   remove_original_source: bool,
 }
 
 impl SourceMapSource {
   /// Create a [SourceMapSource] with [SourceMapSourceOptions].
-  pub fn new<V, N, O>(options: O) -> Self
+  pub fn new<V, N, M1, M2, O>(options: O) -> Self
   where
     V: Into<String>,
     N: Into<String>,
-    O: Into<SourceMapSourceOptions<V, N>>,
+    M1: Into<BoxDecodableMap>,
+    M2: Into<BoxDecodableMap>,
+    O: Into<SourceMapSourceOptions<V, N, M1, M2>>,
   {
     let options = options.into();
     Self {
       value: options.value.into(),
       name: options.name.into(),
-      source_map: options.source_map,
+      source_map: options.source_map.into(),
       original_source: options.original_source,
-      inner_source_map: options.inner_source_map,
+      inner_source_map: options.inner_source_map.map(Into::into),
       remove_original_source: options.remove_original_source,
     }
   }
@@ -102,7 +108,25 @@ impl Source for SourceMapSource {
 
   fn map(&self, options: &MapOptions) -> Option<SourceMap> {
     if self.inner_source_map.is_none() {
-      return Some(self.source_map.clone());
+      return Some(SourceMap::new(
+        self.source_map.file().map(|file| file.to_string()),
+        self.source_map.mappings().to_string(),
+        self
+          .source_map
+          .sources()
+          .map(|source| Cow::from(source.to_string()))
+          .collect::<Vec<_>>(),
+        self
+          .source_map
+          .sources_content()
+          .map(|content| Cow::from(content.to_string()))
+          .collect::<Vec<_>>(),
+        self
+          .source_map
+          .names()
+          .map(|name| Cow::from(name.to_string()))
+          .collect::<Vec<_>>(),
+      ));
     }
     get_map(self, options)
   }
@@ -125,12 +149,30 @@ impl Hash for SourceMapSource {
 
 impl PartialEq for SourceMapSource {
   fn eq(&self, other: &Self) -> bool {
+    if std::ptr::eq(self, other) {
+      return true;
+    }
     self.value == other.value
       && self.name == other.name
-      && self.source_map == other.source_map
+      && *self.source_map == *other.source_map
       && self.original_source == other.original_source
       && self.inner_source_map == other.inner_source_map
       && self.remove_original_source == other.remove_original_source
+  }
+}
+
+impl Eq for SourceMapSource {}
+
+impl Clone for SourceMapSource {
+  fn clone(&self) -> Self {
+    Self {
+      value: self.value.clone(),
+      name: self.name.clone(),
+      source_map: self.source_map.clone(),
+      original_source: self.original_source.clone(),
+      inner_source_map: self.inner_source_map.clone(),
+      remove_original_source: self.remove_original_source,
+    }
   }
 }
 
@@ -157,10 +199,10 @@ impl<'a> StreamChunks<'a> for SourceMapSource {
     if let Some(inner_source_map) = &self.inner_source_map {
       stream_chunks_of_combined_source_map(
         &self.value,
-        &self.source_map,
+        self.source_map.as_ref(),
         &self.name,
         self.original_source.as_deref(),
-        inner_source_map,
+        inner_source_map.as_ref(),
         self.remove_original_source,
         on_chunk,
         on_source,
@@ -170,7 +212,7 @@ impl<'a> StreamChunks<'a> for SourceMapSource {
     } else {
       stream_chunks_of_source_map(
         &self.value,
-        &self.source_map,
+        self.source_map.as_ref(),
         on_chunk,
         on_source,
         on_name,
@@ -183,8 +225,8 @@ impl<'a> StreamChunks<'a> for SourceMapSource {
 #[cfg(test)]
 mod tests {
   use crate::{
-    CachedSource, ConcatSource, OriginalSource, RawSource, ReplaceSource,
-    SourceExt,
+    source::DecodableMapExt, CachedSource, ConcatSource, OriginalSource,
+    RawSource, ReplaceSource, SourceExt,
   };
 
   use super::*;
@@ -215,7 +257,9 @@ mod tests {
       name: "text",
       source_map: source_r_map.clone(),
       original_source: Some(inner_source.source().to_string()),
-      inner_source_map: inner_source.map(&MapOptions::default()),
+      inner_source_map: inner_source
+        .map(&MapOptions::default())
+        .map(|source_map| Box::new(source_map) as Box<dyn DecodableMap>),
       remove_original_source: false,
     });
     let sms2 = SourceMapSource::new(SourceMapSourceOptions {
@@ -223,7 +267,9 @@ mod tests {
       name: "text",
       source_map: source_r_map,
       original_source: Some(inner_source.source().to_string()),
-      inner_source_map: inner_source.map(&MapOptions::default()),
+      inner_source_map: inner_source
+        .map(&MapOptions::default())
+        .map(|source_map| Box::new(source_map) as Box<dyn DecodableMap>),
       remove_original_source: true,
     });
     let expected_content =
@@ -262,7 +308,7 @@ mod tests {
 
     let mut hasher = twox_hash::XxHash64::default();
     sms1.hash(&mut hasher);
-    assert_eq!(format!("{:x}", hasher.finish()), "d136621583d4618c");
+    assert_eq!(format!("{:x}", hasher.finish()), "adeae438c02c143a");
   }
 
   #[test]
@@ -346,12 +392,18 @@ mod tests {
       "/tests/fixtures/es6-promise.map"
     )))
     .unwrap();
-    let inner = SourceMapSource::new(WithoutOriginalOptions {
-      value: code,
-      name: "es6-promise.js",
-      source_map: map,
-    });
-    let source = ConcatSource::new([inner.clone(), inner]);
+    let source = ConcatSource::new([
+      SourceMapSource::new(WithoutOriginalOptions {
+        value: code,
+        name: "es6-promise.js",
+        source_map: map.clone(),
+      }),
+      SourceMapSource::new(WithoutOriginalOptions {
+        value: code,
+        name: "es6-promise.js",
+        source_map: map,
+      }),
+    ]);
     assert_eq!(source.source(), format!("{code}{code}"));
   }
 
@@ -586,7 +638,7 @@ mod tests {
     let source = SourceMapSource::new(WithoutOriginalOptions {
       value: "console.log('a')\n",
       name: "a.js",
-      source_map: original.map(&MapOptions::new(false)).unwrap(),
+      source_map: original.map(&MapOptions::new(false)).unwrap().boxed(),
     });
     let source = ConcatSource::new([
       RawSource::from("\n").boxed(),

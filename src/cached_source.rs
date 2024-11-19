@@ -152,7 +152,7 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks<'_>
       }
       Entry::Vacant(entry) => {
         let (generated_info, map) = stream_and_get_source_and_map(
-          &self.inner as &T,
+          self.inner.as_ref(),
           options,
           on_chunk,
           on_source,
@@ -185,7 +185,10 @@ impl<T: Hash> Hash for CachedSource<T> {
 
 impl<T: PartialEq> PartialEq for CachedSource<T> {
   fn eq(&self, other: &Self) -> bool {
-    self.inner == other.inner
+    if std::ptr::eq(self, other) {
+      return true;
+    }
+    *self.inner == *other.inner
   }
 }
 
@@ -197,7 +200,7 @@ impl<T: std::fmt::Debug> std::fmt::Debug for CachedSource<T> {
     f: &mut std::fmt::Formatter<'_>,
   ) -> Result<(), std::fmt::Error> {
     f.debug_struct("CachedSource")
-      .field("inner", self.inner.as_ref())
+      .field("inner", &self.inner)
       .field("cached_buffer", &self.cached_buffer.get().is_some())
       .field("cached_source", &self.cached_source.get().is_some())
       .field("cached_maps", &(!self.cached_maps.is_empty()))

@@ -137,6 +137,9 @@ impl Hash for RawSource {
 
 impl PartialEq for RawSource {
   fn eq(&self, other: &Self) -> bool {
+    if std::ptr::eq(self, other) {
+      return true;
+    }
     match (&self.value, &other.value) {
       (RawValue::Buffer(l0), RawValue::Buffer(r0)) => l0 == r0,
       (RawValue::String(l0), RawValue::String(r0)) => l0 == r0,
@@ -203,7 +206,7 @@ mod tests {
   // Fix https://github.com/web-infra-dev/rspack/issues/6793
   #[test]
   fn fix_rspack_issue_6793() {
-    let source1 = RawSource::from("hello\n\n".to_string());
+    let source1 = RawSource::from("hello\n\n".to_string()).boxed();
     let source1 = ReplaceSource::new(source1);
     let source2 = OriginalSource::new("world".to_string(), "world.txt");
     let concat = ConcatSource::new([source1.boxed(), source2.boxed()]);

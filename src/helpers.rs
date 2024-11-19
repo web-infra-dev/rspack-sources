@@ -11,7 +11,7 @@ use crate::{
   linear_map::LinearMap,
   source::{Mapping, OriginalLocation},
   with_indices::WithIndices,
-  MapOptions, SourceMap,
+  DecodableMap, MapOptions, SourceMap,
 };
 
 // Adding this type because sourceContentLine not happy
@@ -113,10 +113,16 @@ pub struct GeneratedInfo {
   pub generated_column: u32,
 }
 
-pub fn decode_mappings(
-  source_map: &SourceMap,
-) -> impl Iterator<Item = Mapping> + '_ {
-  MappingsDecoder::new(source_map.mappings())
+/// Decodes the given mappings string into an iterator of `Mapping` items.
+pub fn decode_mappings(mappings: &str) -> impl Iterator<Item = Mapping> + '_ {
+  MappingsDecoder::new(mappings)
+}
+
+/// Encodes the given iterator of `Mapping` items into a `String`.
+pub fn encode_mappings(mappings: impl Iterator<Item = Mapping>) -> String {
+  let mut encoder = create_encoder(true);
+  mappings.for_each(|mapping| encoder.encode(&mapping));
+  encoder.drain()
 }
 
 pub struct PotentialTokens<'a> {
@@ -267,7 +273,7 @@ pub fn stream_chunks_of_raw_source<'a>(
 
 pub fn stream_chunks_of_source_map<'a>(
   source: &'a str,
-  source_map: &'a SourceMap,
+  source_map: &'a dyn DecodableMap,
   on_chunk: OnChunk<'_, 'a>,
   on_source: OnSource<'_, 'a>,
   on_name: OnName<'_, 'a>,
@@ -301,7 +307,10 @@ pub fn stream_chunks_of_source_map<'a>(
   }
 }
 
-fn get_source<'a>(source_map: &SourceMap, source: &'a str) -> Cow<'a, str> {
+fn get_source<'a>(
+  source_map: &dyn DecodableMap,
+  source: &'a str,
+) -> Cow<'a, str> {
   let source_root = source_map.source_root();
   match source_root {
     Some(root) if root.is_empty() => Cow::Borrowed(source),
@@ -315,7 +324,7 @@ fn get_source<'a>(source_map: &SourceMap, source: &'a str) -> Cow<'a, str> {
 
 fn stream_chunks_of_source_map_final<'a>(
   source: &'a str,
-  source_map: &'a SourceMap,
+  source_map: &'a dyn DecodableMap,
   on_chunk: OnChunk,
   on_source: OnSource<'_, 'a>,
   on_name: OnName<'_, 'a>,
@@ -324,14 +333,14 @@ fn stream_chunks_of_source_map_final<'a>(
   if result.generated_line == 1 && result.generated_column == 0 {
     return result;
   }
-  for (i, source) in source_map.sources().iter().enumerate() {
+  for (i, source) in source_map.sources().enumerate() {
     on_source(
       i as u32,
       get_source(source_map, source),
-      source_map.get_source_content(i),
+      source_map.source_content(i),
     )
   }
-  for (i, name) in source_map.names().iter().enumerate() {
+  for (i, name) in source_map.names().enumerate() {
     on_name(i as u32, Cow::Borrowed(name));
   }
   let mut mapping_active_line = 0;
@@ -371,28 +380,28 @@ fn stream_chunks_of_source_map_final<'a>(
 
 fn stream_chunks_of_source_map_full<'a>(
   source: &'a str,
-  source_map: &'a SourceMap,
+  source_map: &'a dyn DecodableMap,
   on_chunk: OnChunk<'_, 'a>,
   on_source: OnSource<'_, 'a>,
   on_name: OnName<'_, 'a>,
 ) -> GeneratedInfo {
   let lines = split_into_lines(source);
   let line_with_indices_list = lines.map(WithIndices::new).collect::<Vec<_>>();
-
   if line_with_indices_list.is_empty() {
     return GeneratedInfo {
       generated_line: 1,
       generated_column: 0,
     };
   }
-  for (i, source) in source_map.sources().iter().enumerate() {
+
+  for (i, source) in source_map.sources().enumerate() {
     on_source(
       i as u32,
       get_source(source_map, source),
-      source_map.get_source_content(i),
+      source_map.source_content(i),
     )
   }
-  for (i, name) in source_map.names().iter().enumerate() {
+  for (i, name) in source_map.names().enumerate() {
     on_name(i as u32, Cow::Borrowed(name));
   }
   let last_line = line_with_indices_list[line_with_indices_list.len() - 1].line;
@@ -519,7 +528,7 @@ fn stream_chunks_of_source_map_full<'a>(
 
 fn stream_chunks_of_source_map_lines_final<'a>(
   source: &'a str,
-  source_map: &'a SourceMap,
+  source_map: &'a dyn DecodableMap,
   on_chunk: OnChunk,
   on_source: OnSource<'_, 'a>,
   _on_name: OnName,
@@ -531,11 +540,11 @@ fn stream_chunks_of_source_map_lines_final<'a>(
       generated_column: 0,
     };
   }
-  for (i, source) in source_map.sources().iter().enumerate() {
+  for (i, source) in source_map.sources().enumerate() {
     on_source(
       i as u32,
       get_source(source_map, source),
-      source_map.get_source_content(i),
+      source_map.source_content(i),
     )
   }
   let final_line = if result.generated_column == 0 {
@@ -564,7 +573,7 @@ fn stream_chunks_of_source_map_lines_final<'a>(
 
 fn stream_chunks_of_source_map_lines_full<'a>(
   source: &'a str,
-  source_map: &'a SourceMap,
+  source_map: &'a dyn DecodableMap,
   on_chunk: OnChunk<'_, 'a>,
   on_source: OnSource<'_, 'a>,
   _on_name: OnName,
@@ -576,11 +585,11 @@ fn stream_chunks_of_source_map_lines_full<'a>(
       generated_column: 0,
     };
   }
-  for (i, source) in source_map.sources().iter().enumerate() {
+  for (i, source) in source_map.sources().enumerate() {
     on_source(
       i as u32,
       get_source(source_map, source),
-      source_map.get_source_content(i),
+      source_map.source_content(i),
     )
   }
   let mut current_generated_line = 1;
@@ -658,10 +667,10 @@ type InnerSourceIndexValueMapping<'a> =
 #[allow(clippy::too_many_arguments)]
 pub fn stream_chunks_of_combined_source_map<'a>(
   source: &'a str,
-  source_map: &'a SourceMap,
+  source_map: &'a dyn DecodableMap,
   inner_source_name: &'a str,
   inner_source: Option<&'a str>,
-  inner_source_map: &'a SourceMap,
+  inner_source_map: &'a dyn DecodableMap,
   remove_inner_source: bool,
   on_chunk: OnChunk<'_, 'a>,
   on_source: OnSource<'_, 'a>,
