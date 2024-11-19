@@ -25,7 +25,7 @@ pub fn encode_vlq(out: &mut Vec<u8>, a: u32, b: u32) {
 
 pub(crate) trait MappingsEncoder {
   fn encode(&mut self, mapping: &Mapping);
-  fn drain(self: Box<Self>) -> String;
+  fn drain(&mut self) -> String;
 }
 
 pub fn create_encoder(columns: bool) -> Box<dyn MappingsEncoder> {
@@ -147,10 +147,10 @@ impl MappingsEncoder for FullMappingsEncoder {
   }
 
   #[allow(unsafe_code)]
-  fn drain(self: Box<Self>) -> String {
+  fn drain(&mut self) -> String {
     unsafe {
       // SAFETY: The `mappings` field in the source map consists solely of ASCII characters.
-      String::from_utf8_unchecked(self.mappings)
+      String::from_utf8_unchecked(std::mem::take(&mut self.mappings))
     }
   }
 }
@@ -227,10 +227,10 @@ impl MappingsEncoder for LinesOnlyMappingsEncoder {
   }
 
   #[allow(unsafe_code)]
-  fn drain(self: Box<Self>) -> String {
+  fn drain(&mut self) -> String {
     unsafe {
       // SAFETY: The `mappings` field in the source map consists solely of ASCII characters.
-      String::from_utf8_unchecked(self.mappings)
+      String::from_utf8_unchecked(std::mem::take(&mut self.mappings))
     }
   }
 }

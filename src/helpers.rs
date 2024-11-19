@@ -113,10 +113,18 @@ pub struct GeneratedInfo {
   pub generated_column: u32,
 }
 
+/// Decodes the given mappings string into an iterator of `Mapping` items.
 pub fn decode_mappings(
   source_map: &SourceMap,
 ) -> impl Iterator<Item = Mapping> + '_ {
   MappingsDecoder::new(source_map.mappings())
+}
+
+/// Encodes the given iterator of `Mapping` items into a `String`.
+pub fn encode_mappings(mappings: impl Iterator<Item = Mapping>) -> String {
+  let mut encoder = create_encoder(true);
+  mappings.for_each(|mapping| encoder.encode(&mapping));
+  encoder.drain()
 }
 
 pub struct PotentialTokens<'a> {
