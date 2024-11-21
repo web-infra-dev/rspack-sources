@@ -18,8 +18,8 @@ use crate::{
 type InnerSourceContentLine<'a> =
   RefCell<LinearMap<OnceCell<Option<Vec<WithIndices<'a>>>>>>;
 
-pub fn get_map<'a, S: StreamChunks<'a>>(
-  stream: &'a S,
+pub fn get_map<'a>(
+  stream: &'a dyn StreamChunks<'a>,
   options: &'a MapOptions,
 ) -> Option<SourceMap> {
   let mut mappings_encoder = create_encoder(options.columns);
@@ -1141,8 +1141,8 @@ pub fn stream_chunks_of_combined_source_map<'a>(
   )
 }
 
-pub fn stream_and_get_source_and_map<'a, S: StreamChunks<'a>>(
-  input_source: &'a S,
+pub fn stream_and_get_source_and_map<'a>(
+  input_source: &'a dyn StreamChunks<'a>,
   options: &MapOptions,
   on_chunk: OnChunk<'_, 'a>,
   on_source: OnSource<'_, 'a>,
