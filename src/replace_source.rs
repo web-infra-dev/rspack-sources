@@ -114,12 +114,6 @@ impl<T> ReplaceSource<T> {
 }
 
 impl<T: Source> ReplaceSource<T> {
-  fn get_inner_source_code(&self) -> &str {
-    self
-      .inner_source_code
-      .get_or_init(|| Box::from(self.inner.source()))
-  }
-
   /// Insert a content at start.
   pub fn insert(&mut self, start: u32, content: &str, name: Option<&str>) {
     self.replace(start, start, content, name)
@@ -178,7 +172,7 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for ReplaceSource<T> {
   fn source(&self) -> Cow<str> {
     self.sort_replacement();
 
-    let inner_source_code = self.get_inner_source_code();
+    let inner_source_code = self.inner.source();
 
     // mut_string_push_str is faster that vec join
     // concatenate strings benchmark, see https://github.com/hoodie/concatenation_benchmarks-rs
