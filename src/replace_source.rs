@@ -4,7 +4,7 @@ use std::{
   hash::{Hash, Hasher},
   sync::{
     atomic::{AtomicBool, Ordering},
-    Arc, Mutex, MutexGuard, OnceLock,
+    Arc, Mutex, MutexGuard,
   },
 };
 
@@ -37,7 +37,6 @@ use crate::{
 /// ```
 pub struct ReplaceSource<T> {
   inner: Arc<T>,
-  inner_source_code: OnceLock<Box<str>>,
   replacements: Mutex<Vec<Replacement>>,
   /// Whether `replacements` is sorted.
   is_sorted: AtomicBool,
@@ -87,7 +86,6 @@ impl<T> ReplaceSource<T> {
   pub fn new(source: T) -> Self {
     Self {
       inner: Arc::new(source),
-      inner_source_code: OnceLock::new(),
       replacements: Mutex::new(Vec::new()),
       is_sorted: AtomicBool::new(true),
     }
@@ -234,13 +232,6 @@ impl<T: std::fmt::Debug> std::fmt::Debug for ReplaceSource<T> {
   ) -> Result<(), std::fmt::Error> {
     f.debug_struct("ReplaceSource")
       .field("inner", self.inner.as_ref())
-      .field(
-        "inner_source_code",
-        &self
-          .inner_source_code
-          .get()
-          .map(|s| s.chars().take(50).collect::<String>()),
-      )
       .field(
         "replacements",
         &self.replacements.lock().iter().take(3).collect::<Vec<_>>(),
@@ -696,7 +687,6 @@ impl<T: Source> Clone for ReplaceSource<T> {
   fn clone(&self) -> Self {
     Self {
       inner: self.inner.clone(),
-      inner_source_code: self.inner_source_code.clone(),
       replacements: Mutex::new(self.replacements().clone()),
       is_sorted: AtomicBool::new(self.is_sorted.load(Ordering::SeqCst)),
     }
