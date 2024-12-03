@@ -23,9 +23,9 @@ pub fn get_map<'a, S: StreamChunks<'a>>(
   options: &'a MapOptions,
 ) -> Option<SourceMap> {
   let mut mappings_encoder = create_encoder(options.columns);
-  let mut sources: Vec<Cow<'static, str>> = Vec::new();
-  let mut sources_content: Vec<Cow<'static, str>> = Vec::new();
-  let mut names: Vec<Cow<'static, str>> = Vec::new();
+  let mut sources: Vec<String> = Vec::new();
+  let mut sources_content: Vec<String> = Vec::new();
+  let mut names: Vec<String> = Vec::new();
 
   stream.stream_chunks(
     &MapOptions {
@@ -40,28 +40,28 @@ pub fn get_map<'a, S: StreamChunks<'a>>(
     &mut |source_index, source, source_content| {
       let source_index = source_index as usize;
       if sources.len() <= source_index {
-        sources.resize(source_index + 1, Cow::Borrowed(""));
+        sources.resize(source_index + 1, "".to_string());
       }
-      sources[source_index] = source.to_string().into();
+      sources[source_index] = source.to_string();
       if let Some(source_content) = source_content {
         if sources_content.len() <= source_index {
-          sources_content.resize(source_index + 1, Cow::Borrowed(""));
+          sources_content.resize(source_index + 1, "".to_string());
         }
-        sources_content[source_index] = source_content.to_string().into();
+        sources_content[source_index] = source_content.to_string();
       }
     },
     // on_name
     &mut |name_index, name| {
       let name_index = name_index as usize;
       if names.len() <= name_index {
-        names.resize(name_index + 1, Cow::Borrowed(""));
+        names.resize(name_index + 1, "".to_string());
       }
-      names[name_index] = name.to_string().into();
+      names[name_index] = name.to_string();
     },
   );
   let mappings = mappings_encoder.drain();
   (!mappings.is_empty())
-    .then(|| SourceMap::new(None, mappings, sources, sources_content, names))
+    .then(|| SourceMap::new(mappings, sources, sources_content, names))
 }
 
 /// [StreamChunks] abstraction, see [webpack-sources source.streamChunks](https://github.com/webpack/webpack-sources/blob/9f98066311d53a153fdc7c633422a1d086528027/lib/helpers/streamChunks.js#L13).
@@ -1149,9 +1149,9 @@ pub fn stream_and_get_source_and_map<'a, S: StreamChunks<'a>>(
   on_name: OnName<'_, 'a>,
 ) -> (GeneratedInfo, Option<SourceMap>) {
   let mut mappings_encoder = create_encoder(options.columns);
-  let mut sources: Vec<Cow<'static, str>> = Vec::new();
-  let mut sources_content: Vec<Cow<'static, str>> = Vec::new();
-  let mut names: Vec<Cow<'static, str>> = Vec::new();
+  let mut sources: Vec<String> = Vec::new();
+  let mut sources_content: Vec<String> = Vec::new();
+  let mut names: Vec<String> = Vec::new();
 
   let generated_info = input_source.stream_chunks(
     options,
@@ -1164,12 +1164,12 @@ pub fn stream_and_get_source_and_map<'a, S: StreamChunks<'a>>(
       while sources.len() <= source_index2 {
         sources.push("".into());
       }
-      sources[source_index2] = source.to_string().into();
+      sources[source_index2] = source.to_string();
       if let Some(source_content) = source_content {
         while sources_content.len() <= source_index2 {
           sources_content.push("".into());
         }
-        sources_content[source_index2] = source_content.to_string().into();
+        sources_content[source_index2] = source_content.to_string();
       }
       on_source(source_index, source, source_content);
     },
@@ -1178,7 +1178,7 @@ pub fn stream_and_get_source_and_map<'a, S: StreamChunks<'a>>(
       while names.len() <= name_index2 {
         names.push("".into());
       }
-      names[name_index2] = name.to_string().into();
+      names[name_index2] = name.to_string();
       on_name(name_index, name);
     },
   );
@@ -1187,13 +1187,7 @@ pub fn stream_and_get_source_and_map<'a, S: StreamChunks<'a>>(
   let map = if mappings.is_empty() {
     None
   } else {
-    Some(SourceMap::new(
-      None,
-      mappings,
-      sources,
-      sources_content,
-      names,
-    ))
+    Some(SourceMap::new(mappings, sources, sources_content, names))
   };
   (generated_info, map)
 }

@@ -12,7 +12,7 @@ use crate::{
 };
 
 /// Options for [SourceMapSource::new].
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct SourceMapSourceOptions<V, N> {
   /// The source code.
   pub value: V,
@@ -271,7 +271,6 @@ mod tests {
       value: "hello world\n",
       name: "hello.txt",
       source_map: SourceMap::new(
-        None,
         "AAAA".to_string(),
         vec!["".into()],
         vec!["".into()],
@@ -281,19 +280,12 @@ mod tests {
     let b = SourceMapSource::new(WithoutOriginalOptions {
       value: "hello world\n",
       name: "hello.txt",
-      source_map: SourceMap::new(
-        None,
-        "AAAA".to_string(),
-        vec![],
-        vec![],
-        vec![],
-      ),
+      source_map: SourceMap::new("AAAA".to_string(), vec![], vec![], vec![]),
     });
     let c = SourceMapSource::new(WithoutOriginalOptions {
       value: "hello world\n",
       name: "hello.txt",
       source_map: SourceMap::new(
-        None,
         "AAAA".to_string(),
         vec!["hello-source.txt".into()],
         vec!["hello world\n".into()],
@@ -361,7 +353,6 @@ mod tests {
       value: "hello\n",
       name: "a",
       source_map: SourceMap::new(
-        None,
         "AAAA;AACA".to_string(),
         vec!["hello1".into()],
         vec![],
@@ -372,7 +363,6 @@ mod tests {
       value: "hi",
       name: "b",
       source_map: SourceMap::new(
-        None,
         "AAAA,EAAE".to_string(),
         vec!["hello2".into()],
         vec![],
@@ -383,7 +373,6 @@ mod tests {
       value: "hi",
       name: "b",
       source_map: SourceMap::new(
-        None,
         "AAAA,EAAE".to_string(),
         vec!["hello3".into()],
         vec![],
@@ -394,7 +383,6 @@ mod tests {
       value: "",
       name: "c",
       source_map: SourceMap::new(
-        None,
         "AAAA".to_string(),
         vec!["hello4".into()],
         vec![],
