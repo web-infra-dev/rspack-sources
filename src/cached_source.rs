@@ -52,7 +52,6 @@ pub struct CachedSource<T> {
   inner: Arc<T>,
   cached_buffer: Arc<OnceLock<Vec<u8>>>,
   cached_source: Arc<OnceLock<Arc<str>>>,
-  cached_size: Arc<OnceLock<usize>>,
   cached_maps:
     Arc<DashMap<MapOptions, Option<SourceMap>, BuildHasherDefault<FxHasher>>>,
 }
@@ -64,7 +63,6 @@ impl<T> CachedSource<T> {
       inner: Arc::new(inner),
       cached_buffer: Default::default(),
       cached_source: Default::default(),
-      cached_size: Default::default(),
       cached_maps: Default::default(),
     }
   }
@@ -91,14 +89,11 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
   }
 
   fn size(&self) -> usize {
-    let cached = self.cached_size.get_or_init(|| {
-      let source = self.cached_source.get();
-      match source {
-        Some(source) => source.len(),
-        None => self.inner.size(),
-      }
-    });
-    *cached
+    let source = self.cached_source.get();
+    match source {
+      Some(source) => source.len(),
+      None => self.inner.size(),
+    }
   }
 
   fn map(&self, options: &MapOptions) -> Option<SourceMap> {
@@ -171,7 +166,6 @@ impl<T: Source> Clone for CachedSource<T> {
       inner: self.inner.clone(),
       cached_buffer: self.cached_buffer.clone(),
       cached_source: self.cached_source.clone(),
-      cached_size: self.cached_size.clone(),
       cached_maps: self.cached_maps.clone(),
     }
   }
@@ -254,7 +248,6 @@ mod tests {
       *clone.cached_buffer.get().unwrap(),
       source.buffer().to_vec()
     );
-    assert_eq!(*clone.cached_size.get().unwrap(), source.size());
     assert_eq!(
       *clone.cached_maps.get(&map_options).unwrap().value(),
       source.map(&map_options)
