@@ -46,10 +46,10 @@ impl RawSource {
   /// use rspack_sources::{RawSource, Source};
   ///
   /// let code = "some source code";
-  /// let s = RawSource::const_new(code);
+  /// let s = RawSource::from_static(code);
   /// assert_eq!(s.source(), code);
   /// ```
-  pub fn const_new(s: &'static str) -> Self {
+  pub fn from_static(s: &'static str) -> Self {
     Self {
       value: RawValue::String(Cow::Borrowed(s)),
       value_as_string: Default::default(),
