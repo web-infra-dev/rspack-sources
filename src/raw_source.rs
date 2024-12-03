@@ -18,6 +18,9 @@ enum RawValue {
   String(Cow<'static, str>),
 }
 
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+static_assertions::assert_eq_size!(RawValue, [u8; 32]);
+
 /// Represents source code without source map, it will not create source map for the source code.
 ///
 /// - [webpack-sources docs](https://github.com/webpack/webpack-sources/#rawsource).
