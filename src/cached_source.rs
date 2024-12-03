@@ -224,8 +224,7 @@ mod tests {
         value: "\nconsole.log(1);\n".to_string(),
         name: "index.js".to_string(),
         source_map: SourceMap::new(
-          None,
-          ";AACA".to_string(),
+          ";AACA",
           vec!["index.js".into()],
           vec!["// DELETE IT\nconsole.log(1)".into()],
           vec![],
