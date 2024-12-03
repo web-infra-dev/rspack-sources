@@ -374,6 +374,12 @@ impl SourceMap {
     let json = simd_json::serde::to_string(&self)?;
     Ok(json)
   }
+
+  /// Generate source map to writer.
+  pub fn to_writer<W: std::io::Write>(self, w: W) -> Result<()> {
+    simd_json::serde::to_writer(w, &self)?;
+    Ok(())
+  }
 }
 
 impl TryFrom<RawSourceMap> for SourceMap {
