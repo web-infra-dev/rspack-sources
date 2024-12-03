@@ -280,12 +280,7 @@ mod tests {
     let b = SourceMapSource::new(WithoutOriginalOptions {
       value: "hello world\n",
       name: "hello.txt",
-      source_map: SourceMap::new(
-        "AAAA".to_string(),
-        vec![],
-        vec![],
-        vec![],
-      ),
+      source_map: SourceMap::new("AAAA".to_string(), vec![], vec![], vec![]),
     });
     let c = SourceMapSource::new(WithoutOriginalOptions {
       value: "hello world\n",

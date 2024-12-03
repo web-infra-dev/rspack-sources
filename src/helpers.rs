@@ -42,12 +42,12 @@ pub fn get_map<'a, S: StreamChunks<'a>>(
       if sources.len() <= source_index {
         sources.resize(source_index + 1, "".to_string());
       }
-      sources[source_index] = source.to_string().into();
+      sources[source_index] = source.to_string();
       if let Some(source_content) = source_content {
         if sources_content.len() <= source_index {
           sources_content.resize(source_index + 1, "".to_string());
         }
-        sources_content[source_index] = source_content.to_string().into();
+        sources_content[source_index] = source_content.to_string();
       }
     },
     // on_name
@@ -56,7 +56,7 @@ pub fn get_map<'a, S: StreamChunks<'a>>(
       if names.len() <= name_index {
         names.resize(name_index + 1, "".to_string());
       }
-      names[name_index] = name.to_string().into();
+      names[name_index] = name.to_string();
     },
   );
   let mappings = mappings_encoder.drain();
@@ -1164,12 +1164,12 @@ pub fn stream_and_get_source_and_map<'a, S: StreamChunks<'a>>(
       while sources.len() <= source_index2 {
         sources.push("".into());
       }
-      sources[source_index2] = source.to_string().into();
+      sources[source_index2] = source.to_string();
       if let Some(source_content) = source_content {
         while sources_content.len() <= source_index2 {
           sources_content.push("".into());
         }
-        sources_content[source_index2] = source_content.to_string().into();
+        sources_content[source_index2] = source_content.to_string();
       }
       on_source(source_index, source, source_content);
     },
@@ -1178,7 +1178,7 @@ pub fn stream_and_get_source_and_map<'a, S: StreamChunks<'a>>(
       while names.len() <= name_index2 {
         names.push("".into());
       }
-      names[name_index2] = name.to_string().into();
+      names[name_index2] = name.to_string();
       on_name(name_index, name);
     },
   );
@@ -1187,12 +1187,7 @@ pub fn stream_and_get_source_and_map<'a, S: StreamChunks<'a>>(
   let map = if mappings.is_empty() {
     None
   } else {
-    Some(SourceMap::new(
-      mappings,
-      sources,
-      sources_content,
-      names,
-    ))
+    Some(SourceMap::new(mappings, sources, sources_content, names))
   };
   (generated_info, map)
 }

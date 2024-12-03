@@ -284,7 +284,10 @@ impl SourceMap {
   }
 
   /// Set the sourcesContent field in [SourceMap].
-  pub fn set_sources_content<T: Into<Arc<[String]>>>(&mut self, sources_content: T) {
+  pub fn set_sources_content<T: Into<Arc<[String]>>>(
+    &mut self,
+    sources_content: T,
+  ) {
     self.sources_content = sources_content.into();
   }
 
