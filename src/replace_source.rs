@@ -175,6 +175,9 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for ReplaceSource<T> {
     // mut_string_push_str is faster that vec join
     // concatenate strings benchmark, see https://github.com/hoodie/concatenation_benchmarks-rs
     let replacements = self.replacements.lock().unwrap();
+    if replacements.is_empty() {
+      return inner_source_code;
+    }
     let max_len = replacements
       .iter()
       .map(|replacement| replacement.content.len())
