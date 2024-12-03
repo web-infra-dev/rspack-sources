@@ -187,7 +187,7 @@ impl MapOptions {
 
 fn is_all_empty(val: &Arc<[String]>) -> bool {
   if val.is_empty() {
-    return false;
+    return true;
   }
   val.iter().all(|s| s.is_empty())
 }
