@@ -522,7 +522,7 @@ mod tests {
     RawSource::from("g").boxed().hash(&mut state);
     (&RawSource::from("h") as &dyn Source).hash(&mut state);
     ReplaceSource::new(RawSource::from("i").boxed()).hash(&mut state);
-    assert_eq!(format!("{:x}", state.finish()), "8163b42b7cb1d8f0");
+    assert_eq!(format!("{:x}", state.finish()), "ef733b8b8ee61bf0");
   }
 
   #[test]

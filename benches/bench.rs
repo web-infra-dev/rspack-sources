@@ -1,5 +1,7 @@
 #![allow(missing_docs)]
 
+use std::collections::HashMap;
+
 #[cfg(not(codspeed))]
 pub use criterion::*;
 
@@ -7,8 +9,8 @@ pub use criterion::*;
 pub use codspeed_criterion_compat::*;
 
 use rspack_sources::{
-  CachedSource, ConcatSource, MapOptions, ReplaceSource, Source, SourceMap,
-  SourceMapSource, SourceMapSourceOptions,
+  BoxSource, CachedSource, ConcatSource, MapOptions, ReplaceSource, Source,
+  SourceExt, SourceMap, SourceMapSource, SourceMapSourceOptions,
 };
 
 const HELLOWORLD_JS: &str = include_str!(concat!(
@@ -195,6 +197,61 @@ fn benchmark_replace_large_minified_source(b: &mut Bencher) {
   });
 }
 
+fn benchmark_concat_generate_string_with_cache_as_key(b: &mut Bencher) {
+  let sms_minify = SourceMapSource::new(SourceMapSourceOptions {
+    value: HELLOWORLD_MIN_JS,
+    name: "helloworld.min.js",
+    source_map: SourceMap::from_json(HELLOWORLD_MIN_JS_MAP).unwrap(),
+    original_source: Some(HELLOWORLD_JS.to_string()),
+    inner_source_map: Some(SourceMap::from_json(HELLOWORLD_JS_MAP).unwrap()),
+    remove_original_source: false,
+  });
+  let sms_rollup = SourceMapSource::new(SourceMapSourceOptions {
+    value: BUNDLE_JS,
+    name: "bundle.js",
+    source_map: SourceMap::from_json(BUNDLE_JS_MAP).unwrap(),
+    original_source: None,
+    inner_source_map: None,
+    remove_original_source: false,
+  });
+  let concat = ConcatSource::new([sms_minify, sms_rollup]);
+  let cached = CachedSource::new(concat).boxed();
+
+  b.iter(|| {
+    let mut m = HashMap::<BoxSource, ()>::new();
+    m.insert(cached.clone(), ());
+    let _ = black_box(|| m.get(&cached));
+    let _ = black_box(|| m.get(&cached));
+  })
+}
+
+fn benchmark_concat_generate_string_as_key(b: &mut Bencher) {
+  let sms_minify = SourceMapSource::new(SourceMapSourceOptions {
+    value: HELLOWORLD_MIN_JS,
+    name: "helloworld.min.js",
+    source_map: SourceMap::from_json(HELLOWORLD_MIN_JS_MAP).unwrap(),
+    original_source: Some(HELLOWORLD_JS.to_string()),
+    inner_source_map: Some(SourceMap::from_json(HELLOWORLD_JS_MAP).unwrap()),
+    remove_original_source: false,
+  });
+  let sms_rollup = SourceMapSource::new(SourceMapSourceOptions {
+    value: BUNDLE_JS,
+    name: "bundle.js",
+    source_map: SourceMap::from_json(BUNDLE_JS_MAP).unwrap(),
+    original_source: None,
+    inner_source_map: None,
+    remove_original_source: false,
+  });
+  let concat = ConcatSource::new([sms_minify, sms_rollup]).boxed();
+
+  b.iter(|| {
+    let mut m = HashMap::<BoxSource, ()>::new();
+    m.insert(concat.clone(), ());
+    let _ = black_box(|| m.get(&concat));
+    let _ = black_box(|| m.get(&concat));
+  })
+}
+
 fn bench_rspack_sources(criterion: &mut Criterion) {
   let mut group = criterion.benchmark_group("rspack_sources");
   group.bench_function(
@@ -212,6 +269,14 @@ fn bench_rspack_sources(criterion: &mut Criterion) {
   group.bench_function(
     "replace_large_minified_source",
     benchmark_replace_large_minified_source,
+  );
+  group.bench_function(
+    "concat_generate_string_with_cache_as_key",
+    benchmark_concat_generate_string_with_cache_as_key,
+  );
+  group.bench_function(
+    "concat_generate_string_as_key",
+    benchmark_concat_generate_string_as_key,
   );
   group.finish();
 }
