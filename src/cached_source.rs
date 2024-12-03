@@ -1,6 +1,6 @@
 use std::{
   borrow::Cow,
-  hash::{BuildHasherDefault, Hash},
+  hash::{BuildHasherDefault, Hash, Hasher},
   sync::{Arc, OnceLock},
 };
 
@@ -52,6 +52,7 @@ pub struct CachedSource<T> {
   inner: Arc<T>,
   cached_buffer: Arc<OnceLock<Vec<u8>>>,
   cached_source: Arc<OnceLock<Arc<str>>>,
+  cached_hash: Arc<OnceLock<u64>>,
   cached_maps:
     Arc<DashMap<MapOptions, Option<SourceMap>, BuildHasherDefault<FxHasher>>>,
 }
@@ -63,6 +64,7 @@ impl<T> CachedSource<T> {
       inner: Arc::new(inner),
       cached_buffer: Default::default(),
       cached_source: Default::default(),
+      cached_hash: Default::default(),
       cached_maps: Default::default(),
     }
   }
@@ -89,11 +91,7 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
   }
 
   fn size(&self) -> usize {
-    let source = self.cached_source.get();
-    match source {
-      Some(source) => source.len(),
-      None => self.inner.size(),
-    }
+    self.source().len()
   }
 
   fn map(&self, options: &MapOptions) -> Option<SourceMap> {
@@ -160,20 +158,26 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks<'_>
   }
 }
 
-impl<T: Source> Clone for CachedSource<T> {
+impl<T> Clone for CachedSource<T> {
   fn clone(&self) -> Self {
     Self {
       inner: self.inner.clone(),
       cached_buffer: self.cached_buffer.clone(),
       cached_source: self.cached_source.clone(),
+      cached_hash: self.cached_hash.clone(),
       cached_maps: self.cached_maps.clone(),
     }
   }
 }
 
-impl<T: Hash> Hash for CachedSource<T> {
+impl<T: Source + Hash + PartialEq + Eq + 'static> Hash for CachedSource<T> {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-    self.inner.hash(state);
+    (self.cached_hash.get_or_init(|| {
+      let mut hasher = FxHasher::default();
+      hasher.write(self.source().as_bytes());
+      hasher.finish()
+    }))
+    .hash(state);
   }
 }
 
