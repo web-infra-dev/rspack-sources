@@ -15,7 +15,7 @@ use crate::{
 #[derive(Clone, PartialEq, Eq)]
 enum RawValue {
   Buffer(Vec<u8>),
-  String(String),
+  String(Cow<'static, str>),
 }
 
 /// Represents source code without source map, it will not create source map for the source code.
@@ -34,6 +34,24 @@ enum RawValue {
 pub struct RawSource {
   value: RawValue,
   value_as_string: OnceLock<String>,
+}
+
+impl RawSource {
+  /// Create a new [RawSource] from a static &str.
+  ///
+  /// ```
+  /// use rspack_sources::{RawSource, Source};
+  ///
+  /// let code = "some source code";
+  /// let s = RawSource::const_new(code);
+  /// assert_eq!(s.source(), code);
+  /// ```
+  pub fn const_new(s: &'static str) -> Self {
+    Self {
+      value: RawValue::String(Cow::Borrowed(s)),
+      value_as_string: Default::default(),
+    }
+  }
 }
 
 impl Clone for RawSource {
@@ -57,7 +75,7 @@ impl RawSource {
 impl From<String> for RawSource {
   fn from(value: String) -> Self {
     Self {
-      value: RawValue::String(value),
+      value: RawValue::String(value.into()),
       value_as_string: Default::default(),
     }
   }
@@ -75,7 +93,7 @@ impl From<Vec<u8>> for RawSource {
 impl From<&str> for RawSource {
   fn from(value: &str) -> Self {
     Self {
-      value: RawValue::String(value.to_string()),
+      value: RawValue::String(value.to_string().into()),
       value_as_string: Default::default(),
     }
   }
