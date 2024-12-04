@@ -112,10 +112,7 @@ impl Source for ConcatSource {
   fn buffer(&self) -> Cow<[u8]> {
     let children = self.children();
     if children.len() == 1 {
-      match children[0].source() {
-        Cow::Borrowed(source) => Cow::Borrowed(source.as_bytes()),
-        Cow::Owned(source) => Cow::Owned(source.into_bytes()),
-      }
+      children[0].buffer()
     } else {
       let all = children
         .iter()
