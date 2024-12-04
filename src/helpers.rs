@@ -456,7 +456,7 @@ fn stream_chunks_of_source_map_full<'a>(
           [(current_generated_line - 1) as usize]
           .substring(current_generated_column as usize, usize::MAX);
         on_chunk(
-          Some(Cow::Owned(chunk.to_string())),
+          Some(Cow::Borrowed(chunk)),
           Mapping {
             generated_line: current_generated_line,
             generated_column: current_generated_column,
@@ -472,7 +472,7 @@ fn stream_chunks_of_source_map_full<'a>(
         let chunk =
           line_with_indices_list[(current_generated_line as usize) - 1].line;
         on_chunk(
-          Some(Cow::Owned(chunk.to_string())),
+          Some(Cow::Borrowed(chunk)),
           Mapping {
             generated_line: current_generated_line,
             generated_column: 0,

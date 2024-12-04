@@ -100,18 +100,30 @@ impl ConcatSource {
 
 impl Source for ConcatSource {
   fn source(&self) -> Cow<str> {
-    let all = self.children().iter().map(|child| child.source()).collect();
-    Cow::Owned(all)
+    let children = self.children();
+    if children.len() == 1 {
+      children[0].source()
+    } else {
+      let all = self.children().iter().map(|child| child.source()).collect();
+      Cow::Owned(all)
+    }
   }
 
   fn buffer(&self) -> Cow<[u8]> {
-    let all = self
-      .children()
-      .iter()
-      .map(|child| child.buffer())
-      .collect::<Vec<_>>()
-      .concat();
-    Cow::Owned(all)
+    let children = self.children();
+    if children.len() == 1 {
+      match children[0].source() {
+        Cow::Borrowed(source) => Cow::Borrowed(source.as_bytes()),
+        Cow::Owned(source) => Cow::Owned(source.into_bytes()),
+      }
+    } else {
+      let all = children
+        .iter()
+        .map(|child| child.buffer())
+        .collect::<Vec<_>>()
+        .concat();
+      Cow::Owned(all)
+    }
   }
 
   fn size(&self) -> usize {

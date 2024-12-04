@@ -206,10 +206,9 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for ReplaceSource<T> {
   }
 
   fn buffer(&self) -> Cow<[u8]> {
-    let source = self.source();
-    match source {
+    match self.source() {
       Cow::Borrowed(s) => Cow::Borrowed(s.as_bytes()),
-      Cow::Owned(s) => Cow::Owned(s.to_string().into_bytes()),
+      Cow::Owned(s) => Cow::Owned(s.into_bytes()),
     }
   }
 
@@ -410,10 +409,17 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
           if next_replacement_pos > pos {
             // Emit chunk until replacement
             let offset = next_replacement_pos - pos;
-            let chunk_slice =
-              &chunk[chunk_pos as usize..(chunk_pos + offset) as usize];
+            let chunk_slice = match &chunk {
+              Cow::Borrowed(c) => Cow::Borrowed(
+                &c[chunk_pos as usize..(chunk_pos + offset) as usize],
+              ),
+              Cow::Owned(c) => Cow::Owned(
+                c[chunk_pos as usize..(chunk_pos + offset) as usize]
+                  .to_string(),
+              ),
+            };
             on_chunk(
-              Some(Cow::Owned(chunk_slice.to_string())),
+              Some(chunk_slice.clone()),
               Mapping {
                 generated_line: line as u32,
                 generated_column: ((mapping.generated_column as i64)
@@ -443,7 +449,7 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
                   original.source_index,
                   original.original_line,
                   original.original_column,
-                  chunk_slice,
+                  &chunk_slice,
                 )
               })
             {
@@ -590,9 +596,7 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
           } else {
             match chunk {
               Cow::Borrowed(c) => Cow::Borrowed(&c[chunk_pos as usize..]),
-              Cow::Owned(c) => {
-                Cow::Owned(c[chunk_pos as usize..].to_string())
-              },
+              Cow::Owned(c) => Cow::Owned(c[chunk_pos as usize..].to_string()),
             }
           };
           let line = mapping.generated_line as i64 + generated_line_offset;
