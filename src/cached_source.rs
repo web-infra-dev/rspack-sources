@@ -57,7 +57,7 @@ pub struct CachedSource {
   cached_source: Arc<OnceLock<Arc<str>>>,
   cached_hash: Arc<OnceLock<u64>>,
   cached_maps:
-    Arc<DashMap<MapOptions, Option<SourceMap>, BuildHasherDefault<FxHasher>>>,
+    Arc<DashMap<bool, Option<SourceMap>, BuildHasherDefault<FxHasher>>>,
 }
 
 impl CachedSource {
@@ -145,7 +145,7 @@ impl CachedSource {
     } else {
       Some(SourceMap::new(mappings, sources, sources_content, names))
     };
-    self.cached_maps.insert(options.clone(), map);
+    self.cached_maps.insert(options.columns, map);
     generated_info
   }
 }
@@ -170,11 +170,11 @@ impl Source for CachedSource {
   }
 
   fn map(&self, options: &MapOptions) -> Option<SourceMap> {
-    if let Some(map) = self.cached_maps.get(options) {
+    if let Some(map) = self.cached_maps.get(&options.columns) {
       map.clone()
     } else {
       let map = self.inner.map(options);
-      self.cached_maps.insert(options.clone(), map.clone());
+      self.cached_maps.insert(options.columns, map.clone());
       map
     }
   }
@@ -192,7 +192,7 @@ impl StreamChunks<'_> for CachedSource {
     on_source: crate::helpers::OnSource<'_, 'a>,
     on_name: crate::helpers::OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {
-    if let Some(cache) = self.cached_maps.get(&options) {
+    if let Some(cache) = self.cached_maps.get(&options.columns) {
       let source = self
       .cached_source
       .get_or_init(|| self.inner.source().into());
@@ -321,7 +321,7 @@ mod tests {
       source.buffer().to_vec()
     );
     assert_eq!(
-      *clone.cached_maps.get(&map_options).unwrap().value(),
+      *clone.cached_maps.get(&map_options.columns).unwrap().value(),
       source.map(&map_options)
     );
   }
