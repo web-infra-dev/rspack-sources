@@ -206,8 +206,10 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for ReplaceSource<T> {
   }
 
   fn buffer(&self) -> Cow<[u8]> {
-    let source = self.source().to_string();
-    Cow::Owned(source.into_bytes())
+    match self.source() {
+      Cow::Borrowed(s) => Cow::Borrowed(s.as_bytes()),
+      Cow::Owned(s) => Cow::Owned(s.into_bytes()),
+    }
   }
 
   fn size(&self) -> usize {
@@ -407,10 +409,17 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
           if next_replacement_pos > pos {
             // Emit chunk until replacement
             let offset = next_replacement_pos - pos;
-            let chunk_slice =
-              &chunk[chunk_pos as usize..(chunk_pos + offset) as usize];
+            let chunk_slice = match &chunk {
+              Cow::Borrowed(c) => Cow::Borrowed(
+                &c[chunk_pos as usize..(chunk_pos + offset) as usize],
+              ),
+              Cow::Owned(c) => Cow::Owned(
+                c[chunk_pos as usize..(chunk_pos + offset) as usize]
+                  .to_string(),
+              ),
+            };
             on_chunk(
-              Some(Cow::Owned(chunk_slice.to_string())),
+              Some(chunk_slice.clone()),
               Mapping {
                 generated_line: line as u32,
                 generated_column: ((mapping.generated_column as i64)
@@ -440,7 +449,7 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
                   original.source_index,
                   original.original_line,
                   original.original_column,
-                  chunk_slice,
+                  &chunk_slice,
                 )
               })
             {
@@ -448,8 +457,12 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
             }
           }
           // Insert replacement content split into chunks by lines
+          #[allow(unsafe_code)]
+          // SAFETY: The safety of this operation relies on the fact that the `ReplaceSource` type will not delete the `replacements` during its entire lifetime.
+          let repl = unsafe {
+            std::mem::transmute::<&Replacement, &'a Replacement>(&repls[i])
+          };
 
-          let repl = &repls[i];
           let lines: Vec<&str> = split_into_lines(&repl.content).collect();
           let mut replacement_name_index = mapping
             .original
@@ -463,14 +476,14 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
             if global_index.is_none() {
               let len = name_mapping.len() as u32;
               name_mapping.insert(Cow::Borrowed(name), len);
-              on_name.borrow_mut()(len, Cow::Owned(name.to_string()));
+              on_name.borrow_mut()(len, Cow::Borrowed(name));
               global_index = Some(len);
             }
             replacement_name_index = global_index;
           }
           for (m, content_line) in lines.iter().enumerate() {
             on_chunk(
-              Some(Cow::Owned(content_line.to_string())),
+              Some(Cow::Borrowed(content_line)),
               Mapping {
                 generated_line: line as u32,
                 generated_column: ((mapping.generated_column as i64)
@@ -581,7 +594,10 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
           let chunk_slice = if chunk_pos == 0 {
             chunk
           } else {
-            Cow::Owned(chunk[chunk_pos as usize..].to_string())
+            match chunk {
+              Cow::Borrowed(c) => Cow::Borrowed(&c[chunk_pos as usize..]),
+              Cow::Owned(c) => Cow::Owned(c[chunk_pos as usize..].to_string()),
+            }
           };
           let line = mapping.generated_line as i64 + generated_line_offset;
           on_chunk(
