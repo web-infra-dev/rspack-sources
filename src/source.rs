@@ -486,8 +486,8 @@ mod tests {
   use std::collections::HashMap;
 
   use crate::{
-    CachedSource, ConcatSource, OriginalSource, RawSource, ReplaceSource,
-    SourceMapSource, WithoutOriginalOptions,
+    CachedSource, ConcatSource, OriginalSource, RawBufferSource, RawSource,
+    RawStringSource, ReplaceSource, SourceMapSource, WithoutOriginalOptions,
   };
 
   use super::*;
@@ -520,14 +520,24 @@ mod tests {
     CachedSource::new(RawSource::from("e")).hash(&mut state);
     ReplaceSource::new(RawSource::from("f")).hash(&mut state);
     RawSource::from("g").boxed().hash(&mut state);
+    RawStringSource::from_static("a").hash(&mut state);
+    RawBufferSource::from("a".as_bytes()).hash(&mut state);
     (&RawSource::from("h") as &dyn Source).hash(&mut state);
     ReplaceSource::new(RawSource::from("i").boxed()).hash(&mut state);
-    assert_eq!(format!("{:x}", state.finish()), "ef733b8b8ee61bf0");
+    assert_eq!(format!("{:x}", state.finish()), "709931db47fa47dc");
   }
 
   #[test]
   fn eq_available() {
     assert_eq!(RawSource::from("a"), RawSource::from("a"));
+    assert_eq!(
+      RawStringSource::from_static("a"),
+      RawStringSource::from_static("a")
+    );
+    assert_eq!(
+      RawBufferSource::from("a".as_bytes()),
+      RawBufferSource::from("a".as_bytes())
+    );
     assert_eq!(OriginalSource::new("b", ""), OriginalSource::new("b", ""));
     assert_eq!(
       SourceMapSource::new(WithoutOriginalOptions {
@@ -569,7 +579,7 @@ mod tests {
   }
 
   #[test]
-  #[allow(clippy::clone_double_ref)]
+  #[allow(suspicious_double_ref_op)]
   fn clone_available() {
     let a = RawSource::from("a");
     assert_eq!(a, a.clone());
@@ -595,6 +605,10 @@ mod tests {
     assert_eq!(i, i.clone());
     let j = CachedSource::new(RawSource::from("j").boxed());
     assert_eq!(j, j.clone());
+    let k = RawStringSource::from_static("k");
+    assert_eq!(k, k.clone());
+    let l = RawBufferSource::from("l".as_bytes());
+    assert_eq!(l, l.clone());
   }
 
   #[test]
@@ -606,7 +620,7 @@ mod tests {
   }
 
   #[test]
-  #[allow(clippy::clone_double_ref)]
+  #[allow(suspicious_double_ref_op)]
   fn ref_dyn_source_use_hashmap_available() {
     let mut map = HashMap::new();
     let a = &RawSource::from("a") as &dyn Source;

@@ -18,7 +18,7 @@ pub use cached_source::CachedSource;
 pub use concat_source::ConcatSource;
 pub use error::{Error, Result};
 pub use original_source::OriginalSource;
-pub use raw_source::RawSource;
+pub use raw_source::{RawBufferSource, RawSource, RawStringSource};
 pub use replace_source::{ReplaceSource, ReplacementEnforce};
 pub use source::{
   BoxSource, MapOptions, Mapping, OriginalLocation, Source, SourceExt,
