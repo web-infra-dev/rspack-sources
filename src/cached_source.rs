@@ -1,19 +1,17 @@
 use std::{
   borrow::Cow,
-  cell::UnsafeCell,
   hash::{BuildHasherDefault, Hash, Hasher},
-  sync::{Arc, Mutex, OnceLock, RwLock},
+  sync::{Arc, Mutex, OnceLock},
 };
 
-use dashmap::{mapref::entry::Entry, DashMap};
+use dashmap::DashMap;
 use rustc_hash::FxHasher;
 
 use crate::{
   encoder::create_encoder,
   helpers::{
-    stream_and_get_source_and_map, stream_chunks_of_raw_source,
-    stream_chunks_of_source_map, GeneratedInfo, OnChunk, OnName, OnSource,
-    StreamChunks,
+    stream_chunks_of_raw_source, stream_chunks_of_source_map, GeneratedInfo,
+    OnChunk, OnName, OnSource, StreamChunks,
   },
   BoxSource, MapOptions, Source, SourceMap,
 };
@@ -52,7 +50,7 @@ use crate::{
 /// );
 /// ```
 pub struct CachedSource {
-  inner: BoxSource,
+  inner: Arc<Mutex<Option<BoxSource>>>,
   cached_buffer: Arc<OnceLock<Vec<u8>>>,
   cached_source: Arc<OnceLock<Arc<str>>>,
   cached_hash: Arc<OnceLock<u64>>,
@@ -64,7 +62,7 @@ impl CachedSource {
   /// Create a [CachedSource] with the original [Source].
   pub fn new<T: Source + 'static>(inner: T) -> Self {
     Self {
-      inner: Arc::new(inner),
+      inner: Arc::new(Mutex::new(Some(Arc::new(inner)))),
       cached_buffer: Default::default(),
       cached_source: Default::default(),
       cached_hash: Default::default(),
@@ -82,10 +80,12 @@ impl CachedSource {
   ) -> GeneratedInfo {
     let code = self
       .cached_source
-      .get_or_init(|| self.inner.source().into());
+      .get_or_init(|| input_source.source().into());
     let mut code_start = 0;
     let mut code_end = 0;
-  
+
+    self.cached_buffer.get_or_init(|| code.as_bytes().to_vec());
+
     let mut mappings_encoder = create_encoder(options.columns);
     let mut sources: Vec<String> = Vec::new();
     let mut sources_content: Vec<String> = Vec::new();
@@ -121,7 +121,9 @@ impl CachedSource {
         };
         #[allow(unsafe_code)]
         let source_content = unsafe {
-          std::mem::transmute::<&String, &'a String>(&sources_content[source_index2])
+          std::mem::transmute::<&String, &'a String>(
+            &sources_content[source_index2],
+          )
         };
         on_source(source_index, Cow::Borrowed(source), Some(source_content));
       },
@@ -146,22 +148,35 @@ impl CachedSource {
       Some(SourceMap::new(mappings, sources, sources_content, names))
     };
     self.cached_maps.insert(options.columns, map);
+
     generated_info
+  }
+
+  fn try_separate(&self, original: &mut Option<BoxSource>) {
+    if self.cached_buffer.get().is_some()
+      && self.cached_hash.get().is_some()
+      && self.cached_maps.get(&true).is_some()
+      && self.cached_source.get().is_some()
+    {
+      original.take();
+    }
   }
 }
 
 impl Source for CachedSource {
   fn source(&self) -> Cow<str> {
-    let cached = self
-      .cached_source
-      .get_or_init(|| self.inner.source().into());
+    let cached = self.cached_source.get_or_init(|| {
+      let original = self.inner.lock().unwrap();
+      original.as_ref().unwrap().source().into()
+    });
     Cow::Borrowed(cached)
   }
 
   fn buffer(&self) -> Cow<[u8]> {
-    let cached = self
-      .cached_buffer
-      .get_or_init(|| self.inner.buffer().to_vec());
+    let cached = self.cached_buffer.get_or_init(|| {
+      let original = self.inner.lock().unwrap();
+      original.as_ref().unwrap().buffer().into()
+    });
     Cow::Borrowed(cached)
   }
 
@@ -173,14 +188,11 @@ impl Source for CachedSource {
     if let Some(map) = self.cached_maps.get(&options.columns) {
       map.clone()
     } else {
-      let map = self.inner.map(options);
+      let original = self.inner.lock().unwrap();
+      let map = original.as_ref().unwrap().map(options);
       self.cached_maps.insert(options.columns, map.clone());
       map
     }
-  }
-
-  fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
-    self.inner.to_writer(writer)
   }
 }
 
@@ -193,9 +205,10 @@ impl StreamChunks<'_> for CachedSource {
     on_name: crate::helpers::OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {
     if let Some(cache) = self.cached_maps.get(&options.columns) {
-      let source = self
-      .cached_source
-      .get_or_init(|| self.inner.source().into());
+      let source = self.cached_source.get_or_init(|| {
+        let original = self.inner.lock().unwrap();
+        original.as_ref().unwrap().source().into()
+      });
       if let Some(map) = cache.as_ref() {
         #[allow(unsafe_code)]
         // SAFETY: We guarantee that once a `SourceMap` is stored in the cache, it will never be removed.
@@ -214,13 +227,15 @@ impl StreamChunks<'_> for CachedSource {
         )
       }
     } else {
+      let mut original = self.inner.lock().unwrap();
       let generated_info = self.stream_and_get_source_and_map(
-        &self.inner,
+        original.as_ref().unwrap(),
         options,
         on_chunk,
         on_source,
         on_name,
       );
+      self.try_separate(&mut original);
       generated_info
     }
   }
@@ -240,18 +255,21 @@ impl Clone for CachedSource {
 
 impl Hash for CachedSource {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-    (self.cached_hash.get_or_init(|| {
+    let mut original = self.inner.lock().unwrap();
+    let result = (self.cached_hash.get_or_init(|| {
       let mut hasher = FxHasher::default();
-      hasher.write(self.source().as_bytes());
+      original.as_ref().unwrap().hash(&mut hasher);
       hasher.finish()
     }))
     .hash(state);
+    self.try_separate(&mut original);
+    result
   }
 }
 
 impl PartialEq for CachedSource {
   fn eq(&self, other: &Self) -> bool {
-    self.inner.as_ref() == other.inner.as_ref()
+    std::ptr::eq(self, other)
   }
 }
 

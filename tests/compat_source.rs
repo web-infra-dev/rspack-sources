@@ -27,10 +27,6 @@ impl Source for CompatSource {
   fn map(&self, _options: &MapOptions) -> Option<SourceMap> {
     self.1.clone()
   }
-
-  fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
-    writer.write_all(self.0.as_bytes())
-  }
 }
 
 impl<'a> StreamChunks<'a> for CompatSource {
