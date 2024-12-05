@@ -1,10 +1,9 @@
 use std::{
   borrow::Cow,
-  hash::{BuildHasherDefault, Hash, Hasher},
+  hash::{Hash, Hasher},
   sync::{Arc, Mutex, OnceLock},
 };
 
-use dashmap::DashMap;
 use rustc_hash::FxHasher;
 
 use crate::{
@@ -50,23 +49,24 @@ use crate::{
 /// );
 /// ```
 pub struct CachedSource {
-  inner: Arc<Mutex<Option<BoxSource>>>,
+  inner: Mutex<Option<BoxSource>>,
   cached_buffer: Arc<OnceLock<Vec<u8>>>,
   cached_source: Arc<OnceLock<Arc<str>>>,
   cached_hash: Arc<OnceLock<u64>>,
-  cached_maps:
-    Arc<DashMap<bool, Option<SourceMap>, BuildHasherDefault<FxHasher>>>,
+  cached_full_map: Arc<OnceLock<Option<SourceMap>>>,
+  cached_lines_only_map: Arc<OnceLock<Option<SourceMap>>>,
 }
 
 impl CachedSource {
   /// Create a [CachedSource] with the original [Source].
   pub fn new<T: Source + 'static>(inner: T) -> Self {
     Self {
-      inner: Arc::new(Mutex::new(Some(Arc::new(inner)))),
+      inner: Mutex::new(Some(Arc::new(inner))),
       cached_buffer: Default::default(),
       cached_source: Default::default(),
       cached_hash: Default::default(),
-      cached_maps: Default::default(),
+      cached_full_map: Default::default(),
+      cached_lines_only_map: Default::default(),
     }
   }
 
@@ -147,19 +147,14 @@ impl CachedSource {
     } else {
       Some(SourceMap::new(mappings, sources, sources_content, names))
     };
-    self.cached_maps.insert(options.columns, map);
+
+    if options.columns {
+      self.cached_full_map.get_or_init(|| map);
+    } else {
+      self.cached_lines_only_map.get_or_init(|| map);
+    }
 
     generated_info
-  }
-
-  fn try_separate(&self, original: &mut Option<BoxSource>) {
-    if self.cached_buffer.get().is_some()
-      && self.cached_hash.get().is_some()
-      && self.cached_maps.get(&true).is_some()
-      && self.cached_source.get().is_some()
-    {
-      original.take();
-    }
   }
 }
 
@@ -173,10 +168,19 @@ impl Source for CachedSource {
   }
 
   fn buffer(&self) -> Cow<[u8]> {
-    let cached = self.cached_buffer.get_or_init(|| {
-      let original = self.inner.lock().unwrap();
-      original.as_ref().unwrap().buffer().into()
-    });
+    let mut original = self.inner.lock().unwrap();
+
+    let cached = self
+      .cached_buffer
+      .get_or_init(|| original.as_ref().unwrap().buffer().into());
+
+    if self.cached_hash.get().is_some()
+      && self.cached_full_map.get().is_some()
+      && self.cached_source.get().is_some()
+    {
+      original.take();
+    }
+
     Cow::Borrowed(cached)
   }
 
@@ -185,13 +189,45 @@ impl Source for CachedSource {
   }
 
   fn map(&self, options: &MapOptions) -> Option<SourceMap> {
-    if let Some(map) = self.cached_maps.get(&options.columns) {
-      map.clone()
+    let mut original = self.inner.lock().unwrap();
+
+    if options.columns {
+      self
+        .cached_full_map
+        .get_or_init(|| {
+          let map = original.as_ref().unwrap().map(options);
+
+          if self.cached_buffer.get().is_some()
+            && self.cached_source.get().is_some()
+            && self.cached_hash.get().is_some()
+          {
+            original.take();
+          }
+
+          map
+        })
+        .clone()
     } else {
-      let original = self.inner.lock().unwrap();
-      let map = original.as_ref().unwrap().map(options);
-      self.cached_maps.insert(options.columns, map.clone());
-      map
+      self
+        .cached_lines_only_map
+        .get_or_init(|| {
+          if let Some(map) = self.cached_full_map.get() {
+            if let Some(map) = map {
+              let mut lines_only_map = map.clone();
+              let mut mappings_encoder = create_encoder(options.columns);
+              map
+                .decoded_mappings()
+                .for_each(|mapping| mappings_encoder.encode(&mapping));
+              lines_only_map.set_mappings(mappings_encoder.drain());
+              Some(lines_only_map)
+            } else {
+              None
+            }
+          } else {
+            original.as_ref().unwrap().map(options)
+          }
+        })
+        .clone()
     }
   }
 }
@@ -204,12 +240,17 @@ impl StreamChunks<'_> for CachedSource {
     on_source: crate::helpers::OnSource<'_, 'a>,
     on_name: crate::helpers::OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {
-    if let Some(cache) = self.cached_maps.get(&options.columns) {
+    let cache = if options.columns {
+      &self.cached_full_map
+    } else {
+      &self.cached_lines_only_map
+    };
+    if let Some(map) = cache.get() {
       let source = self.cached_source.get_or_init(|| {
         let original = self.inner.lock().unwrap();
         original.as_ref().unwrap().source().into()
       });
-      if let Some(map) = cache.as_ref() {
+      if let Some(map) = map.as_ref() {
         #[allow(unsafe_code)]
         // SAFETY: We guarantee that once a `SourceMap` is stored in the cache, it will never be removed.
         // Therefore, even if we force its lifetime to be longer, the reference remains valid.
@@ -228,6 +269,7 @@ impl StreamChunks<'_> for CachedSource {
       }
     } else {
       let mut original = self.inner.lock().unwrap();
+
       let generated_info = self.stream_and_get_source_and_map(
         original.as_ref().unwrap(),
         options,
@@ -235,20 +277,16 @@ impl StreamChunks<'_> for CachedSource {
         on_source,
         on_name,
       );
-      self.try_separate(&mut original);
-      generated_info
-    }
-  }
-}
 
-impl Clone for CachedSource {
-  fn clone(&self) -> Self {
-    Self {
-      inner: self.inner.clone(),
-      cached_buffer: self.cached_buffer.clone(),
-      cached_source: self.cached_source.clone(),
-      cached_hash: self.cached_hash.clone(),
-      cached_maps: self.cached_maps.clone(),
+      if self.cached_buffer.get().is_some()
+        && options.columns
+        && self.cached_source.get().is_some()
+        && self.cached_hash.get().is_some()
+      {
+        original.take();
+      }
+
+      generated_info
     }
   }
 }
@@ -256,20 +294,34 @@ impl Clone for CachedSource {
 impl Hash for CachedSource {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
     let mut original = self.inner.lock().unwrap();
-    let result = (self.cached_hash.get_or_init(|| {
+
+    (self.cached_hash.get_or_init(|| {
       let mut hasher = FxHasher::default();
       original.as_ref().unwrap().hash(&mut hasher);
       hasher.finish()
     }))
     .hash(state);
-    self.try_separate(&mut original);
-    result
+
+    if self.cached_buffer.get().is_some()
+      && self.cached_full_map.get().is_some()
+      && self.cached_source.get().is_some()
+    {
+      original.take();
+    }
   }
 }
 
 impl PartialEq for CachedSource {
   fn eq(&self, other: &Self) -> bool {
-    std::ptr::eq(self, other)
+    if std::ptr::eq(self, other) {
+      return true;
+    }
+    self.cached_buffer.get() == other.cached_buffer.get()
+      && self.cached_full_map.get() == other.cached_full_map.get()
+      && self.cached_lines_only_map.get() == other.cached_lines_only_map.get()
+      && self.cached_source.get() == other.cached_source.get()
+      && self.cached_hash.get() == other.cached_hash.get()
+      && *self.inner.lock().unwrap() == *other.inner.lock().unwrap()
   }
 }
 
@@ -284,15 +336,17 @@ impl std::fmt::Debug for CachedSource {
       .field("inner", &self.inner)
       .field("cached_buffer", &self.cached_buffer.get().is_some())
       .field("cached_source", &self.cached_source.get().is_some())
-      .field("cached_maps", &(!self.cached_maps.is_empty()))
+      .field("cached_full_map", &(self.cached_full_map.get().is_some()))
+      .field(
+        "cached_lines_only_map",
+        &(self.cached_lines_only_map.get().is_some()),
+      )
       .finish()
   }
 }
 
 #[cfg(test)]
 mod tests {
-  use std::borrow::Borrow;
-
   use crate::{
     ConcatSource, OriginalSource, RawSource, SourceExt, SourceMapSource,
     WithoutOriginalOptions,
@@ -318,30 +372,6 @@ mod tests {
     ]);
     let map = source.map(&Default::default()).unwrap();
     assert_eq!(map.mappings(), ";;AACA");
-  }
-
-  #[test]
-  fn should_allow_to_store_and_share_cached_data() {
-    let original = OriginalSource::new("Hello World", "test.txt");
-    let source = CachedSource::new(original);
-    let clone = source.clone();
-
-    // fill up cache
-    let map_options = MapOptions::default();
-    source.source();
-    source.buffer();
-    source.size();
-    source.map(&map_options);
-
-    assert_eq!(clone.cached_source.get().unwrap().borrow(), source.source());
-    assert_eq!(
-      *clone.cached_buffer.get().unwrap(),
-      source.buffer().to_vec()
-    );
-    assert_eq!(
-      *clone.cached_maps.get(&map_options.columns).unwrap().value(),
-      source.map(&map_options)
-    );
   }
 
   #[test]

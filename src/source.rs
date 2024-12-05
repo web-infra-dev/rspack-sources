@@ -7,7 +7,6 @@ use std::{
   sync::Arc,
 };
 
-use dyn_clone::DynClone;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -20,14 +19,7 @@ pub type BoxSource = Arc<dyn Source>;
 
 /// [Source] abstraction, [webpack-sources docs](https://github.com/webpack/webpack-sources/#source).
 pub trait Source:
-  for<'a> StreamChunks<'a>
-  + DynHash
-  + AsAny
-  + DynEq
-  + DynClone
-  + fmt::Debug
-  + Sync
-  + Send
+  for<'a> StreamChunks<'a> + DynHash + AsAny + DynEq + fmt::Debug + Sync + Send
 {
   /// Get the source code.
   fn source(&self) -> Cow<str>;
@@ -64,8 +56,6 @@ impl Source for BoxSource {
     self.as_ref().map(options)
   }
 }
-
-dyn_clone::clone_trait_object!(Source);
 
 impl<'a> StreamChunks<'a> for BoxSource {
   fn stream_chunks(
@@ -254,6 +244,11 @@ impl SourceMap {
   /// Get the mappings string in [SourceMap].
   pub fn mappings(&self) -> &str {
     &self.mappings
+  }
+
+  /// Set the mappings string in [SourceMap].
+  pub fn set_mappings<T: Into<Arc<str>>>(&mut self, mappings: T) {
+    self.mappings = mappings.into();
   }
 
   /// Get the sources field in [SourceMap].
@@ -515,7 +510,7 @@ mod tests {
     RawSource::from("g").boxed().hash(&mut state);
     (&RawSource::from("h") as &dyn Source).hash(&mut state);
     ReplaceSource::new(RawSource::from("i").boxed()).hash(&mut state);
-    assert_eq!(format!("{:x}", state.finish()), "ef733b8b8ee61bf0");
+    assert_eq!(format!("{:x}", state.finish()), "6f87cd6073fc4ed8");
   }
 
   #[test]
@@ -559,35 +554,6 @@ mod tests {
       CachedSource::new(RawSource::from("j").boxed()),
       CachedSource::new(RawSource::from("j").boxed())
     );
-  }
-
-  #[test]
-  #[allow(clippy::clone_double_ref)]
-  fn clone_available() {
-    let a = RawSource::from("a");
-    assert_eq!(a, a.clone());
-    let b = OriginalSource::new("b", "");
-    assert_eq!(b, b.clone());
-    let c = SourceMapSource::new(WithoutOriginalOptions {
-      value: "c",
-      name: "",
-      source_map: SourceMap::from_json("{\"mappings\": \";\"}").unwrap(),
-    });
-    assert_eq!(c, c.clone());
-    let d = ConcatSource::new([RawSource::from("d")]);
-    assert_eq!(d, d.clone());
-    let e = CachedSource::new(RawSource::from("e"));
-    assert_eq!(e, e.clone());
-    let f = ReplaceSource::new(RawSource::from("f"));
-    assert_eq!(f, f.clone());
-    let g = RawSource::from("g").boxed();
-    assert_eq!(&g, &g.clone());
-    let h = &RawSource::from("h") as &dyn Source;
-    assert_eq!(h, h);
-    let i = ReplaceSource::new(RawSource::from("i").boxed());
-    assert_eq!(i, i.clone());
-    let j = CachedSource::new(RawSource::from("j").boxed());
-    assert_eq!(j, j.clone());
   }
 
   #[test]

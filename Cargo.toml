@@ -32,9 +32,7 @@ harness = false
 [dependencies]
 serde = { version = "1", features = ["derive", "rc"] }
 serde_json = "1"
-dyn-clone = "1"
 rustc-hash = "1"
-dashmap = "5"
 memchr = "2.6.4"
 
 codspeed-criterion-compat = { version = "2.3.3", default-features = false, optional = true }
