@@ -116,10 +116,14 @@ impl CachedSource {
           sources_content[source_index2] = source_content.to_string();
         }
         #[allow(unsafe_code)]
+        // SAFETY: the `sources` will be stored in either `self.cached_full_map` or `self.cached_lines_only_map`.
+        // As long as the instance containing `self` remains valid within the lifetime `'a`, the `sources` data stored therein will also be valid.
         let source = unsafe {
           std::mem::transmute::<&String, &'a String>(&sources[source_index2])
         };
         #[allow(unsafe_code)]
+        // SAFETY: the `sources_content` will be stored in either `self.cached_full_map` or `self.cached_lines_only_map`.
+        // As long as the instance containing `self` remains valid within the lifetime `'a`, the `sources_content` data stored therein will also be valid.
         let source_content = unsafe {
           std::mem::transmute::<&String, &'a String>(
             &sources_content[source_index2],
@@ -134,6 +138,8 @@ impl CachedSource {
         }
         names[name_index2] = name.to_string();
         #[allow(unsafe_code)]
+        // SAFETY: the `names` will be stored in either `self.cached_full_map` or `self.cached_lines_only_map`.
+        // As long as the instance containing `self` remains valid within the lifetime `'a`, the `names` data stored therein will also be valid.
         let name = unsafe {
           std::mem::transmute::<&String, &'a String>(&names[name_index2])
         };
@@ -218,8 +224,13 @@ impl Source for CachedSource {
               map
                 .decoded_mappings()
                 .for_each(|mapping| mappings_encoder.encode(&mapping));
-              lines_only_map.set_mappings(mappings_encoder.drain());
-              Some(lines_only_map)
+              let mappings = mappings_encoder.drain();
+              lines_only_map.set_mappings(mappings);
+              if lines_only_map.mappings().is_empty() {
+                None
+              } else {
+                Some(lines_only_map)
+              }
             } else {
               None
             }
