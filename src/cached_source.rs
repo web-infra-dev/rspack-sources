@@ -170,20 +170,29 @@ impl Source for CachedSource {
       let original = self.inner.lock().unwrap();
       original.as_ref().unwrap().source().into()
     });
+
+    if self.cached_hash.get().is_some()
+      && self.cached_full_map.get().is_some()
+      && self.cached_buffer.get().is_some()
+    {
+      let mut original = self.inner.lock().unwrap();
+      original.take();
+    }
+
     Cow::Borrowed(cached)
   }
 
   fn buffer(&self) -> Cow<[u8]> {
-    let mut original = self.inner.lock().unwrap();
-
-    let cached = self
-      .cached_buffer
-      .get_or_init(|| original.as_ref().unwrap().buffer().into());
+    let cached = self.cached_buffer.get_or_init(|| {
+      let original = self.inner.lock().unwrap();
+      original.as_ref().unwrap().buffer().into()
+    });
 
     if self.cached_hash.get().is_some()
       && self.cached_full_map.get().is_some()
       && self.cached_source.get().is_some()
     {
+      let mut original = self.inner.lock().unwrap();
       original.take();
     }
 
@@ -195,46 +204,48 @@ impl Source for CachedSource {
   }
 
   fn map(&self, options: &MapOptions) -> Option<SourceMap> {
-    let mut original = self.inner.lock().unwrap();
-
     if options.columns {
-      self
+      let map = self
         .cached_full_map
         .get_or_init(|| {
-          let map = original.as_ref().unwrap().map(options);
-
-          if self.cached_buffer.get().is_some()
-            && self.cached_source.get().is_some()
-            && self.cached_hash.get().is_some()
-          {
-            original.take();
-          }
-
-          map
+          let original = self.inner.lock().unwrap();
+          original.as_ref().unwrap().map(options)
         })
-        .clone()
+        .clone();
+
+      if self.cached_buffer.get().is_some()
+        && self.cached_source.get().is_some()
+        && self.cached_hash.get().is_some()
+      {
+        let mut original = self.inner.lock().unwrap();
+        original.take();
+      }
+
+      map
     } else {
       self
         .cached_lines_only_map
         .get_or_init(|| {
           if let Some(map) = self.cached_full_map.get() {
             if let Some(map) = map {
-              let mut lines_only_map = map.clone();
               let mut mappings_encoder = create_encoder(options.columns);
               map
                 .decoded_mappings()
                 .for_each(|mapping| mappings_encoder.encode(&mapping));
+
               let mappings = mappings_encoder.drain();
-              lines_only_map.set_mappings(mappings);
-              if lines_only_map.mappings().is_empty() {
+              if mappings.is_empty() {
                 None
               } else {
+                let mut lines_only_map = map.clone();
+                lines_only_map.set_mappings(mappings);
                 Some(lines_only_map)
               }
             } else {
               None
             }
           } else {
+            let original = self.inner.lock().unwrap();
             original.as_ref().unwrap().map(options)
           }
         })
@@ -304,9 +315,8 @@ impl StreamChunks<'_> for CachedSource {
 
 impl Hash for CachedSource {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-    let mut original = self.inner.lock().unwrap();
-
     (self.cached_hash.get_or_init(|| {
+      let original = self.inner.lock().unwrap();
       let mut hasher = FxHasher::default();
       original.as_ref().unwrap().hash(&mut hasher);
       hasher.finish()
@@ -317,6 +327,7 @@ impl Hash for CachedSource {
       && self.cached_full_map.get().is_some()
       && self.cached_source.get().is_some()
     {
+      let mut original = self.inner.lock().unwrap();
       original.take();
     }
   }
@@ -364,6 +375,8 @@ mod tests {
   };
 
   use super::*;
+
+  // TODO cache 增加更多测试
 
   #[test]
   fn line_number_should_not_add_one() {
