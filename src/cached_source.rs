@@ -96,9 +96,9 @@ impl CachedSource {
       &mut |chunk, mapping| {
         mappings_encoder.encode(&mapping);
         if let Some(chunk) = chunk {
-          code_start += chunk.len();
           code_end += chunk.len();
           on_chunk(Some(Cow::Borrowed(&code[code_start..code_end])), mapping);
+          code_start = code_end;
         } else {
           on_chunk(Some(Cow::Borrowed("")), mapping);
         }

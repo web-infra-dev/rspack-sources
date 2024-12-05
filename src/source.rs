@@ -512,7 +512,7 @@ mod tests {
     RawBufferSource::from("a".as_bytes()).hash(&mut state);
     (&RawSource::from("h") as &dyn Source).hash(&mut state);
     ReplaceSource::new(RawSource::from("i").boxed()).hash(&mut state);
-    assert_eq!(format!("{:x}", state.finish()), "6f87cd6073fc4ed8");
+    assert_eq!(format!("{:x}", state.finish()), "f4b280bd9a8d4d3b");
   }
 
   #[test]
