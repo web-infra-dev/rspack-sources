@@ -1,18 +1,18 @@
 use std::{
   borrow::Cow,
-  hash::{BuildHasherDefault, Hash, Hasher},
-  sync::{Arc, OnceLock},
+  hash::{Hash, Hasher},
+  sync::{Mutex, OnceLock},
 };
 
-use dashmap::{mapref::entry::Entry, DashMap};
 use rustc_hash::FxHasher;
 
 use crate::{
+  encoder::create_encoder,
   helpers::{
-    stream_and_get_source_and_map, stream_chunks_of_raw_source,
-    stream_chunks_of_source_map, StreamChunks,
+    stream_chunks_of_raw_source, stream_chunks_of_source_map, GeneratedInfo,
+    OnChunk, OnName, OnSource, StreamChunks,
   },
-  MapOptions, Source, SourceMap,
+  BoxSource, MapOptions, Source, SourceExt, SourceMap,
 };
 
 /// It tries to reused cached results from other methods to avoid calculations,
@@ -48,45 +48,154 @@ use crate::{
 ///   "Hello World\nconsole.log('test');\nconsole.log('test2');\nHello2\n"
 /// );
 /// ```
-pub struct CachedSource<T> {
-  inner: Arc<T>,
-  cached_buffer: Arc<OnceLock<Vec<u8>>>,
-  cached_source: Arc<OnceLock<Arc<str>>>,
-  cached_hash: Arc<OnceLock<u64>>,
-  cached_maps:
-    Arc<DashMap<MapOptions, Option<SourceMap>, BuildHasherDefault<FxHasher>>>,
+pub struct CachedSource {
+  inner: Mutex<Option<BoxSource>>,
+  cached_buffer: OnceLock<Vec<u8>>,
+  cached_source: OnceLock<String>,
+  cached_hash: OnceLock<u64>,
+  cached_full_map: OnceLock<Option<SourceMap>>,
+  cached_lines_only_map: OnceLock<Option<SourceMap>>,
 }
 
-impl<T> CachedSource<T> {
+impl CachedSource {
   /// Create a [CachedSource] with the original [Source].
-  pub fn new(inner: T) -> Self {
+  pub fn new<T: Source + 'static>(inner: T) -> Self {
     Self {
-      inner: Arc::new(inner),
+      inner: Mutex::new(Some(inner.boxed())),
       cached_buffer: Default::default(),
       cached_source: Default::default(),
       cached_hash: Default::default(),
-      cached_maps: Default::default(),
+      cached_full_map: Default::default(),
+      cached_lines_only_map: Default::default(),
     }
   }
 
-  /// Get the original [Source].
-  pub fn original(&self) -> &T {
-    &self.inner
+  fn stream_and_get_source_and_map<'a>(
+    &'a self,
+    input_source: &BoxSource,
+    options: &MapOptions,
+    on_chunk: OnChunk<'_, 'a>,
+    on_source: OnSource<'_, 'a>,
+    on_name: OnName<'_, 'a>,
+  ) -> GeneratedInfo {
+    let code = self
+      .cached_source
+      .get_or_init(|| input_source.source().into());
+    let mut code_start = 0;
+    let mut code_end = 0;
+
+    self.cached_buffer.get_or_init(|| code.as_bytes().to_vec());
+
+    let mut mappings_encoder = create_encoder(options.columns);
+    let mut sources: Vec<String> = Vec::new();
+    let mut sources_content: Vec<String> = Vec::new();
+    let mut names: Vec<String> = Vec::new();
+
+    let generated_info = input_source.stream_chunks(
+      options,
+      &mut |chunk, mapping| {
+        mappings_encoder.encode(&mapping);
+        if let Some(chunk) = chunk {
+          code_end += chunk.len();
+          on_chunk(Some(Cow::Borrowed(&code[code_start..code_end])), mapping);
+          code_start = code_end;
+        } else {
+          on_chunk(Some(Cow::Borrowed("")), mapping);
+        }
+      },
+      &mut |source_index, source, source_content| {
+        let source_index2 = source_index as usize;
+        while sources.len() <= source_index2 {
+          sources.push("".into());
+        }
+        sources[source_index2] = source.to_string();
+        if let Some(source_content) = source_content {
+          while sources_content.len() <= source_index2 {
+            sources_content.push("".into());
+          }
+          sources_content[source_index2] = source_content.to_string();
+        }
+        #[allow(unsafe_code)]
+        // SAFETY: the `sources` will be stored in either `self.cached_full_map` or `self.cached_lines_only_map`.
+        // As long as the instance containing `self` remains valid within the lifetime `'a`, the `sources` data stored therein will also be valid.
+        let source = unsafe {
+          std::mem::transmute::<&String, &'a String>(&sources[source_index2])
+        };
+        #[allow(unsafe_code)]
+        // SAFETY: the `sources_content` will be stored in either `self.cached_full_map` or `self.cached_lines_only_map`.
+        // As long as the instance containing `self` remains valid within the lifetime `'a`, the `sources_content` data stored therein will also be valid.
+        let source_content = unsafe {
+          std::mem::transmute::<&String, &'a String>(
+            &sources_content[source_index2],
+          )
+        };
+        on_source(source_index, Cow::Borrowed(source), Some(source_content));
+      },
+      &mut |name_index, name| {
+        let name_index2 = name_index as usize;
+        while names.len() <= name_index2 {
+          names.push("".into());
+        }
+        names[name_index2] = name.to_string();
+        #[allow(unsafe_code)]
+        // SAFETY: the `names` will be stored in either `self.cached_full_map` or `self.cached_lines_only_map`.
+        // As long as the instance containing `self` remains valid within the lifetime `'a`, the `names` data stored therein will also be valid.
+        let name = unsafe {
+          std::mem::transmute::<&String, &'a String>(&names[name_index2])
+        };
+        on_name(name_index, Cow::Borrowed(name));
+      },
+    );
+
+    let mappings = mappings_encoder.drain();
+    let map = if mappings.is_empty() {
+      None
+    } else {
+      Some(SourceMap::new(mappings, sources, sources_content, names))
+    };
+
+    if options.columns {
+      self.cached_full_map.get_or_init(|| map);
+    } else {
+      self.cached_lines_only_map.get_or_init(|| map);
+    }
+
+    generated_info
   }
 }
 
-impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
+impl Source for CachedSource {
   fn source(&self) -> Cow<str> {
-    let cached = self
-      .cached_source
-      .get_or_init(|| self.inner.source().into());
+    let cached = self.cached_source.get_or_init(|| {
+      let original = self.inner.lock().unwrap();
+      original.as_ref().unwrap().source().into()
+    });
+
+    if self.cached_hash.get().is_some()
+      && self.cached_full_map.get().is_some()
+      && self.cached_buffer.get().is_some()
+    {
+      let mut original = self.inner.lock().unwrap();
+      original.take();
+    }
+
     Cow::Borrowed(cached)
   }
 
   fn buffer(&self) -> Cow<[u8]> {
-    let cached = self
-      .cached_buffer
-      .get_or_init(|| self.inner.buffer().to_vec());
+    let cached = self.cached_buffer.get_or_init(|| {
+      let original = self.inner.lock().unwrap();
+      original.as_ref().unwrap().buffer().into()
+    });
+
+    if self.cached_hash.get().is_some()
+      && self.cached_full_map.get().is_some()
+      && self.cached_source.get().is_some()
+    {
+      let mut original = self.inner.lock().unwrap();
+      original.take();
+    }
+
     Cow::Borrowed(cached)
   }
 
@@ -95,23 +204,57 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
   }
 
   fn map(&self, options: &MapOptions) -> Option<SourceMap> {
-    if let Some(map) = self.cached_maps.get(options) {
-      map.clone()
-    } else {
-      let map = self.inner.map(options);
-      self.cached_maps.insert(options.clone(), map.clone());
-      map
-    }
-  }
+    if options.columns {
+      let map = self
+        .cached_full_map
+        .get_or_init(|| {
+          let original = self.inner.lock().unwrap();
+          original.as_ref().unwrap().map(options)
+        })
+        .clone();
 
-  fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
-    self.inner.to_writer(writer)
+      if self.cached_buffer.get().is_some()
+        && self.cached_source.get().is_some()
+        && self.cached_hash.get().is_some()
+      {
+        let mut original = self.inner.lock().unwrap();
+        original.take();
+      }
+
+      map
+    } else {
+      self
+        .cached_lines_only_map
+        .get_or_init(|| {
+          if let Some(map) = self.cached_full_map.get() {
+            if let Some(map) = map {
+              let mut mappings_encoder = create_encoder(options.columns);
+              map
+                .decoded_mappings()
+                .for_each(|mapping| mappings_encoder.encode(&mapping));
+
+              let mappings = mappings_encoder.drain();
+              if mappings.is_empty() {
+                None
+              } else {
+                let mut lines_only_map = map.clone();
+                lines_only_map.set_mappings(mappings);
+                Some(lines_only_map)
+              }
+            } else {
+              None
+            }
+          } else {
+            let original = self.inner.lock().unwrap();
+            original.as_ref().unwrap().map(options)
+          }
+        })
+        .clone()
+    }
   }
 }
 
-impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks<'_>
-  for CachedSource<T>
-{
+impl StreamChunks<'_> for CachedSource {
   fn stream_chunks<'a>(
     &'a self,
     options: &MapOptions,
@@ -119,100 +262,121 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks<'_>
     on_source: crate::helpers::OnSource<'_, 'a>,
     on_name: crate::helpers::OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {
-    let cached_map = self.cached_maps.entry(options.clone());
-    match cached_map {
-      Entry::Occupied(entry) => {
-        let source = self
-          .cached_source
-          .get_or_init(|| self.inner.source().into());
-        if let Some(map) = entry.get() {
-          #[allow(unsafe_code)]
-          // SAFETY: We guarantee that once a `SourceMap` is stored in the cache, it will never be removed.
-          // Therefore, even if we force its lifetime to be longer, the reference remains valid.
-          // This is based on the following assumptions:
-          // 1. `SourceMap` will be valid for the entire duration of the application.
-          // 2. The cached `SourceMap` will not be manually removed or replaced, ensuring the reference's safety.
-          let map =
-            unsafe { std::mem::transmute::<&SourceMap, &'a SourceMap>(map) };
-          stream_chunks_of_source_map(
-            source, map, on_chunk, on_source, on_name, options,
-          )
-        } else {
-          stream_chunks_of_raw_source(
-            source, options, on_chunk, on_source, on_name,
-          )
-        }
+    let cache = if options.columns {
+      &self.cached_full_map
+    } else {
+      &self.cached_lines_only_map
+    };
+    if let Some(map) = cache.get() {
+      let source = self.cached_source.get_or_init(|| {
+        let original = self.inner.lock().unwrap();
+        original.as_ref().unwrap().source().into()
+      });
+      if let Some(map) = map.as_ref() {
+        #[allow(unsafe_code)]
+        // SAFETY: We guarantee that once a `SourceMap` is stored in the cache, it will never be removed.
+        // Therefore, even if we force its lifetime to be longer, the reference remains valid.
+        // This is based on the following assumptions:
+        // 1. `SourceMap` will be valid for the entire duration of the application.
+        // 2. The cached `SourceMap` will not be manually removed or replaced, ensuring the reference's safety.
+        let map =
+          unsafe { std::mem::transmute::<&SourceMap, &'a SourceMap>(map) };
+        stream_chunks_of_source_map(
+          source, map, on_chunk, on_source, on_name, options,
+        )
+      } else {
+        stream_chunks_of_raw_source(
+          source, options, on_chunk, on_source, on_name,
+        )
       }
-      Entry::Vacant(entry) => {
-        let (generated_info, map) = stream_and_get_source_and_map(
-          &self.inner as &T,
-          options,
-          on_chunk,
-          on_source,
-          on_name,
-        );
-        entry.insert(map);
-        generated_info
+    } else {
+      let mut original = self.inner.lock().unwrap();
+
+      let generated_info = self.stream_and_get_source_and_map(
+        original.as_ref().unwrap(),
+        options,
+        on_chunk,
+        on_source,
+        on_name,
+      );
+
+      if self.cached_buffer.get().is_some()
+        && options.columns
+        && self.cached_source.get().is_some()
+        && self.cached_hash.get().is_some()
+      {
+        original.take();
       }
+
+      generated_info
     }
   }
 }
 
-impl<T> Clone for CachedSource<T> {
-  fn clone(&self) -> Self {
-    Self {
-      inner: self.inner.clone(),
-      cached_buffer: self.cached_buffer.clone(),
-      cached_source: self.cached_source.clone(),
-      cached_hash: self.cached_hash.clone(),
-      cached_maps: self.cached_maps.clone(),
-    }
-  }
-}
-
-impl<T: Source + Hash + PartialEq + Eq + 'static> Hash for CachedSource<T> {
+impl Hash for CachedSource {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
     (self.cached_hash.get_or_init(|| {
+      let original = self.inner.lock().unwrap();
       let mut hasher = FxHasher::default();
-      hasher.write(self.source().as_bytes());
+      original.as_ref().unwrap().hash(&mut hasher);
       hasher.finish()
     }))
     .hash(state);
+
+    if self.cached_buffer.get().is_some()
+      && self.cached_full_map.get().is_some()
+      && self.cached_source.get().is_some()
+    {
+      let mut original = self.inner.lock().unwrap();
+      original.take();
+    }
   }
 }
 
-impl<T: PartialEq> PartialEq for CachedSource<T> {
+impl PartialEq for CachedSource {
   fn eq(&self, other: &Self) -> bool {
-    self.inner == other.inner
+    if std::ptr::eq(self, other) {
+      return true;
+    }
+    self.cached_buffer.get() == other.cached_buffer.get()
+      && self.cached_full_map.get() == other.cached_full_map.get()
+      && self.cached_lines_only_map.get() == other.cached_lines_only_map.get()
+      && self.cached_source.get() == other.cached_source.get()
+      && self.cached_hash.get() == other.cached_hash.get()
+      && *self.inner.lock().unwrap() == *other.inner.lock().unwrap()
   }
 }
 
-impl<T: Eq> Eq for CachedSource<T> {}
+impl Eq for CachedSource {}
 
-impl<T: std::fmt::Debug> std::fmt::Debug for CachedSource<T> {
+impl std::fmt::Debug for CachedSource {
   fn fmt(
     &self,
     f: &mut std::fmt::Formatter<'_>,
   ) -> Result<(), std::fmt::Error> {
     f.debug_struct("CachedSource")
-      .field("inner", self.inner.as_ref())
+      .field("inner", &self.inner)
       .field("cached_buffer", &self.cached_buffer.get().is_some())
       .field("cached_source", &self.cached_source.get().is_some())
-      .field("cached_maps", &(!self.cached_maps.is_empty()))
+      .field("cached_full_map", &(self.cached_full_map.get().is_some()))
+      .field(
+        "cached_lines_only_map",
+        &(self.cached_lines_only_map.get().is_some()),
+      )
       .finish()
   }
 }
 
 #[cfg(test)]
 mod tests {
-  use std::borrow::Borrow;
-
   use crate::{
     ConcatSource, OriginalSource, RawSource, SourceExt, SourceMapSource,
     WithoutOriginalOptions,
   };
 
   use super::*;
+
+  // TODO cache 增加更多测试
 
   #[test]
   fn line_number_should_not_add_one() {
@@ -232,30 +396,6 @@ mod tests {
     ]);
     let map = source.map(&Default::default()).unwrap();
     assert_eq!(map.mappings(), ";;AACA");
-  }
-
-  #[test]
-  fn should_allow_to_store_and_share_cached_data() {
-    let original = OriginalSource::new("Hello World", "test.txt");
-    let source = CachedSource::new(original);
-    let clone = source.clone();
-
-    // fill up cache
-    let map_options = MapOptions::default();
-    source.source();
-    source.buffer();
-    source.size();
-    source.map(&map_options);
-
-    assert_eq!(clone.cached_source.get().unwrap().borrow(), source.source());
-    assert_eq!(
-      *clone.cached_buffer.get().unwrap(),
-      source.buffer().to_vec()
-    );
-    assert_eq!(
-      *clone.cached_maps.get(&map_options).unwrap().value(),
-      source.map(&map_options)
-    );
   }
 
   #[test]

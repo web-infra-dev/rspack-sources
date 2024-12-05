@@ -491,7 +491,7 @@ fn stream_chunks_of_source_map_full<'a>(
             mapping.generated_column as usize,
           );
         on_chunk(
-          Some(Cow::Owned(chunk.to_string())),
+          Some(Cow::Borrowed(chunk)),
           Mapping {
             generated_line: current_generated_line,
             generated_column: current_generated_column,
@@ -1139,55 +1139,4 @@ pub fn stream_chunks_of_combined_source_map<'a>(
     },
     options,
   )
-}
-
-pub fn stream_and_get_source_and_map<'a, S: StreamChunks<'a>>(
-  input_source: &'a S,
-  options: &MapOptions,
-  on_chunk: OnChunk<'_, 'a>,
-  on_source: OnSource<'_, 'a>,
-  on_name: OnName<'_, 'a>,
-) -> (GeneratedInfo, Option<SourceMap>) {
-  let mut mappings_encoder = create_encoder(options.columns);
-  let mut sources: Vec<String> = Vec::new();
-  let mut sources_content: Vec<String> = Vec::new();
-  let mut names: Vec<String> = Vec::new();
-
-  let generated_info = input_source.stream_chunks(
-    options,
-    &mut |chunk, mapping| {
-      mappings_encoder.encode(&mapping);
-      on_chunk(chunk, mapping);
-    },
-    &mut |source_index, source, source_content| {
-      let source_index2 = source_index as usize;
-      while sources.len() <= source_index2 {
-        sources.push("".into());
-      }
-      sources[source_index2] = source.to_string();
-      if let Some(source_content) = source_content {
-        while sources_content.len() <= source_index2 {
-          sources_content.push("".into());
-        }
-        sources_content[source_index2] = source_content.to_string();
-      }
-      on_source(source_index, source, source_content);
-    },
-    &mut |name_index, name| {
-      let name_index2 = name_index as usize;
-      while names.len() <= name_index2 {
-        names.push("".into());
-      }
-      names[name_index2] = name.to_string();
-      on_name(name_index, name);
-    },
-  );
-
-  let mappings = mappings_encoder.drain();
-  let map = if mappings.is_empty() {
-    None
-  } else {
-    Some(SourceMap::new(mappings, sources, sources_content, names))
-  };
-  (generated_info, map)
 }

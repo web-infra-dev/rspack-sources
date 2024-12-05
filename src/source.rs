@@ -7,7 +7,6 @@ use std::{
   sync::Arc,
 };
 
-use dyn_clone::DynClone;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -20,14 +19,7 @@ pub type BoxSource = Arc<dyn Source>;
 
 /// [Source] abstraction, [webpack-sources docs](https://github.com/webpack/webpack-sources/#source).
 pub trait Source:
-  for<'a> StreamChunks<'a>
-  + DynHash
-  + AsAny
-  + DynEq
-  + DynClone
-  + fmt::Debug
-  + Sync
-  + Send
+  for<'a> StreamChunks<'a> + DynHash + AsAny + DynEq + fmt::Debug + Sync + Send
 {
   /// Get the source code.
   fn source(&self) -> Cow<str>;
@@ -45,9 +37,6 @@ pub trait Source:
   fn update_hash(&self, state: &mut dyn Hasher) {
     self.dyn_hash(state);
   }
-
-  /// Writes the source into a writer, preferably a `std::io::BufWriter<std::io::Write>`.
-  fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()>;
 }
 
 impl Source for BoxSource {
@@ -66,13 +55,7 @@ impl Source for BoxSource {
   fn map(&self, options: &MapOptions) -> Option<SourceMap> {
     self.as_ref().map(options)
   }
-
-  fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
-    self.as_ref().to_writer(writer)
-  }
 }
-
-dyn_clone::clone_trait_object!(Source);
 
 impl<'a> StreamChunks<'a> for BoxSource {
   fn stream_chunks(
@@ -261,6 +244,11 @@ impl SourceMap {
   /// Get the mappings string in [SourceMap].
   pub fn mappings(&self) -> &str {
     &self.mappings
+  }
+
+  /// Set the mappings string in [SourceMap].
+  pub fn set_mappings<T: Into<Arc<str>>>(&mut self, mappings: T) {
+    self.mappings = mappings.into();
   }
 
   /// Get the sources field in [SourceMap].
@@ -524,7 +512,7 @@ mod tests {
     RawBufferSource::from("a".as_bytes()).hash(&mut state);
     (&RawSource::from("h") as &dyn Source).hash(&mut state);
     ReplaceSource::new(RawSource::from("i").boxed()).hash(&mut state);
-    assert_eq!(format!("{:x}", state.finish()), "709931db47fa47dc");
+    assert_eq!(format!("{:x}", state.finish()), "f4b280bd9a8d4d3b");
   }
 
   #[test]
@@ -579,39 +567,6 @@ mod tests {
   }
 
   #[test]
-  #[allow(suspicious_double_ref_op)]
-  fn clone_available() {
-    let a = RawSource::from("a");
-    assert_eq!(a, a.clone());
-    let b = OriginalSource::new("b", "");
-    assert_eq!(b, b.clone());
-    let c = SourceMapSource::new(WithoutOriginalOptions {
-      value: "c",
-      name: "",
-      source_map: SourceMap::from_json("{\"mappings\": \";\"}").unwrap(),
-    });
-    assert_eq!(c, c.clone());
-    let d = ConcatSource::new([RawSource::from("d")]);
-    assert_eq!(d, d.clone());
-    let e = CachedSource::new(RawSource::from("e"));
-    assert_eq!(e, e.clone());
-    let f = ReplaceSource::new(RawSource::from("f"));
-    assert_eq!(f, f.clone());
-    let g = RawSource::from("g").boxed();
-    assert_eq!(&g, &g.clone());
-    let h = &RawSource::from("h") as &dyn Source;
-    assert_eq!(h, h);
-    let i = ReplaceSource::new(RawSource::from("i").boxed());
-    assert_eq!(i, i.clone());
-    let j = CachedSource::new(RawSource::from("j").boxed());
-    assert_eq!(j, j.clone());
-    let k = RawStringSource::from_static("k");
-    assert_eq!(k, k.clone());
-    let l = RawBufferSource::from("l".as_bytes());
-    assert_eq!(l, l.clone());
-  }
-
-  #[test]
   fn box_dyn_source_use_hashmap_available() {
     let mut map = HashMap::new();
     let a = RawSource::from("a").boxed();
@@ -626,18 +581,5 @@ mod tests {
     let a = &RawSource::from("a") as &dyn Source;
     map.insert(a, a);
     assert_eq!(map.get(&a).unwrap(), &a);
-  }
-
-  #[test]
-  fn to_writer() {
-    let sources =
-      ConcatSource::new([RawSource::from("a"), RawSource::from("b")]);
-    let mut writer = std::io::BufWriter::new(Vec::new());
-    let result = sources.to_writer(&mut writer);
-    assert!(result.is_ok());
-    assert_eq!(
-      String::from_utf8(writer.into_inner().unwrap()).unwrap(),
-      "ab"
-    );
   }
 }

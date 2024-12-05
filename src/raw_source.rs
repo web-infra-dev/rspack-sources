@@ -140,13 +140,6 @@ impl Source for RawSource {
   fn map(&self, _: &MapOptions) -> Option<SourceMap> {
     None
   }
-
-  fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
-    writer.write_all(match &self.value {
-      RawValue::String(v) => v.as_bytes(),
-      RawValue::Buffer(v) => v,
-    })
-  }
 }
 
 impl Hash for RawSource {
@@ -277,10 +270,6 @@ impl Source for RawStringSource {
   fn map(&self, _: &MapOptions) -> Option<SourceMap> {
     None
   }
-
-  fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
-    writer.write_all(self.0.as_bytes())
-  }
 }
 
 impl std::fmt::Debug for RawStringSource {
@@ -375,10 +364,6 @@ impl Source for RawBufferSource {
 
   fn map(&self, _: &MapOptions) -> Option<SourceMap> {
     None
-  }
-
-  fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
-    writer.write_all(&self.value)
   }
 }
 
