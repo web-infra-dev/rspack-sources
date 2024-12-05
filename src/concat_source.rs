@@ -300,7 +300,7 @@ impl StreamChunks for ConcatSource {
             .borrow_mut()
             .insert(i, global_index.unwrap());
         },
-        &arena,
+        arena,
       );
       if need_to_close_mapping && (generated_line != 1 || generated_column != 0)
       {
