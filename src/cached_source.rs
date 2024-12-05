@@ -1,7 +1,7 @@
 use std::{
   borrow::Cow,
   hash::{Hash, Hasher},
-  sync::{Arc, Mutex, OnceLock},
+  sync::{Mutex, OnceLock},
 };
 
 use rustc_hash::FxHasher;
@@ -51,7 +51,7 @@ use crate::{
 pub struct CachedSource {
   inner: Mutex<Option<BoxSource>>,
   cached_buffer: OnceLock<Vec<u8>>,
-  cached_source: OnceLock<Arc<str>>,
+  cached_source: OnceLock<String>,
   cached_hash: OnceLock<u64>,
   cached_full_map: OnceLock<Option<SourceMap>>,
   cached_lines_only_map: OnceLock<Option<SourceMap>>,
