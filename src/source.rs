@@ -39,7 +39,7 @@ pub trait Source:
   fn size(&self) -> usize;
 
   /// Get the [SourceMap].
-  fn map(&self, options: &MapOptions) -> Option<SourceMap>;
+  fn map(&self, options: &MapOptions) -> Option<Cow<SourceMap>>;
 
   /// Update hash based on the source.
   fn update_hash(&self, state: &mut dyn Hasher) {
@@ -63,7 +63,7 @@ impl Source for BoxSource {
     self.as_ref().size()
   }
 
-  fn map(&self, options: &MapOptions) -> Option<SourceMap> {
+  fn map(&self, options: &MapOptions) -> Option<Cow<SourceMap>> {
     self.as_ref().map(options)
   }
 
@@ -370,8 +370,8 @@ impl SourceMap {
   }
 
   /// Generate source map to a json string.
-  pub fn to_json(self) -> Result<String> {
-    let json = simd_json::serde::to_string(&self)?;
+  pub fn to_json(&self) -> Result<String> {
+    let json = simd_json::serde::to_string(self)?;
     Ok(json)
   }
 
