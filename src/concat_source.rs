@@ -319,7 +319,7 @@ impl<'a> StreamChunks<'a> for ConcatSource {
 
 #[cfg(test)]
 mod tests {
-  use crate::{OriginalSource, RawSource};
+  use crate::{OriginalSource, RawBufferSource, RawSource, RawStringSource};
 
   use super::*;
 
@@ -327,6 +327,106 @@ mod tests {
   fn should_concat_two_sources() {
     let mut source = ConcatSource::new([
       RawSource::from("Hello World\n".to_string()).boxed(),
+      OriginalSource::new(
+        "console.log('test');\nconsole.log('test2');\n",
+        "console.js",
+      )
+      .boxed(),
+    ]);
+    source.add(OriginalSource::new("Hello2\n", "hello.md"));
+
+    let expected_source =
+      "Hello World\nconsole.log('test');\nconsole.log('test2');\nHello2\n";
+    assert_eq!(source.size(), 62);
+    assert_eq!(source.source(), expected_source);
+    assert_eq!(
+      source.map(&MapOptions::new(false)).unwrap(),
+      SourceMap::from_json(
+        r#"{
+          "version": 3,
+          "mappings": ";AAAA;AACA;ACDA",
+          "names": [],
+          "sources": ["console.js", "hello.md"],
+          "sourcesContent": [
+            "console.log('test');\nconsole.log('test2');\n",
+            "Hello2\n"
+          ]
+        }"#,
+      )
+      .unwrap()
+    );
+    assert_eq!(
+      source.map(&MapOptions::default()).unwrap(),
+      SourceMap::from_json(
+        r#"{
+          "version": 3,
+          "mappings": ";AAAA;AACA;ACDA",
+          "names": [],
+          "sources": ["console.js", "hello.md"],
+          "sourcesContent": [
+            "console.log('test');\nconsole.log('test2');\n",
+            "Hello2\n"
+          ]
+        }"#
+      )
+      .unwrap()
+    );
+  }
+
+  #[test]
+  fn should_concat_two_sources2() {
+    let mut source = ConcatSource::new([
+      RawStringSource::from("Hello World\n".to_string()).boxed(),
+      OriginalSource::new(
+        "console.log('test');\nconsole.log('test2');\n",
+        "console.js",
+      )
+      .boxed(),
+    ]);
+    source.add(OriginalSource::new("Hello2\n", "hello.md"));
+
+    let expected_source =
+      "Hello World\nconsole.log('test');\nconsole.log('test2');\nHello2\n";
+    assert_eq!(source.size(), 62);
+    assert_eq!(source.source(), expected_source);
+    assert_eq!(
+      source.map(&MapOptions::new(false)).unwrap(),
+      SourceMap::from_json(
+        r#"{
+          "version": 3,
+          "mappings": ";AAAA;AACA;ACDA",
+          "names": [],
+          "sources": ["console.js", "hello.md"],
+          "sourcesContent": [
+            "console.log('test');\nconsole.log('test2');\n",
+            "Hello2\n"
+          ]
+        }"#,
+      )
+      .unwrap()
+    );
+    assert_eq!(
+      source.map(&MapOptions::default()).unwrap(),
+      SourceMap::from_json(
+        r#"{
+          "version": 3,
+          "mappings": ";AAAA;AACA;ACDA",
+          "names": [],
+          "sources": ["console.js", "hello.md"],
+          "sourcesContent": [
+            "console.log('test');\nconsole.log('test2');\n",
+            "Hello2\n"
+          ]
+        }"#
+      )
+      .unwrap()
+    );
+  }
+
+  #[test]
+  fn should_concat_two_sources3() {
+    let mut source = ConcatSource::new([
+      RawBufferSource::from("Hello World\n".as_bytes()).boxed(),
       OriginalSource::new(
         "console.log('test');\nconsole.log('test2');\n",
         "console.js",
