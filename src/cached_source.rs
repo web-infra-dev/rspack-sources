@@ -104,9 +104,11 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
           // This is based on the following assumptions:
           // 1. `SourceMap` will be valid for the entire duration of the application.
           // 2. The cached `SourceMap` will not be manually removed or replaced, ensuring the reference's safety.
-          let map = unsafe { std::mem::transmute::<&SourceMap, &'static SourceMap>(map) };
+          let map = unsafe {
+            std::mem::transmute::<&SourceMap, &'static SourceMap>(map)
+          };
           Some(Cow::Borrowed(map))
-        },
+        }
         None => None,
       }
     } else {
@@ -122,9 +124,11 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
           // This is based on the following assumptions:
           // 1. `SourceMap` will be valid for the entire duration of the application.
           // 2. The cached `SourceMap` will not be manually removed or replaced, ensuring the reference's safety.
-          let map = unsafe { std::mem::transmute::<&SourceMap, &'static SourceMap>(map) };
+          let map = unsafe {
+            std::mem::transmute::<&SourceMap, &'static SourceMap>(map)
+          };
           Some(Cow::Borrowed(map))
-        },
+        }
         None => None,
       }
     }

@@ -427,11 +427,15 @@ mod tests {
     }
 
     test_cached!(source, |s: &dyn Source| s.source().to_string());
-    test_cached!(source, |s: &dyn Source| s.map(&MapOptions::default()).map(|m| m.into_owned()));
-    test_cached!(source, |s: &dyn Source| s.map(&MapOptions {
-      columns: false,
-      final_source: true
-    }).map(|m| m.into_owned()));
+    test_cached!(source, |s: &dyn Source| s
+      .map(&MapOptions::default())
+      .map(|m| m.into_owned()));
+    test_cached!(source, |s: &dyn Source| s
+      .map(&MapOptions {
+        columns: false,
+        final_source: true
+      })
+      .map(|m| m.into_owned()));
   }
 
   #[test]
@@ -611,9 +615,8 @@ mod tests {
       }"#,
     )
     .unwrap();
-    let inner_source_map = inner_source
-      .map(&MapOptions::default())
-      .map(|map| {
+    let inner_source_map =
+      inner_source.map(&MapOptions::default()).map(|map| {
         let mut map = map.into_owned();
         map.set_source_root(Some("/path/to/folder/".to_string()));
         map
