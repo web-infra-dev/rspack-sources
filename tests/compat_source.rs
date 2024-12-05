@@ -24,8 +24,8 @@ impl Source for CompatSource {
     42
   }
 
-  fn map(&self, _options: &MapOptions) -> Option<SourceMap> {
-    self.1.clone()
+  fn map(&self, _options: &MapOptions) -> Option<Cow<SourceMap>> {
+    self.1.as_ref().map(Cow::Borrowed)
   }
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
@@ -116,5 +116,5 @@ fn should_generate_correct_source_map() {
   .unwrap();
 
   assert_eq!(source, expected_source);
-  assert_eq!(map, expected_source_map)
+  assert_eq!(map.into_owned(), expected_source_map)
 }
