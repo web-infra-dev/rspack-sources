@@ -1,5 +1,6 @@
 //! Rusty [`webpack-sources`](https://github.com/webpack/webpack-sources) port.
 
+mod arena;
 mod cached_source;
 mod concat_source;
 mod decoder;
@@ -27,6 +28,8 @@ pub use source::{
 pub use source_map_source::{
   SourceMapSource, SourceMapSourceOptions, WithoutOriginalOptions,
 };
+
+pub use arena::Arena;
 
 /// Reexport `StreamChunks` related types.
 pub mod stream_chunks {

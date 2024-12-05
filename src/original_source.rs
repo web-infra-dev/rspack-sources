@@ -26,11 +26,11 @@ use crate::{
 /// let source = OriginalSource::new(input, "file.js");
 /// assert_eq!(source.source(), input);
 /// assert_eq!(
-///   source.map(&MapOptions::default()).unwrap().mappings(),
+///   source.map(&MapOptions::default(), &Default::default()).unwrap().mappings(),
 ///   "AAAA,eAAe,SAAS,MAAM,WAAW;AACzC,eAAe,SAAS,MAAM,WAAW",
 /// );
 /// assert_eq!(
-///   source.map(&MapOptions::new(false)).unwrap().mappings(),
+///   source.map(&MapOptions::new(false), &Default::default()).unwrap().mappings(),
 ///   "AAAA;AACA",
 /// );
 /// ```
@@ -63,8 +63,12 @@ impl Source for OriginalSource {
     self.value.len()
   }
 
-  fn map(&self, options: &MapOptions) -> Option<SourceMap> {
-    get_map(self, options)
+  fn map(
+    &self,
+    options: &MapOptions,
+    arena: &crate::arena::Arena,
+  ) -> Option<SourceMap> {
+    get_map(self, options, arena)
   }
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
@@ -105,6 +109,7 @@ impl<'a> StreamChunks<'a> for OriginalSource {
     on_chunk: OnChunk<'_, 'a>,
     on_source: OnSource<'_, 'a>,
     _on_name: OnName,
+    _arena: &'a crate::arena::Arena,
   ) -> crate::helpers::GeneratedInfo {
     on_source(0, Cow::Borrowed(&self.name), Some(&self.value));
     if options.columns {
@@ -237,8 +242,12 @@ mod tests {
   fn should_handle_multiline_string() {
     let source = OriginalSource::new("Line1\n\nLine3\n", "file.js");
     let result_text = source.source();
-    let result_map = source.map(&MapOptions::default()).unwrap();
-    let result_list_map = source.map(&MapOptions::new(false)).unwrap();
+    let result_map = source
+      .map(&MapOptions::default(), &Default::default())
+      .unwrap();
+    let result_list_map = source
+      .map(&MapOptions::new(false), &Default::default())
+      .unwrap();
 
     assert_eq!(result_text, "Line1\n\nLine3\n");
     assert_eq!(result_map.sources(), &["file.js".to_string()]);
@@ -259,8 +268,9 @@ mod tests {
   fn should_handle_empty_string() {
     let source = OriginalSource::new("", "file.js");
     let result_text = source.source();
-    let result_map = source.map(&MapOptions::default());
-    let result_list_map = source.map(&MapOptions::new(false));
+    let result_map = source.map(&MapOptions::default(), &Default::default());
+    let result_list_map =
+      source.map(&MapOptions::new(false), &Default::default());
 
     assert_eq!(result_text, "");
     assert!(result_map.is_none());
@@ -270,7 +280,9 @@ mod tests {
   #[test]
   fn should_omit_mappings_for_columns_with_node() {
     let source = OriginalSource::new("Line1\n\nLine3\n", "file.js");
-    let result_map = source.map(&MapOptions::new(false)).unwrap();
+    let result_map = source
+      .map(&MapOptions::new(false), &Default::default())
+      .unwrap();
     assert_eq!(result_map.mappings(), "AAAA;AACA;AACA");
   }
 
@@ -295,11 +307,17 @@ mod tests {
     let source = OriginalSource::new(input, "file.js");
     assert_eq!(source.source(), input);
     assert_eq!(
-      source.map(&MapOptions::default()).unwrap().mappings(),
+      source
+        .map(&MapOptions::default(), &Default::default())
+        .unwrap()
+        .mappings(),
       "AAAA,eAAe,SAAS,MAAM,WAAW;AACzC,eAAe,SAAS,MAAM,WAAW",
     );
     assert_eq!(
-      source.map(&MapOptions::new(false)).unwrap().mappings(),
+      source
+        .map(&MapOptions::new(false), &Default::default())
+        .unwrap()
+        .mappings(),
       "AAAA;AACA",
     );
   }
@@ -315,7 +333,9 @@ mod tests {
     let source2 = OriginalSource::new(code2, "world.txt");
 
     let concat = ConcatSource::new([source1.boxed(), source2.boxed()]);
-    let map = concat.map(&MapOptions::new(false)).unwrap();
+    let map = concat
+      .map(&MapOptions::new(false), &Default::default())
+      .unwrap();
     assert_eq!(map.mappings(), "AAAA;AACA;ACDA",);
   }
 }

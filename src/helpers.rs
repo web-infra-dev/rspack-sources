@@ -21,6 +21,7 @@ type InnerSourceContentLine<'a> =
 pub fn get_map<'a, S: StreamChunks<'a>>(
   stream: &'a S,
   options: &'a MapOptions,
+  arena: &'a crate::arena::Arena,
 ) -> Option<SourceMap> {
   let mut mappings_encoder = create_encoder(options.columns);
   let mut sources: Vec<String> = Vec::new();
@@ -58,6 +59,7 @@ pub fn get_map<'a, S: StreamChunks<'a>>(
       }
       names[name_index] = name.to_string();
     },
+    arena,
   );
   let mappings = mappings_encoder.drain();
   (!mappings.is_empty())
@@ -73,6 +75,7 @@ pub trait StreamChunks<'a> {
     on_chunk: OnChunk<'_, 'a>,
     on_source: OnSource<'_, 'a>,
     on_name: OnName<'_, 'a>,
+    arena: &'a crate::arena::Arena,
   ) -> GeneratedInfo;
 }
 
@@ -1147,6 +1150,7 @@ pub fn stream_and_get_source_and_map<'a, S: StreamChunks<'a>>(
   on_chunk: OnChunk<'_, 'a>,
   on_source: OnSource<'_, 'a>,
   on_name: OnName<'_, 'a>,
+  arena: &'a crate::arena::Arena,
 ) -> (GeneratedInfo, Option<SourceMap>) {
   let mut mappings_encoder = create_encoder(options.columns);
   let mut sources: Vec<String> = Vec::new();
@@ -1181,6 +1185,7 @@ pub fn stream_and_get_source_and_map<'a, S: StreamChunks<'a>>(
       names[name_index2] = name.to_string();
       on_name(name_index, name);
     },
+    arena,
   );
 
   let mappings = mappings_encoder.drain();

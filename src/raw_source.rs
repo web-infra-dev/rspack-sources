@@ -1,7 +1,6 @@
 use std::{
   borrow::Cow,
   hash::{Hash, Hasher},
-  sync::OnceLock,
 };
 
 use crate::{
@@ -31,12 +30,11 @@ static_assertions::assert_eq_size!(RawValue, [u8; 32]);
 /// let code = "some source code";
 /// let s = RawSource::from(code.to_string());
 /// assert_eq!(s.source(), code);
-/// assert_eq!(s.map(&MapOptions::default()), None);
+/// assert_eq!(s.map(&MapOptions::default(), &Default::default()), None);
 /// assert_eq!(s.size(), 16);
 /// ```
 pub struct RawSource {
   value: RawValue,
-  value_as_string: OnceLock<String>,
 }
 
 impl RawSource {
@@ -52,7 +50,6 @@ impl RawSource {
   pub fn from_static(s: &'static str) -> Self {
     Self {
       value: RawValue::String(Cow::Borrowed(s)),
-      value_as_string: Default::default(),
     }
   }
 }
@@ -61,7 +58,6 @@ impl Clone for RawSource {
   fn clone(&self) -> Self {
     Self {
       value: self.value.clone(),
-      value_as_string: Default::default(),
     }
   }
 }
@@ -79,7 +75,6 @@ impl From<String> for RawSource {
   fn from(value: String) -> Self {
     Self {
       value: RawValue::String(value.into()),
-      value_as_string: Default::default(),
     }
   }
 }
@@ -88,7 +83,6 @@ impl From<Vec<u8>> for RawSource {
   fn from(value: Vec<u8>) -> Self {
     Self {
       value: RawValue::Buffer(value),
-      value_as_string: Default::default(),
     }
   }
 }
@@ -97,7 +91,6 @@ impl From<&str> for RawSource {
   fn from(value: &str) -> Self {
     Self {
       value: RawValue::String(value.to_string().into()),
-      value_as_string: Default::default(),
     }
   }
 }
@@ -106,7 +99,6 @@ impl From<&[u8]> for RawSource {
   fn from(value: &[u8]) -> Self {
     Self {
       value: RawValue::Buffer(value.to_owned()),
-      value_as_string: Default::default(),
     }
   }
 }
@@ -115,11 +107,7 @@ impl Source for RawSource {
   fn source(&self) -> Cow<str> {
     match &self.value {
       RawValue::String(v) => Cow::Borrowed(v),
-      RawValue::Buffer(v) => Cow::Borrowed(
-        self
-          .value_as_string
-          .get_or_init(|| String::from_utf8_lossy(v).to_string()),
-      ),
+      RawValue::Buffer(v) => String::from_utf8_lossy(v),
     }
   }
 
@@ -137,7 +125,11 @@ impl Source for RawSource {
     }
   }
 
-  fn map(&self, _: &MapOptions) -> Option<SourceMap> {
+  fn map(
+    &self,
+    _: &MapOptions,
+    _arena: &crate::arena::Arena,
+  ) -> Option<SourceMap> {
     None
   }
 
@@ -194,23 +186,13 @@ impl<'a> StreamChunks<'a> for RawSource {
     on_chunk: OnChunk<'_, 'a>,
     on_source: OnSource<'_, 'a>,
     on_name: OnName<'_, 'a>,
+    arena: &'a crate::arena::Arena,
   ) -> crate::helpers::GeneratedInfo {
     if options.final_source {
       get_generated_source_info(&self.source())
     } else {
-      match &self.value {
-        RawValue::Buffer(buffer) => {
-          let source = self
-            .value_as_string
-            .get_or_init(|| String::from_utf8_lossy(buffer).to_string());
-          stream_chunks_of_raw_source(
-            source, options, on_chunk, on_source, on_name,
-          )
-        }
-        RawValue::String(source) => stream_chunks_of_raw_source(
-          source, options, on_chunk, on_source, on_name,
-        ),
-      }
+      let source = arena.alloc(self.source());
+      stream_chunks_of_raw_source(source, options, on_chunk, on_source, on_name)
     }
   }
 }
@@ -225,7 +207,7 @@ impl<'a> StreamChunks<'a> for RawSource {
 /// let code = "some source code";
 /// let s = RawStringSource::from(code.to_string());
 /// assert_eq!(s.source(), code);
-/// assert_eq!(s.map(&MapOptions::default()), None);
+/// assert_eq!(s.map(&MapOptions::default(), &Default::default()), None);
 /// assert_eq!(s.size(), 16);
 /// ```
 #[derive(Clone, PartialEq, Eq)]
@@ -274,7 +256,11 @@ impl Source for RawStringSource {
     self.0.len()
   }
 
-  fn map(&self, _: &MapOptions) -> Option<SourceMap> {
+  fn map(
+    &self,
+    _: &MapOptions,
+    _arena: &crate::arena::Arena,
+  ) -> Option<SourceMap> {
     None
   }
 
@@ -308,6 +294,7 @@ impl<'a> StreamChunks<'a> for RawStringSource {
     on_chunk: OnChunk<'_, 'a>,
     on_source: OnSource<'_, 'a>,
     on_name: OnName<'_, 'a>,
+    _arena: &'a crate::arena::Arena,
   ) -> crate::helpers::GeneratedInfo {
     if options.final_source {
       get_generated_source_info(&self.source())
@@ -329,21 +316,17 @@ impl<'a> StreamChunks<'a> for RawStringSource {
 /// let code = "some source code".as_bytes();
 /// let s = RawBufferSource::from(code);
 /// assert_eq!(s.buffer(), code);
-/// assert_eq!(s.map(&MapOptions::default()), None);
+/// assert_eq!(s.map(&MapOptions::default(), &Default::default()), None);
 /// assert_eq!(s.size(), 16);
 /// ```
 #[derive(Clone, PartialEq, Eq)]
 pub struct RawBufferSource {
   value: Vec<u8>,
-  value_as_string: OnceLock<String>,
 }
 
 impl From<Vec<u8>> for RawBufferSource {
   fn from(value: Vec<u8>) -> Self {
-    Self {
-      value,
-      value_as_string: Default::default(),
-    }
+    Self { value }
   }
 }
 
@@ -351,18 +334,13 @@ impl From<&[u8]> for RawBufferSource {
   fn from(value: &[u8]) -> Self {
     Self {
       value: value.to_vec(),
-      value_as_string: Default::default(),
     }
   }
 }
 
 impl Source for RawBufferSource {
   fn source(&self) -> Cow<str> {
-    Cow::Borrowed(
-      self
-        .value_as_string
-        .get_or_init(|| String::from_utf8_lossy(&self.value).to_string()),
-    )
+    String::from_utf8_lossy(&self.value)
   }
 
   fn buffer(&self) -> Cow<[u8]> {
@@ -373,7 +351,11 @@ impl Source for RawBufferSource {
     self.value.len()
   }
 
-  fn map(&self, _: &MapOptions) -> Option<SourceMap> {
+  fn map(
+    &self,
+    _: &MapOptions,
+    _arena: &crate::arena::Arena,
+  ) -> Option<SourceMap> {
     None
   }
 
@@ -407,19 +389,13 @@ impl<'a> StreamChunks<'a> for RawBufferSource {
     on_chunk: OnChunk<'_, 'a>,
     on_source: OnSource<'_, 'a>,
     on_name: OnName<'_, 'a>,
+    arena: &'a crate::arena::Arena,
   ) -> crate::helpers::GeneratedInfo {
     if options.final_source {
       get_generated_source_info(&self.source())
     } else {
-      stream_chunks_of_raw_source(
-        self
-          .value_as_string
-          .get_or_init(|| String::from_utf8_lossy(&self.value).to_string()),
-        options,
-        on_chunk,
-        on_source,
-        on_name,
-      )
+      let source = arena.alloc(String::from_utf8_lossy(&self.value));
+      stream_chunks_of_raw_source(source, options, on_chunk, on_source, on_name)
     }
   }
 }
@@ -437,7 +413,9 @@ mod tests {
     let source1 = ReplaceSource::new(source1);
     let source2 = OriginalSource::new("world".to_string(), "world.txt");
     let concat = ConcatSource::new([source1.boxed(), source2.boxed()]);
-    let map = concat.map(&MapOptions::new(false)).unwrap();
+    let map = concat
+      .map(&MapOptions::new(false), &Default::default())
+      .unwrap();
     assert_eq!(map.mappings(), ";;AAAA",);
   }
 }

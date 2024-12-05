@@ -94,11 +94,15 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
     self.source().len()
   }
 
-  fn map(&self, options: &MapOptions) -> Option<SourceMap> {
+  fn map(
+    &self,
+    options: &MapOptions,
+    arena: &crate::arena::Arena,
+  ) -> Option<SourceMap> {
     if let Some(map) = self.cached_maps.get(options) {
       map.clone()
     } else {
-      let map = self.inner.map(options);
+      let map = self.inner.map(options, arena);
       self.cached_maps.insert(options.clone(), map.clone());
       map
     }
@@ -118,6 +122,7 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks<'_>
     on_chunk: crate::helpers::OnChunk<'_, 'a>,
     on_source: crate::helpers::OnSource<'_, 'a>,
     on_name: crate::helpers::OnName<'_, 'a>,
+    arena: &'a crate::arena::Arena,
   ) -> crate::helpers::GeneratedInfo {
     let cached_map = self.cached_maps.entry(options.clone());
     match cached_map {
@@ -150,6 +155,7 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks<'_>
           on_chunk,
           on_source,
           on_name,
+          arena,
         );
         entry.insert(map);
         generated_info
@@ -230,7 +236,9 @@ mod tests {
       })
       .boxed(),
     ]);
-    let map = source.map(&Default::default()).unwrap();
+    let map = source
+      .map(&Default::default(), &Default::default())
+      .unwrap();
     assert_eq!(map.mappings(), ";;AACA");
   }
 
@@ -245,7 +253,7 @@ mod tests {
     source.source();
     source.buffer();
     source.size();
-    source.map(&map_options);
+    source.map(&map_options, &Default::default());
 
     assert_eq!(clone.cached_source.get().unwrap().borrow(), source.source());
     assert_eq!(
@@ -254,7 +262,7 @@ mod tests {
     );
     assert_eq!(
       *clone.cached_maps.get(&map_options).unwrap().value(),
-      source.map(&map_options)
+      source.map(&map_options, &Default::default())
     );
   }
 
@@ -324,6 +332,7 @@ mod tests {
       &mut |_name_index, _name| {
         on_name_count += 1;
       },
+      &Default::default(),
     );
 
     let cached_source = CachedSource::new(source);
@@ -332,6 +341,7 @@ mod tests {
       &mut |_chunk, _mapping| {},
       &mut |_source_index, _source, _source_content| {},
       &mut |_name_index, _name| {},
+      &Default::default(),
     );
 
     let mut cached_on_chunk_count = 0;
@@ -348,6 +358,7 @@ mod tests {
       &mut |_name_index, _name| {
         cached_on_name_count += 1;
       },
+      &Default::default(),
     );
 
     assert_eq!(on_chunk_count, cached_on_chunk_count);

@@ -39,7 +39,11 @@ pub trait Source:
   fn size(&self) -> usize;
 
   /// Get the [SourceMap].
-  fn map(&self, options: &MapOptions) -> Option<SourceMap>;
+  fn map(
+    &self,
+    options: &MapOptions,
+    arena: &crate::arena::Arena,
+  ) -> Option<SourceMap>;
 
   /// Update hash based on the source.
   fn update_hash(&self, state: &mut dyn Hasher) {
@@ -63,8 +67,12 @@ impl Source for BoxSource {
     self.as_ref().size()
   }
 
-  fn map(&self, options: &MapOptions) -> Option<SourceMap> {
-    self.as_ref().map(options)
+  fn map(
+    &self,
+    options: &MapOptions,
+    arena: &crate::arena::Arena,
+  ) -> Option<SourceMap> {
+    self.as_ref().map(options, arena)
   }
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
@@ -81,10 +89,11 @@ impl<'a> StreamChunks<'a> for BoxSource {
     on_chunk: crate::helpers::OnChunk<'_, 'a>,
     on_source: crate::helpers::OnSource<'_, 'a>,
     on_name: crate::helpers::OnName<'_, 'a>,
+    arena: &'a crate::arena::Arena,
   ) -> crate::helpers::GeneratedInfo {
     self
       .as_ref()
-      .stream_chunks(options, on_chunk, on_source, on_name)
+      .stream_chunks(options, on_chunk, on_source, on_name, arena)
   }
 }
 

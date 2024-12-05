@@ -216,13 +216,17 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for ReplaceSource<T> {
     self.source().len()
   }
 
-  fn map(&self, options: &crate::MapOptions) -> Option<SourceMap> {
+  fn map(
+    &self,
+    options: &crate::MapOptions,
+    arena: &crate::arena::Arena,
+  ) -> Option<SourceMap> {
     let replacements = self.replacements.lock().unwrap();
     if replacements.is_empty() {
-      return self.inner.map(options);
+      return self.inner.map(options, arena);
     }
     drop(replacements);
-    get_map(self, options)
+    get_map(self, options, arena)
   }
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
@@ -280,6 +284,7 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
     on_chunk: crate::helpers::OnChunk<'_, 'a>,
     on_source: crate::helpers::OnSource<'_, 'a>,
     on_name: crate::helpers::OnName<'_, 'a>,
+    arena: &'a crate::arena::Arena,
   ) -> crate::helpers::GeneratedInfo {
     self.sort_replacement();
     let on_name = RefCell::new(on_name);
@@ -644,6 +649,7 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
           .borrow_mut()
           .insert(name_index, global_index.unwrap());
       },
+      arena,
     );
 
     // Handle remaining replacements
@@ -807,7 +813,9 @@ mod tests {
     source.replace(start_line6 + 4, start_line6 + 5, " ", None);
 
     let result = source.source();
-    let result_map = source.map(&MapOptions::default()).unwrap();
+    let result_map = source
+      .map(&MapOptions::default(), &Default::default())
+      .unwrap();
 
     assert_eq!(
       code,
@@ -839,7 +847,9 @@ Last Line"#
 5:0 -> [file.txt] 6:0, :4 -> [file.txt] 6:4, :5 -> [file.txt] 7:0"#
     );
 
-    let result_list_map = source.map(&MapOptions::new(false)).unwrap();
+    let result_list_map = source
+      .map(&MapOptions::new(false), &Default::default())
+      .unwrap();
     assert_eq!(
       with_readable_mappings(&result_list_map),
       r#"
@@ -862,8 +872,12 @@ Last Line"#
     source.insert(0, "Message: ", None);
     source.replace(2, (line1.len() + 5) as u32, "y A", None);
     let result_text = source.source();
-    let result_map = source.map(&MapOptions::default()).unwrap();
-    let result_list_map = source.map(&MapOptions::new(false)).unwrap();
+    let result_map = source
+      .map(&MapOptions::default(), &Default::default())
+      .unwrap();
+    let result_list_map = source
+      .map(&MapOptions::new(false), &Default::default())
+      .unwrap();
 
     assert_eq!(
       original_code,
@@ -893,8 +907,12 @@ World!"#
     source.insert(0, "Line 0\n", None);
 
     let result_text = source.source();
-    let result_map = source.map(&MapOptions::default()).unwrap();
-    let result_list_map = source.map(&MapOptions::new(false)).unwrap();
+    let result_map = source
+      .map(&MapOptions::default(), &Default::default())
+      .unwrap();
+    let result_list_map = source
+      .map(&MapOptions::new(false), &Default::default())
+      .unwrap();
 
     assert_eq!(result_text, "Line -1\nLine 0\nLine 1");
     assert_eq!(
@@ -922,8 +940,12 @@ World!"#
     source.insert(0, "Line 0\n", None);
     source.replace(0, 6, "Hello", None);
     let result_text = source.source();
-    let result_map = source.map(&MapOptions::default()).unwrap();
-    let result_list_map = source.map(&MapOptions::new(false)).unwrap();
+    let result_map = source
+      .map(&MapOptions::default(), &Default::default())
+      .unwrap();
+    let result_list_map = source
+      .map(&MapOptions::new(false), &Default::default())
+      .unwrap();
 
     assert_eq!(
       result_text,
@@ -947,8 +969,12 @@ Line 2"#
     let mut source = ReplaceSource::new(OriginalSource::new(line1, "file.txt"));
     source.insert((line1.len() + 1) as u32, "Line 2\n", None);
     let result_text = source.source();
-    let result_map = source.map(&MapOptions::default()).unwrap();
-    let result_list_map = source.map(&MapOptions::new(false)).unwrap();
+    let result_map = source
+      .map(&MapOptions::default(), &Default::default())
+      .unwrap();
+    let result_list_map = source
+      .map(&MapOptions::new(false), &Default::default())
+      .unwrap();
 
     assert_eq!(result_text, "Line 1\nLine 2\n");
     assert_eq!(
@@ -968,7 +994,9 @@ Line 2"#
       ReplaceSource::new(OriginalSource::new(bootstrap_code, "file.js"));
     source.replace(7, 12, "h", Some("hello"));
     source.replace(20, 25, "w", Some("world"));
-    let result_map = source.map(&MapOptions::default()).expect("failed");
+    let result_map = source
+      .map(&MapOptions::default(), &Default::default())
+      .expect("failed");
 
     let target_code = source.source();
     assert_eq!(target_code, "   var h\n   var w\n");
@@ -1033,7 +1061,9 @@ export default function StaticPage(_ref) {
     );
 
     let target_code = source.source();
-    let source_map = source.map(&MapOptions::default()).unwrap();
+    let source_map = source
+      .map(&MapOptions::default(), &Default::default())
+      .unwrap();
 
     assert_eq!(
       target_code,
@@ -1084,7 +1114,9 @@ return <div>{data.foo}</div>
     source.replace(12, 24, "", None);
 
     let target_code = source.source();
-    let source_map = source.map(&MapOptions::default()).unwrap();
+    let source_map = source
+      .map(&MapOptions::default(), &Default::default())
+      .unwrap();
 
     assert_eq!(target_code, "if (false) {}");
     assert_eq!(
@@ -1110,7 +1142,9 @@ return <div>{data.foo}</div>
     source.replace(0, 999, "replaced!\n", Some("whole"));
 
     let result_text = source.source();
-    let result_map = source.map(&MapOptions::default()).unwrap();
+    let result_map = source
+      .map(&MapOptions::default(), &Default::default())
+      .unwrap();
 
     assert_eq!(result_text, "start1\nstart2\nreplaced!\nend1\nend2");
     assert_eq!(
@@ -1128,7 +1162,10 @@ return <div>{data.foo}</div>
     source.replace(3, 5, "", None);
     assert_eq!(source.size(), 3);
     assert_eq!(source.source(), "box");
-    assert_eq!(source.map(&MapOptions::default()), None);
+    assert_eq!(
+      source.map(&MapOptions::default(), &Default::default()),
+      None
+    );
     let mut hasher = twox_hash::XxHash64::default();
     source.hash(&mut hasher);
     assert_eq!(format!("{:x}", hasher.finish()), "5781cda25d360a42");
@@ -1163,7 +1200,7 @@ return <div>{data.foo}</div>
     );
     assert_eq!(
       source
-        .map(&MapOptions::default())
+        .map(&MapOptions::default(), &Default::default())
         .unwrap()
         .to_json()
         .unwrap(),

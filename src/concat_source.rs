@@ -39,7 +39,7 @@ use crate::{
 ///   "Hello World\nconsole.log('test');\nconsole.log('test2');\nHello2\n"
 /// );
 /// assert_eq!(
-///   source.map(&MapOptions::new(false)).unwrap(),
+///   source.map(&MapOptions::new(false), &Default::default()).unwrap(),
 ///   SourceMap::from_json(
 ///     r#"{
 ///       "version": 3,
@@ -127,8 +127,12 @@ impl Source for ConcatSource {
     self.children().iter().map(|child| child.size()).sum()
   }
 
-  fn map(&self, options: &MapOptions) -> Option<SourceMap> {
-    get_map(self, options)
+  fn map(
+    &self,
+    options: &MapOptions,
+    arena: &crate::arena::Arena,
+  ) -> Option<SourceMap> {
+    get_map(self, options, arena)
   }
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
@@ -162,10 +166,11 @@ impl<'a> StreamChunks<'a> for ConcatSource {
     on_chunk: OnChunk<'_, 'a>,
     on_source: OnSource<'_, 'a>,
     on_name: OnName<'_, 'a>,
+    arena: &'a crate::arena::Arena,
   ) -> crate::helpers::GeneratedInfo {
     if self.children().len() == 1 {
       return self.children[0]
-        .stream_chunks(options, on_chunk, on_source, on_name);
+        .stream_chunks(options, on_chunk, on_source, on_name, arena);
     }
     let mut current_line_offset = 0;
     let mut current_column_offset = 0;
@@ -295,6 +300,7 @@ impl<'a> StreamChunks<'a> for ConcatSource {
             .borrow_mut()
             .insert(i, global_index.unwrap());
         },
+        &arena,
       );
       if need_to_close_mapping && (generated_line != 1 || generated_column != 0)
       {
@@ -347,7 +353,9 @@ mod tests {
     assert_eq!(source.size(), 62);
     assert_eq!(source.source(), expected_source);
     assert_eq!(
-      source.map(&MapOptions::new(false)).unwrap(),
+      source
+        .map(&MapOptions::new(false), &Default::default())
+        .unwrap(),
       SourceMap::from_json(
         r#"{
           "version": 3,
@@ -363,7 +371,9 @@ mod tests {
       .unwrap()
     );
     assert_eq!(
-      source.map(&MapOptions::default()).unwrap(),
+      source
+        .map(&MapOptions::default(), &Default::default())
+        .unwrap(),
       SourceMap::from_json(
         r#"{
           "version": 3,
@@ -397,7 +407,9 @@ mod tests {
     assert_eq!(source.size(), 62);
     assert_eq!(source.source(), expected_source);
     assert_eq!(
-      source.map(&MapOptions::new(false)).unwrap(),
+      source
+        .map(&MapOptions::new(false), &Default::default())
+        .unwrap(),
       SourceMap::from_json(
         r#"{
           "version": 3,
@@ -413,7 +425,9 @@ mod tests {
       .unwrap()
     );
     assert_eq!(
-      source.map(&MapOptions::default()).unwrap(),
+      source
+        .map(&MapOptions::default(), &Default::default())
+        .unwrap(),
       SourceMap::from_json(
         r#"{
           "version": 3,
@@ -447,7 +461,9 @@ mod tests {
     assert_eq!(source.size(), 62);
     assert_eq!(source.source(), expected_source);
     assert_eq!(
-      source.map(&MapOptions::new(false)).unwrap(),
+      source
+        .map(&MapOptions::new(false), &Default::default())
+        .unwrap(),
       SourceMap::from_json(
         r#"{
           "version": 3,
@@ -463,7 +479,9 @@ mod tests {
       .unwrap()
     );
     assert_eq!(
-      source.map(&MapOptions::default()).unwrap(),
+      source
+        .map(&MapOptions::default(), &Default::default())
+        .unwrap(),
       SourceMap::from_json(
         r#"{
           "version": 3,
@@ -512,7 +530,9 @@ mod tests {
     assert_eq!(source.source(), expected_source);
     assert_eq!(source.buffer(), expected_source.as_bytes());
 
-    let map = source.map(&MapOptions::new(false)).unwrap();
+    let map = source
+      .map(&MapOptions::new(false), &Default::default())
+      .unwrap();
     assert_eq!(map, expected_map1);
 
     // TODO: test hash
@@ -527,8 +547,9 @@ mod tests {
     ]);
 
     let result_text = source.source();
-    let result_map = source.map(&MapOptions::default());
-    let result_list_map = source.map(&MapOptions::new(false));
+    let result_map = source.map(&MapOptions::default(), &Default::default());
+    let result_list_map =
+      source.map(&MapOptions::new(false), &Default::default());
 
     assert_eq!(result_text, "Hello World\nHello World\n");
     assert!(result_map.is_none());
@@ -549,7 +570,9 @@ mod tests {
     ]);
 
     assert_eq!(
-      source.map(&MapOptions::default()).unwrap(),
+      source
+        .map(&MapOptions::default(), &Default::default())
+        .unwrap(),
       SourceMap::from_json(
         r#"{
           "mappings": "AAAA,K,CCAA,M;ADAA;;ACAA",
@@ -575,6 +598,8 @@ mod tests {
       RawSource::from("c"),
     ]);
     assert_eq!(source.source(), "abc");
-    assert!(source.map(&MapOptions::default()).is_none());
+    assert!(source
+      .map(&MapOptions::default(), &Default::default())
+      .is_none());
   }
 }

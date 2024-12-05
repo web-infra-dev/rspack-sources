@@ -24,7 +24,11 @@ impl Source for CompatSource {
     42
   }
 
-  fn map(&self, _options: &MapOptions) -> Option<SourceMap> {
+  fn map(
+    &self,
+    _options: &MapOptions,
+    _arena: &rspack_sources::Arena,
+  ) -> Option<SourceMap> {
     self.1.clone()
   }
 
@@ -40,6 +44,7 @@ impl<'a> StreamChunks<'a> for CompatSource {
     on_chunk: OnChunk<'_, 'a>,
     on_source: OnSource<'_, 'a>,
     on_name: OnName<'_, 'a>,
+    _arena: &'a rspack_sources::Arena,
   ) -> GeneratedInfo {
     stream_chunks_default(
       self.0,
@@ -79,7 +84,10 @@ fn should_work_with_custom_compat_source() {
   assert_eq!(source.source(), CONTENT);
   assert_eq!(source.size(), 42);
   assert_eq!(source.buffer(), CONTENT.as_bytes());
-  assert_eq!(source.map(&MapOptions::default()), None);
+  assert_eq!(
+    source.map(&MapOptions::default(), &Default::default()),
+    None
+  );
 }
 
 #[test]
@@ -101,7 +109,9 @@ fn should_generate_correct_source_map() {
   ]);
 
   let source = result.source();
-  let map = result.map(&MapOptions::default()).unwrap();
+  let map = result
+    .map(&MapOptions::default(), &Default::default())
+    .unwrap();
 
   let expected_source = "Line0\nLine1\nLine2\nLine3\n";
   let expected_source_map = SourceMap::from_json(
