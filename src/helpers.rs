@@ -18,7 +18,7 @@ use crate::{
 type InnerSourceContentLine<'a> =
   RefCell<LinearMap<OnceCell<Option<Vec<WithIndices<'a>>>>>>;
 
-pub fn get_map<'a, S: StreamChunks<'a>>(
+pub fn get_map<'a, S: StreamChunks>(
   stream: &'a S,
   options: &'a MapOptions,
   arena: &'a crate::arena::Arena,
@@ -67,9 +67,9 @@ pub fn get_map<'a, S: StreamChunks<'a>>(
 }
 
 /// [StreamChunks] abstraction, see [webpack-sources source.streamChunks](https://github.com/webpack/webpack-sources/blob/9f98066311d53a153fdc7c633422a1d086528027/lib/helpers/streamChunks.js#L13).
-pub trait StreamChunks<'a> {
+pub trait StreamChunks {
   /// [StreamChunks] abstraction
-  fn stream_chunks(
+  fn stream_chunks<'a>(
     &'a self,
     options: &MapOptions,
     on_chunk: OnChunk<'_, 'a>,
@@ -1144,7 +1144,7 @@ pub fn stream_chunks_of_combined_source_map<'a>(
   )
 }
 
-pub fn stream_and_get_source_and_map<'a, S: StreamChunks<'a>>(
+pub fn stream_and_get_source_and_map<'a, S: StreamChunks>(
   input_source: &'a S,
   options: &MapOptions,
   on_chunk: OnChunk<'_, 'a>,

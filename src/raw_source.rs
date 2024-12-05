@@ -179,8 +179,8 @@ impl std::fmt::Debug for RawSource {
   }
 }
 
-impl<'a> StreamChunks<'a> for RawSource {
-  fn stream_chunks(
+impl StreamChunks for RawSource {
+  fn stream_chunks<'a>(
     &'a self,
     options: &MapOptions,
     on_chunk: OnChunk<'_, 'a>,
@@ -287,8 +287,8 @@ impl Hash for RawStringSource {
   }
 }
 
-impl<'a> StreamChunks<'a> for RawStringSource {
-  fn stream_chunks(
+impl StreamChunks for RawStringSource {
+  fn stream_chunks<'a>(
     &'a self,
     options: &MapOptions,
     on_chunk: OnChunk<'_, 'a>,
@@ -382,8 +382,8 @@ impl Hash for RawBufferSource {
   }
 }
 
-impl<'a> StreamChunks<'a> for RawBufferSource {
-  fn stream_chunks(
+impl StreamChunks for RawBufferSource {
+  fn stream_chunks<'a>(
     &'a self,
     options: &MapOptions,
     on_chunk: OnChunk<'_, 'a>,

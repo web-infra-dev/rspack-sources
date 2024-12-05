@@ -277,8 +277,8 @@ fn check_content_at_position(
   }
 }
 
-impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
-  fn stream_chunks(
+impl<T: Source> StreamChunks for ReplaceSource<T> {
+  fn stream_chunks<'a>(
     &'a self,
     options: &crate::MapOptions,
     on_chunk: crate::helpers::OnChunk<'_, 'a>,

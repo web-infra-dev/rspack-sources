@@ -159,8 +159,8 @@ impl PartialEq for ConcatSource {
 }
 impl Eq for ConcatSource {}
 
-impl<'a> StreamChunks<'a> for ConcatSource {
-  fn stream_chunks(
+impl StreamChunks for ConcatSource {
+  fn stream_chunks<'a>(
     &'a self,
     options: &MapOptions,
     on_chunk: OnChunk<'_, 'a>,

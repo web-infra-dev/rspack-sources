@@ -102,8 +102,8 @@ impl std::fmt::Debug for OriginalSource {
   }
 }
 
-impl<'a> StreamChunks<'a> for OriginalSource {
-  fn stream_chunks(
+impl StreamChunks for OriginalSource {
+  fn stream_chunks<'a>(
     &'a self,
     options: &MapOptions,
     on_chunk: OnChunk<'_, 'a>,

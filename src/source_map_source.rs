@@ -150,8 +150,8 @@ impl std::fmt::Debug for SourceMapSource {
   }
 }
 
-impl<'a> StreamChunks<'a> for SourceMapSource {
-  fn stream_chunks(
+impl StreamChunks for SourceMapSource {
+  fn stream_chunks<'a>(
     &'a self,
     options: &MapOptions,
     on_chunk: crate::helpers::OnChunk<'_, 'a>,
