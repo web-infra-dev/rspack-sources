@@ -209,6 +209,156 @@ impl<T: std::fmt::Debug> std::fmt::Debug for CachedSource<T> {
   }
 }
 
+/// Map-cached variant of [CachedSource]
+///
+/// - [webpack-sources docs](https://github.com/webpack/webpack-sources/#cachedsource).
+pub struct MapCachedSource<T> {
+  inner: Arc<T>,
+  cached_hash: Arc<OnceLock<u64>>,
+  cached_maps:
+    Arc<DashMap<MapOptions, Option<SourceMap>, BuildHasherDefault<FxHasher>>>,
+}
+
+impl<T> MapCachedSource<T> {
+  /// Create a [MapCachedSource] with the original [Source].
+  pub fn new(inner: T) -> Self {
+    Self {
+      inner: Arc::new(inner),
+      cached_hash: Default::default(),
+      cached_maps: Default::default(),
+    }
+  }
+
+  /// Get the original [Source].
+  pub fn original(&self) -> &T {
+    &self.inner
+  }
+}
+
+impl<T: Source + Hash + PartialEq + Eq + 'static> Source
+  for MapCachedSource<T>
+{
+  fn source(&self) -> Cow<str> {
+    self.inner.source()
+  }
+
+  fn buffer(&self) -> Cow<[u8]> {
+    self.inner.buffer()
+  }
+
+  fn size(&self) -> usize {
+    self.source().len()
+  }
+
+  fn map(
+    &self,
+    options: &MapOptions,
+    arena: &crate::arena::Arena,
+  ) -> Option<SourceMap> {
+    if let Some(map) = self.cached_maps.get(options) {
+      map.clone()
+    } else {
+      let map = self.inner.map(options, arena);
+      self.cached_maps.insert(options.clone(), map.clone());
+      map
+    }
+  }
+
+  fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
+    self.inner.to_writer(writer)
+  }
+}
+
+impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks
+  for MapCachedSource<T>
+{
+  fn stream_chunks<'a>(
+    &'a self,
+    options: &MapOptions,
+    on_chunk: crate::helpers::OnChunk<'_, 'a>,
+    on_source: crate::helpers::OnSource<'_, 'a>,
+    on_name: crate::helpers::OnName<'_, 'a>,
+    arena: &'a crate::arena::Arena,
+  ) -> crate::helpers::GeneratedInfo {
+    let cached_map = self.cached_maps.entry(options.clone());
+    match cached_map {
+      Entry::Occupied(entry) => {
+        let source = arena.alloc(self.inner.source());
+        if let Some(map) = entry.get() {
+          #[allow(unsafe_code)]
+          // SAFETY: We guarantee that once a `SourceMap` is stored in the cache, it will never be removed.
+          // Therefore, even if we force its lifetime to be longer, the reference remains valid.
+          // This is based on the following assumptions:
+          // 1. `SourceMap` will be valid for the entire duration of the application.
+          // 2. The cached `SourceMap` will not be manually removed or replaced, ensuring the reference's safety.
+          let map =
+            unsafe { std::mem::transmute::<&SourceMap, &'a SourceMap>(map) };
+          stream_chunks_of_source_map(
+            source, map, on_chunk, on_source, on_name, options,
+          )
+        } else {
+          stream_chunks_of_raw_source(
+            source, options, on_chunk, on_source, on_name,
+          )
+        }
+      }
+      Entry::Vacant(entry) => {
+        let (generated_info, map) = stream_and_get_source_and_map(
+          &self.inner as &T,
+          options,
+          on_chunk,
+          on_source,
+          on_name,
+          arena,
+        );
+        entry.insert(map);
+        generated_info
+      }
+    }
+  }
+}
+
+impl<T> Clone for MapCachedSource<T> {
+  fn clone(&self) -> Self {
+    Self {
+      inner: self.inner.clone(),
+      cached_hash: self.cached_hash.clone(),
+      cached_maps: self.cached_maps.clone(),
+    }
+  }
+}
+
+impl<T: Source + Hash + PartialEq + Eq + 'static> Hash for MapCachedSource<T> {
+  fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+    (self.cached_hash.get_or_init(|| {
+      let mut hasher = FxHasher::default();
+      hasher.write(self.source().as_bytes());
+      hasher.finish()
+    }))
+    .hash(state);
+  }
+}
+
+impl<T: PartialEq> PartialEq for MapCachedSource<T> {
+  fn eq(&self, other: &Self) -> bool {
+    self.inner == other.inner
+  }
+}
+
+impl<T: Eq> Eq for MapCachedSource<T> {}
+
+impl<T: std::fmt::Debug> std::fmt::Debug for MapCachedSource<T> {
+  fn fmt(
+    &self,
+    f: &mut std::fmt::Formatter<'_>,
+  ) -> Result<(), std::fmt::Error> {
+    f.debug_struct("MapCachedSource")
+      .field("inner", self.inner.as_ref())
+      .field("cached_maps", &(!self.cached_maps.is_empty()))
+      .finish()
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use std::borrow::Borrow;

@@ -15,7 +15,7 @@ mod source;
 mod source_map_source;
 mod with_indices;
 
-pub use cached_source::CachedSource;
+pub use cached_source::{CachedSource, MapCachedSource};
 pub use concat_source::ConcatSource;
 pub use error::{Error, Result};
 pub use original_source::OriginalSource;
