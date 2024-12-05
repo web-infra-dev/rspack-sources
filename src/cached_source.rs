@@ -12,7 +12,7 @@ use crate::{
     stream_chunks_of_raw_source, stream_chunks_of_source_map, GeneratedInfo,
     OnChunk, OnName, OnSource, StreamChunks,
   },
-  BoxSource, MapOptions, Source, SourceMap,
+  BoxSource, MapOptions, Source, SourceExt, SourceMap,
 };
 
 /// It tries to reused cached results from other methods to avoid calculations,
@@ -50,18 +50,18 @@ use crate::{
 /// ```
 pub struct CachedSource {
   inner: Mutex<Option<BoxSource>>,
-  cached_buffer: Arc<OnceLock<Vec<u8>>>,
-  cached_source: Arc<OnceLock<Arc<str>>>,
-  cached_hash: Arc<OnceLock<u64>>,
-  cached_full_map: Arc<OnceLock<Option<SourceMap>>>,
-  cached_lines_only_map: Arc<OnceLock<Option<SourceMap>>>,
+  cached_buffer: OnceLock<Vec<u8>>,
+  cached_source: OnceLock<Arc<str>>,
+  cached_hash: OnceLock<u64>,
+  cached_full_map: OnceLock<Option<SourceMap>>,
+  cached_lines_only_map: OnceLock<Option<SourceMap>>,
 }
 
 impl CachedSource {
   /// Create a [CachedSource] with the original [Source].
   pub fn new<T: Source + 'static>(inner: T) -> Self {
     Self {
-      inner: Mutex::new(Some(Arc::new(inner))),
+      inner: Mutex::new(Some(inner.boxed())),
       cached_buffer: Default::default(),
       cached_source: Default::default(),
       cached_hash: Default::default(),
