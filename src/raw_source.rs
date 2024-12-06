@@ -9,7 +9,7 @@ use crate::{
     get_generated_source_info, stream_chunks_of_raw_source, OnChunk, OnName,
     OnSource, StreamChunks,
   },
-  MapOptions, Source, SourceMap,
+  MapOptions, Rope, Source, SourceMap,
 };
 
 #[derive(Clone, PartialEq, Eq)]
@@ -207,7 +207,17 @@ impl<'a> StreamChunks<'a> for RawSource {
     on_name: OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {
     if options.final_source {
-      get_generated_source_info(&self.source())
+      match &self.value {
+        RawValue::Buffer(buffer) => {
+          let source = self
+            .value_as_string
+            .get_or_init(|| String::from_utf8_lossy(buffer).to_string());
+          get_generated_source_info(Rope::from_str(source))
+        }
+        RawValue::String(source) => {
+          get_generated_source_info(Rope::from_str(source))
+        }
+      }
     } else {
       match &self.value {
         RawValue::Buffer(buffer) => {
@@ -215,11 +225,19 @@ impl<'a> StreamChunks<'a> for RawSource {
             .value_as_string
             .get_or_init(|| String::from_utf8_lossy(buffer).to_string());
           stream_chunks_of_raw_source(
-            source, options, on_chunk, on_source, on_name,
+            Rope::from_str(source),
+            options,
+            on_chunk,
+            on_source,
+            on_name,
           )
         }
         RawValue::String(source) => stream_chunks_of_raw_source(
-          source, options, on_chunk, on_source, on_name,
+          Rope::from_str(source),
+          options,
+          on_chunk,
+          on_source,
+          on_name,
         ),
       }
     }
@@ -325,10 +343,14 @@ impl<'a> StreamChunks<'a> for RawStringSource {
     on_name: OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {
     if options.final_source {
-      get_generated_source_info(&self.source())
+      get_generated_source_info(Rope::from_str(&self.source()))
     } else {
       stream_chunks_of_raw_source(
-        &self.0, options, on_chunk, on_source, on_name,
+        Rope::from_str(&self.0),
+        options,
+        on_chunk,
+        on_source,
+        on_name,
       )
     }
   }
@@ -432,12 +454,14 @@ impl<'a> StreamChunks<'a> for RawBufferSource {
     on_name: OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {
     if options.final_source {
-      get_generated_source_info(&self.source())
+      get_generated_source_info(Rope::from_str(&self.source()))
     } else {
       stream_chunks_of_raw_source(
-        self
-          .value_as_string
-          .get_or_init(|| String::from_utf8_lossy(&self.value).to_string()),
+        Rope::from_str(
+          self
+            .value_as_string
+            .get_or_init(|| String::from_utf8_lossy(&self.value).to_string()),
+        ),
         options,
         on_chunk,
         on_source,

@@ -1,4 +1,11 @@
-use std::{borrow::Cow, fmt::Display, ops::Range};
+use std::{
+  borrow::Cow,
+  cell::RefCell,
+  collections::VecDeque,
+  fmt::Display,
+  hash::Hash,
+  ops::{Index, Range},
+};
 
 #[derive(Clone, Debug)]
 pub struct Rope<'a> {
@@ -27,14 +34,42 @@ impl<'a> Rope<'a> {
     }
   }
 
-  pub fn chunks(&self) -> RopeChunks<'_, 'a> {
+  pub fn chunks(&self) -> Chunks<'_, 'a> {
     self.iter()
   }
 
-  pub fn iter(&self) -> RopeChunks<'_, 'a> {
-    RopeChunks {
+  pub fn iter(&self) -> Chunks<'_, 'a> {
+    Chunks {
       data: &self.data,
       index: 0,
+    }
+  }
+
+  /// # Panics
+  ///
+  /// Panics if the index is out of bounds.
+  pub fn byte(&self, byte_index: usize) -> u8 {
+    self.try_byte(byte_index).expect("byte out of bounds")
+  }
+
+  pub fn try_byte(&self, byte_index: usize) -> Option<u8> {
+    if byte_index >= self.len() {
+      return None;
+    }
+    let chunk_index = self
+      .data
+      .binary_search_by(|(_, start_pos)| start_pos.cmp(&byte_index))
+      .unwrap_or_else(|index| index.saturating_sub(1));
+    let (s, start_pos) = &self.data.get(chunk_index)?;
+    let pos = byte_index - start_pos;
+    Some(s.as_bytes()[pos])
+  }
+
+  pub fn char_indices(&self) -> CharIndices<'_, 'a> {
+    CharIndices {
+      chunks: &self.data,
+      char_indices: Default::default(),
+      chunk_index: 0,
     }
   }
 
@@ -67,8 +102,12 @@ impl<'a> Rope<'a> {
 
   /// # Panics
   ///
-  /// Panics if the start of the range is greater than the end, or if the end is out of bounds (i.e. end > len_chars()).
+  /// Panics if the start of the range is greater than the end, or if the end is out of bounds.
   pub fn byte_slice(&self, range: Range<usize>) -> Rope<'a> {
+    if range.end == self.len() && range.start == self.len() {
+      return Default::default();
+    }
+
     if range.end > self.len() {
       panic!("byte_slice end out of bounds");
     }
@@ -132,6 +171,44 @@ impl<'a> Rope<'a> {
   }
 }
 
+impl Hash for Rope<'_> {
+  fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+    for (s, _) in &self.data {
+      s.hash(state);
+    }
+  }
+}
+
+pub struct CharIndices<'a, 'b> {
+  chunks: &'a [(&'b str, usize)],
+  char_indices: VecDeque<(usize, char)>,
+  chunk_index: usize,
+}
+
+impl<'a, 'b> Iterator for CharIndices<'a, 'b> {
+  type Item = (usize, char);
+
+  fn next(&mut self) -> Option<Self::Item> {
+    if let Some(item) = self.char_indices.pop_front() {
+      return Some(item);
+    }
+
+    if self.chunk_index >= self.chunks.len() {
+      return None;
+    }
+
+    if self.char_indices.is_empty() {
+      let (chunk, start_pos) = self.chunks[self.chunk_index];
+      self
+        .char_indices
+        .extend(chunk.char_indices().map(|(i, c)| (start_pos + i, c)));
+      self.chunk_index += 1;
+    }
+
+    self.char_indices.pop_front()
+  }
+}
+
 impl Default for Rope<'_> {
   fn default() -> Self {
     Self::new()
@@ -147,6 +224,43 @@ impl<'a> Display for Rope<'a> {
   }
 }
 
+impl PartialEq<Rope<'_>> for Rope<'_> {
+  fn eq(&self, other: &Rope<'_>) -> bool {
+    if self.len() != other.len() {
+      return false;
+    }
+
+    if self.len() == 0 {
+      return true;
+    }
+
+    let chunks = &self.data;
+    let other_chunks = &other.data;
+
+    let mut cur = 0;
+    let other_chunk_index = RefCell::new(0);
+    let mut other_chunk_byte_index = 0;
+    let other_chunk = || other_chunks[*other_chunk_index.borrow()].0.as_bytes();
+    for (chunk, start_pos) in chunks {
+      let chunk = chunk.as_bytes();
+      while (cur - start_pos) < chunk.len() {
+        if other_chunk_byte_index >= other_chunk().len() {
+          other_chunk_byte_index = 0;
+          *other_chunk_index.borrow_mut() += 1;
+        }
+        if chunk[cur - start_pos] == other_chunk()[other_chunk_byte_index] {
+          cur += 1;
+          other_chunk_byte_index += 1;
+        } else {
+          return false;
+        }
+      }
+    }
+
+    true
+  }
+}
+
 impl PartialEq<str> for Rope<'_> {
   fn eq(&self, other: &str) -> bool {
     if self.len() != other.len() {
@@ -156,7 +270,28 @@ impl PartialEq<str> for Rope<'_> {
     let other = other.as_bytes();
 
     let mut idx = 0;
-    for chunk in self.chunks() {
+    for (chunk, _) in &self.data {
+      let chunk = chunk.as_bytes();
+      if chunk != &other[idx..(idx + chunk.len())] {
+        return false;
+      }
+      idx += chunk.len();
+    }
+
+    true
+  }
+}
+
+impl PartialEq<&str> for Rope<'_> {
+  fn eq(&self, other: &&str) -> bool {
+    if self.len() != other.len() {
+      return false;
+    }
+
+    let other = other.as_bytes();
+
+    let mut idx = 0;
+    for (chunk, _) in &self.data {
       let chunk = chunk.as_bytes();
       if chunk != &other[idx..(idx + chunk.len())] {
         return false;
@@ -192,19 +327,27 @@ impl<'a> From<&'a Cow<'a, str>> for Rope<'a> {
   }
 }
 
-pub struct RopeChunks<'a, 'b: 'a> {
+pub struct Chunks<'a, 'b: 'a> {
   data: &'a Vec<(&'b str, usize)>,
   index: usize,
 }
 
-impl<'a, 'b: 'a> Iterator for RopeChunks<'a, 'b> {
-  type Item = &'b str;
+impl<'a, 'b: 'a> Index<usize> for Chunks<'a, 'b> {
+  type Output = (&'b str, usize);
+
+  fn index(&self, index: usize) -> &Self::Output {
+    &self.data[index]
+  }
+}
+
+impl<'a, 'b: 'a> Iterator for Chunks<'a, 'b> {
+  type Item = (&'b str, usize);
 
   fn next(&mut self) -> Option<Self::Item> {
     if self.index < self.data.len() {
-      let (value, _) = self.data[self.index];
+      let (value, pos) = self.data[self.index];
       self.index += 1;
-      Some(value)
+      Some((value, pos))
     } else {
       None
     }
@@ -290,13 +433,38 @@ mod tests {
     a.append("abc");
     a.append("def");
     a.append("ghi");
-
     assert_eq!(&a, "abcdefghi");
+
+    let mut b = Rope::new();
+    b.append("abcde");
+    b.append("fghi");
+
+    assert_eq!(a, b);
   }
 
   #[test]
   fn from() {
     let _ = Rope::from_str("abc");
     let _ = Rope::from("abc");
+  }
+
+  #[test]
+  fn byte() {
+    let mut a = Rope::from_str("abc");
+    assert_eq!(a.byte(0), b'a');
+    a.append("d");
+    assert_eq!(a.byte(3), b'd');
+  }
+
+  #[test]
+  fn char_indices() {
+    let mut a = Rope::new();
+    a.append("abc");
+    a.append("def");
+
+    let a = a.char_indices().collect::<Vec<_>>();
+    let b = "abcdef".char_indices().collect::<Vec<_>>();
+
+    assert_eq!(a, b);
   }
 }
