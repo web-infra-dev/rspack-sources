@@ -1,6 +1,7 @@
 use std::{
   borrow::{BorrowMut, Cow},
   cell::{OnceCell, RefCell},
+  ops::Range,
 };
 
 use rustc_hash::FxHashMap as HashMap;
@@ -11,7 +12,7 @@ use crate::{
   linear_map::LinearMap,
   source::{Mapping, OriginalLocation},
   with_indices::WithIndices,
-  MapOptions, SourceMap,
+  MapOptions, Rope, SourceMap,
 };
 
 // Adding this type because sourceContentLine not happy
@@ -77,18 +78,18 @@ pub trait StreamChunks<'a> {
 }
 
 /// [OnChunk] abstraction, see [webpack-sources onChunk](https://github.com/webpack/webpack-sources/blob/9f98066311d53a153fdc7c633422a1d086528027/lib/helpers/streamChunks.js#L13).
-pub type OnChunk<'a, 'b> = &'a mut dyn FnMut(Option<Cow<'b, str>>, Mapping);
+pub type OnChunk<'a, 'b> = &'a mut dyn FnMut(Option<Rope<'b>>, Mapping);
 
 /// [OnSource] abstraction, see [webpack-sources onSource](https://github.com/webpack/webpack-sources/blob/9f98066311d53a153fdc7c633422a1d086528027/lib/helpers/streamChunks.js#L13).
 pub type OnSource<'a, 'b> =
-  &'a mut dyn FnMut(u32, Cow<'b, str>, Option<&'b str>);
+  &'a mut dyn FnMut(u32, Cow<'b, str>, Option<Rope<'b>>);
 
 /// [OnName] abstraction, see [webpack-sources onName](https://github.com/webpack/webpack-sources/blob/9f98066311d53a153fdc7c633422a1d086528027/lib/helpers/streamChunks.js#L13).
 pub type OnName<'a, 'b> = &'a mut dyn FnMut(u32, Cow<'b, str>);
 
 /// Default stream chunks behavior impl, see [webpack-sources streamChunks](https://github.com/webpack/webpack-sources/blob/9f98066311d53a153fdc7c633422a1d086528027/lib/helpers/streamChunks.js#L15-L35).
 pub fn stream_chunks_default<'a>(
-  source: &'a str,
+  source: Rope<'a>,
   source_map: Option<&'a SourceMap>,
   options: &MapOptions,
   on_chunk: OnChunk<'_, 'a>,
@@ -128,24 +129,23 @@ pub fn encode_mappings(mappings: impl Iterator<Item = Mapping>) -> String {
 }
 
 pub struct PotentialTokens<'a> {
-  bytes: &'a [u8],
-  source: &'a str,
+  source: Rope<'a>,
   index: usize,
 }
 
 impl<'a> Iterator for PotentialTokens<'a> {
-  type Item = &'a str;
+  type Item = Rope<'a>;
 
   fn next(&mut self) -> Option<Self::Item> {
-    if let Some(&c) = self.bytes.get(self.index) {
+    if let Some(c) = self.source.try_byte(self.index) {
       let start = self.index;
       let mut c = char::from(c);
       while c != '\n' && c != ';' && c != '{' && c != '}' {
         self.index += 1;
-        if let Some(&ch) = self.bytes.get(self.index) {
+        if let Some(ch) = self.source.try_byte(self.index) {
           c = char::from(ch);
         } else {
-          return Some(&self.source[start..self.index]);
+          return Some(self.source.byte_slice(start..self.index));
         }
       }
       while c == ';'
@@ -156,16 +156,16 @@ impl<'a> Iterator for PotentialTokens<'a> {
         || c == '\t'
       {
         self.index += 1;
-        if let Some(&ch) = self.bytes.get(self.index) {
+        if let Some(ch) = self.source.try_byte(self.index) {
           c = char::from(ch);
         } else {
-          return Some(&self.source[start..self.index]);
+          return Some(self.source.byte_slice(start..self.index));
         }
       }
       if c == '\n' {
         self.index += 1;
       }
-      Some(&self.source[start..self.index])
+      Some(self.source.byte_slice(start..self.index))
     } else {
       None
     }
@@ -173,12 +173,8 @@ impl<'a> Iterator for PotentialTokens<'a> {
 }
 
 // /[^\n;{}]+[;{} \r\t]*\n?|[;{} \r\t]+\n?|\n/g
-pub fn split_into_potential_tokens(source: &str) -> PotentialTokens {
-  PotentialTokens {
-    bytes: source.as_bytes(),
-    source,
-    index: 0,
-  }
+pub fn split_into_potential_tokens(source: Rope) -> PotentialTokens {
+  PotentialTokens { source, index: 0 }
 }
 
 /// Split the string with a needle, each string will contain the needle.
@@ -210,18 +206,66 @@ fn split(haystack: &str, needle: u8) -> impl Iterator<Item = &str> {
   Split { haystack, needle }
 }
 
-// /[^\n]+\n?|\n/g
-pub fn split_into_lines(source: &str) -> impl Iterator<Item = &str> {
-  split(source, b'\n')
+const EMPTY_ROPE: Rope = Rope::new();
+
+fn split_new<'a>(
+  haystack: Rope<'a>,
+  needle: u8,
+) -> impl Iterator<Item = Rope<'a>> {
+  struct Split<'a> {
+    haystack: Rope<'a>,
+    bytes: Vec<u8>,
+    range: Range<usize>,
+    needle: u8,
+  }
+
+  impl<'a> Iterator for Split<'a> {
+    type Item = Rope<'a>;
+
+    fn next(&mut self) -> Option<Rope<'a>> {
+      if self.haystack.is_empty() {
+        return None;
+      }
+      let (ret, remaining, remaining_range) =
+        match memchr::memchr(self.needle, &self.bytes[self.range.clone()]) {
+          Some(pos) => (
+            self.haystack.byte_slice(0..pos + 1),
+            self.haystack.byte_slice(pos + 1..self.haystack.len()),
+            pos + 1..self.haystack.len(),
+          ),
+          None => (std::mem::take(&mut self.haystack), EMPTY_ROPE, 0..0),
+        };
+      self.haystack = remaining;
+      self.range = remaining_range;
+      Some(ret)
+    }
+  }
+
+  // FIXME: memory issue
+  let bytes = haystack.to_bytes();
+  let len = bytes.len();
+  Split {
+    haystack,
+    bytes,
+    range: 0..len,
+    needle,
+  }
 }
 
-pub fn get_generated_source_info(source: &str) -> GeneratedInfo {
-  let (generated_line, generated_column) = if source.ends_with('\n') {
-    (split(source, b'\n').count() + 1, 0)
+// /[^\n]+\n?|\n/g
+pub fn split_into_lines<'a>(
+  source: Rope<'a>,
+) -> impl Iterator<Item = Rope<'a>> {
+  split_new(source, b'\n')
+}
+
+pub fn get_generated_source_info(source: Rope) -> GeneratedInfo {
+  let (generated_line, generated_column) = if source.ends_with("\n") {
+    (split_new(source.clone(), b'\n').count() + 1, 0)
   } else {
     let mut line_count = 0;
-    let mut last_line = "";
-    for line in split(source, b'\n') {
+    let mut last_line = EMPTY_ROPE;
+    for line in split_new(source, b'\n') {
       line_count += 1;
       last_line = line;
     }
@@ -234,7 +278,7 @@ pub fn get_generated_source_info(source: &str) -> GeneratedInfo {
 }
 
 pub fn stream_chunks_of_raw_source<'a>(
-  source: &'a str,
+  source: Rope<'a>,
   options: &MapOptions,
   on_chunk: OnChunk<'_, 'a>,
   _on_source: OnSource<'_, 'a>,
@@ -248,7 +292,7 @@ pub fn stream_chunks_of_raw_source<'a>(
   let mut last_line = None;
   for l in split_into_lines(source) {
     on_chunk(
-      Some(Cow::Borrowed(l)),
+      Some(l.clone()),
       Mapping {
         generated_line: line,
         generated_column: 0,
@@ -259,7 +303,7 @@ pub fn stream_chunks_of_raw_source<'a>(
     last_line = Some(l);
   }
   if let Some(last_line) =
-    last_line.filter(|last_line| !last_line.ends_with('\n'))
+    last_line.filter(|last_line| !last_line.ends_with("\n"))
   {
     GeneratedInfo {
       generated_line: line - 1,
@@ -274,7 +318,7 @@ pub fn stream_chunks_of_raw_source<'a>(
 }
 
 pub fn stream_chunks_of_source_map<'a>(
-  source: &'a str,
+  source: Rope<'a>,
   source_map: &'a SourceMap,
   on_chunk: OnChunk<'_, 'a>,
   on_source: OnSource<'_, 'a>,
@@ -322,7 +366,7 @@ fn get_source<'a>(source_map: &SourceMap, source: &'a str) -> Cow<'a, str> {
 }
 
 fn stream_chunks_of_source_map_final<'a>(
-  source: &'a str,
+  source: Rope<'a>,
   source_map: &'a SourceMap,
   on_chunk: OnChunk,
   on_source: OnSource<'_, 'a>,
@@ -336,7 +380,7 @@ fn stream_chunks_of_source_map_final<'a>(
     on_source(
       i as u32,
       get_source(source_map, source),
-      source_map.get_source_content(i),
+      source_map.get_source_content(i).map(Rope::from_str),
     )
   }
   for (i, name) in source_map.names().iter().enumerate() {
@@ -378,7 +422,7 @@ fn stream_chunks_of_source_map_final<'a>(
 }
 
 fn stream_chunks_of_source_map_full<'a>(
-  source: &'a str,
+  source: Rope<'a>,
   source_map: &'a SourceMap,
   on_chunk: OnChunk<'_, 'a>,
   on_source: OnSource<'_, 'a>,
@@ -397,14 +441,15 @@ fn stream_chunks_of_source_map_full<'a>(
     on_source(
       i as u32,
       get_source(source_map, source),
-      source_map.get_source_content(i),
+      source_map.get_source_content(i).map(Rope::from_str),
     )
   }
   for (i, name) in source_map.names().iter().enumerate() {
     on_name(i as u32, Cow::Borrowed(name));
   }
-  let last_line = line_with_indices_list[line_with_indices_list.len() - 1].line;
-  let last_new_line = last_line.ends_with('\n');
+  let last_line =
+    &line_with_indices_list[line_with_indices_list.len() - 1].line;
+  let last_new_line = last_line.ends_with("\n");
   let final_line: u32 = if last_new_line {
     line_with_indices_list.len() + 1
   } else {
@@ -421,7 +466,7 @@ fn stream_chunks_of_source_map_full<'a>(
     if mapping_active
       && current_generated_line as usize <= line_with_indices_list.len()
     {
-      let chunk: &str;
+      let chunk: Rope;
       let mapping_line = current_generated_line;
       let mapping_column = current_generated_column;
       let line = &line_with_indices_list[(current_generated_line - 1) as usize];
@@ -438,7 +483,7 @@ fn stream_chunks_of_source_map_full<'a>(
       }
       if !chunk.is_empty() {
         on_chunk(
-          Some(Cow::Borrowed(chunk)),
+          Some(chunk),
           Mapping {
             generated_line: mapping_line,
             generated_column: mapping_column,
@@ -452,11 +497,11 @@ fn stream_chunks_of_source_map_full<'a>(
       && current_generated_column > 0
     {
       if current_generated_line as usize <= line_with_indices_list.len() {
-        let chunk = &line_with_indices_list
+        let chunk = line_with_indices_list
           [(current_generated_line - 1) as usize]
           .substring(current_generated_column as usize, usize::MAX);
         on_chunk(
-          Some(Cow::Borrowed(chunk)),
+          Some(chunk),
           Mapping {
             generated_line: current_generated_line,
             generated_column: current_generated_column,
@@ -470,9 +515,9 @@ fn stream_chunks_of_source_map_full<'a>(
     while mapping.generated_line > current_generated_line {
       if current_generated_line as usize <= line_with_indices_list.len() {
         let chunk =
-          line_with_indices_list[(current_generated_line as usize) - 1].line;
+          &line_with_indices_list[(current_generated_line as usize) - 1].line;
         on_chunk(
-          Some(Cow::Borrowed(chunk)),
+          Some(chunk.clone()),
           Mapping {
             generated_line: current_generated_line,
             generated_column: 0,
@@ -491,7 +536,7 @@ fn stream_chunks_of_source_map_full<'a>(
             mapping.generated_column as usize,
           );
         on_chunk(
-          Some(Cow::Owned(chunk.to_string())),
+          Some(chunk),
           Mapping {
             generated_line: current_generated_line,
             generated_column: current_generated_column,
@@ -526,7 +571,7 @@ fn stream_chunks_of_source_map_full<'a>(
 }
 
 fn stream_chunks_of_source_map_lines_final<'a>(
-  source: &'a str,
+  source: Rope<'a>,
   source_map: &'a SourceMap,
   on_chunk: OnChunk,
   on_source: OnSource<'_, 'a>,
@@ -543,7 +588,7 @@ fn stream_chunks_of_source_map_lines_final<'a>(
     on_source(
       i as u32,
       get_source(source_map, source),
-      source_map.get_source_content(i),
+      source_map.get_source_content(i).map(Rope::from_str),
     )
   }
   let final_line = if result.generated_column == 0 {
@@ -571,13 +616,13 @@ fn stream_chunks_of_source_map_lines_final<'a>(
 }
 
 fn stream_chunks_of_source_map_lines_full<'a>(
-  source: &'a str,
+  source: Rope<'a>,
   source_map: &'a SourceMap,
   on_chunk: OnChunk<'_, 'a>,
   on_source: OnSource<'_, 'a>,
   _on_name: OnName,
 ) -> GeneratedInfo {
-  let lines: Vec<&str> = split_into_lines(source).collect();
+  let lines: Vec<Rope<'a>> = split_into_lines(source).collect();
   if lines.is_empty() {
     return GeneratedInfo {
       generated_line: 1,
@@ -588,7 +633,7 @@ fn stream_chunks_of_source_map_lines_full<'a>(
     on_source(
       i as u32,
       get_source(source_map, source),
-      source_map.get_source_content(i),
+      source_map.get_source_content(i).map(Rope::from_str),
     )
   }
   let mut current_generated_line = 1;
@@ -601,9 +646,9 @@ fn stream_chunks_of_source_map_lines_full<'a>(
     }
     while mapping.generated_line > current_generated_line {
       if current_generated_line as usize <= lines.len() {
-        let chunk = lines[current_generated_line as usize - 1];
+        let chunk = &lines[current_generated_line as usize - 1];
         on_chunk(
-          Some(Cow::Borrowed(chunk)),
+          Some(chunk.clone()),
           Mapping {
             generated_line: current_generated_line,
             generated_column: 0,
@@ -618,10 +663,10 @@ fn stream_chunks_of_source_map_lines_full<'a>(
       .as_mut()
       .filter(|_| mapping.generated_line as usize <= lines.len())
     {
-      let chunk = lines[current_generated_line as usize - 1];
+      let chunk = &lines[current_generated_line as usize - 1];
       mapping.generated_column = 0;
       original.name_index = None;
-      on_chunk(Some(Cow::Borrowed(chunk)), mapping);
+      on_chunk(Some(chunk.clone()), mapping);
       current_generated_line += 1;
     }
   };
@@ -629,9 +674,9 @@ fn stream_chunks_of_source_map_lines_full<'a>(
     on_mapping(mapping);
   }
   while current_generated_line as usize <= lines.len() {
-    let chunk = lines[current_generated_line as usize - 1];
+    let chunk = &lines[current_generated_line as usize - 1];
     on_chunk(
-      Some(Cow::Borrowed(chunk)),
+      Some(chunk.clone()),
       Mapping {
         generated_line: current_generated_line,
         generated_column: 0,
@@ -640,8 +685,8 @@ fn stream_chunks_of_source_map_lines_full<'a>(
     );
     current_generated_line += 1;
   }
-  let last_line = lines[lines.len() - 1];
-  let last_new_line = last_line.ends_with('\n');
+  let last_line = &lines[lines.len() - 1];
+  let last_new_line = last_line.ends_with("\n");
   let final_line = if last_new_line {
     lines.len() + 1
   } else {
@@ -657,18 +702,18 @@ fn stream_chunks_of_source_map_lines_full<'a>(
 #[derive(Debug)]
 struct SourceMapLineData<'a> {
   pub mappings_data: Vec<i64>,
-  pub chunks: Vec<Cow<'a, str>>,
+  pub chunks: Vec<Rope<'a>>,
 }
 
 type InnerSourceIndexValueMapping<'a> =
-  LinearMap<(Cow<'a, str>, Option<&'a str>)>;
+  LinearMap<(Cow<'a, str>, Option<Rope<'a>>)>;
 
 #[allow(clippy::too_many_arguments)]
 pub fn stream_chunks_of_combined_source_map<'a>(
-  source: &'a str,
+  source: Rope<'a>,
   source_map: &'a SourceMap,
   inner_source_name: &'a str,
-  inner_source: Option<&'a str>,
+  inner_source: Option<Rope<'a>>,
   inner_source_map: &'a SourceMap,
   remove_inner_source: bool,
   on_chunk: OnChunk<'_, 'a>,
@@ -677,7 +722,7 @@ pub fn stream_chunks_of_combined_source_map<'a>(
   options: &MapOptions,
 ) -> GeneratedInfo {
   let on_source = RefCell::new(on_source);
-  let inner_source: RefCell<Option<&str>> = RefCell::new(inner_source);
+  let inner_source: RefCell<Option<Rope<'a>>> = RefCell::new(inner_source);
   let source_mapping: RefCell<HashMap<Cow<str>, u32>> =
     RefCell::new(HashMap::default());
   let mut name_mapping: HashMap<Cow<str>, u32> = HashMap::default();
@@ -692,7 +737,7 @@ pub fn stream_chunks_of_combined_source_map<'a>(
     RefCell::new(LinearMap::default());
   let inner_source_index_value_mapping: RefCell<InnerSourceIndexValueMapping> =
     RefCell::new(LinearMap::default());
-  let inner_source_contents: RefCell<LinearMap<Option<&str>>> =
+  let inner_source_contents: RefCell<LinearMap<Option<Rope<'a>>>> =
     RefCell::new(LinearMap::default());
   let inner_source_content_lines: InnerSourceContentLine =
     RefCell::new(LinearMap::default());
@@ -727,7 +772,7 @@ pub fn stream_chunks_of_combined_source_map<'a>(
   };
 
   stream_chunks_of_source_map(
-    source,
+    source.clone(),
     source_map,
     &mut |chunk, mapping| {
       let source_index = mapping
@@ -781,7 +826,7 @@ pub fn stream_chunks_of_combined_source_map<'a>(
                     let inner_source_contents = inner_source_contents.borrow();
                     match inner_source_contents.get(&inner_source_index) {
                       Some(Some(source_content)) => Some(
-                        split_into_lines(source_content)
+                        split_into_lines(source_content.clone())
                           .map(WithIndices::new)
                           .collect(),
                       ),
@@ -800,8 +845,8 @@ pub fn stream_chunks_of_combined_source_map<'a>(
                   });
                 if let Some(original_chunk) = original_chunk {
                   if original_chunk.len() <= inner_chunk.len()
-                    && inner_chunk.get(..original_chunk.len())
-                      == Some(original_chunk)
+                    && inner_chunk.byte_slice(0..original_chunk.len())
+                      == original_chunk
                   {
                     inner_original_column += location_in_chunk;
                     inner_name_index = -1;
@@ -881,7 +926,7 @@ pub fn stream_chunks_of_combined_source_map<'a>(
                     let inner_source_contents = inner_source_contents.borrow();
                     match inner_source_contents.get(&inner_source_index) {
                       Some(Some(source_content)) => Some(
-                        split_into_lines(source_content)
+                        split_into_lines(source_content.clone())
                           .map(WithIndices::new)
                           .collect(),
                       ),
@@ -897,12 +942,12 @@ pub fn stream_chunks_of_combined_source_map<'a>(
                   name_index_value_mapping.get(&name_index).cloned().unwrap();
                 let original_name = original_source_lines
                   .get(inner_original_line as usize - 1)
-                  .map_or("", |i| {
+                  .map_or(EMPTY_ROPE, |i| {
                     let start = inner_original_column as usize;
                     let end = start + name.len();
                     i.substring(start, end)
                   });
-                if name == original_name {
+                if Rope::from_str(&name) == original_name {
                   let mut name_index_mapping = name_index_mapping.borrow_mut();
                   final_name_index =
                     name_index_mapping.get(&name_index).copied().unwrap_or(-2);
@@ -963,11 +1008,11 @@ pub fn stream_chunks_of_combined_source_map<'a>(
               source_mapping.get(inner_source_name).copied();
             if global_index.is_none() {
               let len = source_mapping.len() as u32;
-              source_mapping.insert(source.into(), len);
+              source_mapping.insert(Cow::Owned(source.to_string()), len);
               on_source.borrow_mut()(
                 len,
                 Cow::Borrowed(inner_source_name),
-                *inner_source.borrow(),
+                inner_source.borrow().clone(),
               );
               global_index = Some(len);
             }
@@ -1041,9 +1086,9 @@ pub fn stream_chunks_of_combined_source_map<'a>(
         *inner_source_index.borrow_mut() = i as i64;
         let mut inner_source = inner_source.borrow_mut();
         if let Some(inner_source) = inner_source.as_ref() {
-          source_content = Some(inner_source);
+          source_content = Some(inner_source.clone());
         } else {
-          *inner_source = source_content;
+          *inner_source = source_content.clone();
         }
         source_index_mapping.borrow_mut().insert(i, -2);
         stream_chunks_of_source_map(
@@ -1101,7 +1146,9 @@ pub fn stream_chunks_of_combined_source_map<'a>(
             data.chunks.push(chunk.unwrap());
           },
           &mut |i, source, source_content| {
-            inner_source_contents.borrow_mut().insert(i, source_content);
+            inner_source_contents
+              .borrow_mut()
+              .insert(i, source_content.clone());
             inner_source_content_lines
               .borrow_mut()
               .insert(i, Default::default());
@@ -1165,7 +1212,7 @@ pub fn stream_and_get_source_and_map<'a, S: StreamChunks<'a>>(
         sources.push("".into());
       }
       sources[source_index2] = source.to_string();
-      if let Some(source_content) = source_content {
+      if let Some(ref source_content) = source_content {
         while sources_content.len() <= source_index2 {
           sources_content.push("".into());
         }
