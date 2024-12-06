@@ -69,7 +69,7 @@ fn benchmark_concat_generate_string(b: &mut Bencher) {
 
   b.iter(|| {
     concat
-      .map(&MapOptions::default())
+      .map(&MapOptions::default(), &Default::default())
       .unwrap()
       .to_json()
       .unwrap();
@@ -98,7 +98,7 @@ fn benchmark_concat_generate_string_with_cache(b: &mut Bencher) {
 
   b.iter(|| {
     cached
-      .map(&MapOptions::default())
+      .map(&MapOptions::default(), &Default::default())
       .unwrap()
       .to_json()
       .unwrap();
@@ -126,7 +126,7 @@ fn benchmark_concat_generate_base64(b: &mut Bencher) {
 
   b.iter(|| {
     let json = concat
-      .map(&MapOptions::default())
+      .map(&MapOptions::default(), &Default::default())
       .unwrap()
       .to_json()
       .unwrap();
@@ -156,7 +156,7 @@ fn benchmark_concat_generate_base64_with_cache(b: &mut Bencher) {
 
   b.iter(|| {
     let json = cached
-      .map(&MapOptions::default())
+      .map(&MapOptions::default(), &Default::default())
       .unwrap()
       .to_json()
       .unwrap();
@@ -193,7 +193,7 @@ fn benchmark_replace_large_minified_source(b: &mut Bencher) {
   replace_source.replace(494, 498, "this", None);
 
   b.iter(|| {
-    replace_source.map(&MapOptions::default());
+    replace_source.map(&MapOptions::default(), &Default::default());
   });
 }
 

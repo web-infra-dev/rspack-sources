@@ -18,9 +18,10 @@ use crate::{
 type InnerSourceContentLine<'a> =
   RefCell<LinearMap<OnceCell<Option<Vec<WithIndices<'a>>>>>>;
 
-pub fn get_map<'a, S: StreamChunks<'a>>(
+pub fn get_map<'a, S: StreamChunks>(
   stream: &'a S,
   options: &'a MapOptions,
+  arena: &'a crate::arena::Arena,
 ) -> Option<SourceMap> {
   let mut mappings_encoder = create_encoder(options.columns);
   let mut sources: Vec<String> = Vec::new();
@@ -58,6 +59,7 @@ pub fn get_map<'a, S: StreamChunks<'a>>(
       }
       names[name_index] = name.to_string();
     },
+    arena,
   );
   let mappings = mappings_encoder.drain();
   (!mappings.is_empty())
@@ -65,14 +67,15 @@ pub fn get_map<'a, S: StreamChunks<'a>>(
 }
 
 /// [StreamChunks] abstraction, see [webpack-sources source.streamChunks](https://github.com/webpack/webpack-sources/blob/9f98066311d53a153fdc7c633422a1d086528027/lib/helpers/streamChunks.js#L13).
-pub trait StreamChunks<'a> {
+pub trait StreamChunks {
   /// [StreamChunks] abstraction
-  fn stream_chunks(
+  fn stream_chunks<'a>(
     &'a self,
     options: &MapOptions,
     on_chunk: OnChunk<'_, 'a>,
     on_source: OnSource<'_, 'a>,
     on_name: OnName<'_, 'a>,
+    arena: &'a crate::arena::Arena,
   ) -> GeneratedInfo;
 }
 
@@ -1141,12 +1144,13 @@ pub fn stream_chunks_of_combined_source_map<'a>(
   )
 }
 
-pub fn stream_and_get_source_and_map<'a, S: StreamChunks<'a>>(
+pub fn stream_and_get_source_and_map<'a, S: StreamChunks>(
   input_source: &'a S,
   options: &MapOptions,
   on_chunk: OnChunk<'_, 'a>,
   on_source: OnSource<'_, 'a>,
   on_name: OnName<'_, 'a>,
+  arena: &'a crate::arena::Arena,
 ) -> (GeneratedInfo, Option<SourceMap>) {
   let mut mappings_encoder = create_encoder(options.columns);
   let mut sources: Vec<String> = Vec::new();
@@ -1181,6 +1185,7 @@ pub fn stream_and_get_source_and_map<'a, S: StreamChunks<'a>>(
       names[name_index2] = name.to_string();
       on_name(name_index, name);
     },
+    arena,
   );
 
   let mappings = mappings_encoder.drain();
