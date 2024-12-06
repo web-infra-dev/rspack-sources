@@ -14,7 +14,7 @@ use crate::{
     stream_chunks_of_source_map, StreamChunks,
   },
   rope::Rope,
-  MapOptions, RawSource, Source, SourceMap,
+  MapOptions, Source, SourceMap,
 };
 
 /// It tries to reused cached results from other methods to avoid calculations,
@@ -85,12 +85,11 @@ impl<T> CachedSource<T> {
 }
 
 impl<T: Source> CachedSource<T> {
-  // fn rope(&self) -> &Rope {
-  //   // self.inner.with_cached_rope(|source_vec| {
-  //   //   source_vec.get_or_init(|| self.inner.borrow_inner().rope())
-  //   // })
-  //   self.inner.borrow_inner().rope()
-  // }
+  fn get_rope(&self) -> &Rope<'_> {
+    self
+      .inner
+      .with(|cache| cache.cached_rope.get_or_init(|| cache.inner.rope()))
+  }
 }
 
 impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
@@ -99,7 +98,7 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
   }
 
   fn rope(&self) -> Rope<'_> {
-    self.inner.borrow_inner().rope().clone()
+    self.get_rope().clone()
   }
 
   fn buffer(&self) -> Cow<[u8]> {
@@ -138,12 +137,11 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks<'_>
     on_source: crate::helpers::OnSource<'_, 'a>,
     on_name: crate::helpers::OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {
-    todo!();
     let cached_map = self.inner.borrow_cached_maps().entry(options.clone());
     match cached_map {
       Entry::Occupied(entry) => {
         // let source = self.rope();
-        let source = "";
+        let source = self.get_rope();
         if let Some(map) = entry.get() {
           #[allow(unsafe_code)]
           // SAFETY: We guarantee that once a `SourceMap` is stored in the cache, it will never be removed.
@@ -154,11 +152,20 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks<'_>
           let map =
             unsafe { std::mem::transmute::<&SourceMap, &'a SourceMap>(map) };
           stream_chunks_of_source_map(
-            source, map, on_chunk, on_source, on_name, options,
+            source.clone(),
+            map,
+            on_chunk,
+            on_source,
+            on_name,
+            options,
           )
         } else {
           stream_chunks_of_raw_source(
-            source, options, on_chunk, on_source, on_name,
+            source.clone(),
+            options,
+            on_chunk,
+            on_source,
+            on_name,
           )
         }
       }
@@ -226,8 +233,6 @@ impl<T: std::fmt::Debug> std::fmt::Debug for CachedSource<T> {
 
 #[cfg(test)]
 mod tests {
-  use std::borrow::Borrow;
-
   use crate::{
     ConcatSource, OriginalSource, RawSource, ReplaceSource, SourceExt,
     SourceMapSource, WithoutOriginalOptions,
@@ -268,7 +273,7 @@ mod tests {
     source.size();
     source.map(&map_options);
 
-    // TODO: ADD BACK
+    // FIXME:: ADD BACK
     // assert_eq!(
     //   clone.inner.borrow_cached_source().get().unwrap().borrow(),
     //   source.source()

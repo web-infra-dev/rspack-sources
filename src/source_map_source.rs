@@ -8,7 +8,7 @@ use crate::{
     get_map, stream_chunks_of_combined_source_map, stream_chunks_of_source_map,
     StreamChunks,
   },
-  MapOptions, Source, SourceMap,
+  MapOptions, Rope, Source, SourceMap,
 };
 
 /// Options for [SourceMapSource::new].
@@ -160,10 +160,10 @@ impl<'a> StreamChunks<'a> for SourceMapSource {
   ) -> crate::helpers::GeneratedInfo {
     if let Some(inner_source_map) = &self.inner_source_map {
       stream_chunks_of_combined_source_map(
-        &self.value,
+        Rope::from_str(&self.value),
         &self.source_map,
         &self.name,
-        self.original_source.as_deref(),
+        self.original_source.as_deref().map(Rope::from_str),
         inner_source_map,
         self.remove_original_source,
         on_chunk,
@@ -173,7 +173,7 @@ impl<'a> StreamChunks<'a> for SourceMapSource {
       )
     } else {
       stream_chunks_of_source_map(
-        &self.value,
+        Rope::from_str(&self.value),
         &self.source_map,
         on_chunk,
         on_source,

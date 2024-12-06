@@ -10,7 +10,7 @@ use crate::{
     StreamChunks,
   },
   source::{Mapping, OriginalLocation},
-  MapOptions, Source, SourceMap,
+  MapOptions, Rope, Source, SourceMap,
 };
 
 /// Represents source code, it will create source map for the source code,
@@ -110,17 +110,17 @@ impl<'a> StreamChunks<'a> for OriginalSource {
     on_source: OnSource<'_, 'a>,
     _on_name: OnName,
   ) -> crate::helpers::GeneratedInfo {
-    on_source(0, Cow::Borrowed(&self.name), Some(&self.value));
+    on_source(0, Cow::Borrowed(&self.name), Some(Rope::from(&self.value)));
     if options.columns {
       // With column info we need to read all lines and split them
       let mut line = 1;
       let mut column = 0;
-      for token in split_into_potential_tokens(&self.value) {
-        let is_end_of_line = token.ends_with('\n');
+      for token in split_into_potential_tokens(Rope::from_str(&self.value)) {
+        let is_end_of_line = token.ends_with("\n");
         if is_end_of_line && token.len() == 1 {
           if !options.final_source {
             on_chunk(
-              Some(Cow::Borrowed(token)),
+              Some(token.clone()),
               Mapping {
                 generated_line: line,
                 generated_column: column,
@@ -130,7 +130,7 @@ impl<'a> StreamChunks<'a> for OriginalSource {
           }
         } else {
           on_chunk(
-            (!options.final_source).then_some(Cow::Borrowed(token)),
+            (!options.final_source).then_some(token.clone()),
             Mapping {
               generated_line: line,
               generated_column: column,
@@ -157,7 +157,7 @@ impl<'a> StreamChunks<'a> for OriginalSource {
     } else if options.final_source {
       // Without column info and with final source we only
       // need meta info to generate mapping
-      let result = get_generated_source_info(&self.value);
+      let result = get_generated_source_info(Rope::from_str(&self.value));
       if result.generated_column == 0 {
         for line in 1..result.generated_line {
           on_chunk(
@@ -197,9 +197,9 @@ impl<'a> StreamChunks<'a> for OriginalSource {
       // we need to split source by lines
       let mut line = 1;
       let mut last_line = None;
-      for l in split_into_lines(&self.value) {
+      for l in split_into_lines(Rope::from_str(&self.value)) {
         on_chunk(
-          (!options.final_source).then_some(Cow::Borrowed(l)),
+          (!options.final_source).then_some(l.clone()),
           Mapping {
             generated_line: line,
             generated_column: 0,
@@ -215,7 +215,7 @@ impl<'a> StreamChunks<'a> for OriginalSource {
         last_line = Some(l);
       }
       if let Some(last_line) =
-        last_line.filter(|last_line| !last_line.ends_with('\n'))
+        last_line.filter(|last_line| !last_line.ends_with("\n"))
       {
         GeneratedInfo {
           generated_line: line - 1,

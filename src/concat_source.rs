@@ -117,7 +117,7 @@ impl Source for ConcatSource {
       let mut rope = crate::rope::Rope::new();
       for child in children {
         let child_rope = child.rope();
-        rope.extend(child_rope.chunks());
+        rope.extend(child_rope.chunks().map(|(s, _)| s));
       }
       rope
     }
