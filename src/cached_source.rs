@@ -174,7 +174,7 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Hash for CachedSource<T> {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
     (self.cached_hash.get_or_init(|| {
       let mut hasher = FxHasher::default();
-      hasher.write(self.source().as_bytes());
+      self.inner.hash(&mut hasher);
       hasher.finish()
     }))
     .hash(state);
@@ -208,8 +208,8 @@ mod tests {
   use std::borrow::Borrow;
 
   use crate::{
-    ConcatSource, OriginalSource, RawSource, SourceExt, SourceMapSource,
-    WithoutOriginalOptions,
+    ConcatSource, OriginalSource, RawSource, ReplaceSource, SourceExt,
+    SourceMapSource, WithoutOriginalOptions,
   };
 
   use super::*;
@@ -363,5 +363,28 @@ mod tests {
 
     source.source();
     assert_eq!(source.buffer(), buf.as_slice());
+  }
+
+  #[test]
+  fn hash_should_different_when_map_are_different() {
+    let hash1 = {
+      let mut source =
+        ReplaceSource::new(OriginalSource::new("Hello", "hello.txt").boxed());
+      source.insert(5, " world", None);
+      let cache = CachedSource::new(source);
+      let mut hasher = FxHasher::default();
+      cache.hash(&mut hasher);
+      hasher.finish()
+    };
+
+    let hash2 = {
+      let source = OriginalSource::new("Hello world", "hello.txt").boxed();
+      let cache = CachedSource::new(source);
+      let mut hasher = FxHasher::default();
+      cache.hash(&mut hasher);
+      hasher.finish()
+    };
+
+    assert!(hash1 != hash2);
   }
 }
