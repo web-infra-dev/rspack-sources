@@ -10,6 +10,7 @@ mod linear_map;
 mod original_source;
 mod raw_source;
 mod replace_source;
+mod rope;
 mod source;
 mod source_map_source;
 mod with_indices;
@@ -20,6 +21,7 @@ pub use error::{Error, Result};
 pub use original_source::OriginalSource;
 pub use raw_source::{RawBufferSource, RawSource, RawStringSource};
 pub use replace_source::{ReplaceSource, ReplacementEnforce};
+pub use rope::Rope;
 pub use source::{
   BoxSource, MapOptions, Mapping, OriginalLocation, Source, SourceExt,
   SourceMap,
