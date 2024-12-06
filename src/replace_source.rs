@@ -4,15 +4,17 @@ use std::{
   hash::{Hash, Hasher},
   sync::{
     atomic::{AtomicBool, Ordering},
-    Arc, Mutex, MutexGuard,
+    Arc, Mutex,
   },
 };
 
+use itertools::Itertools;
 use rustc_hash::FxHashMap as HashMap;
 
 use crate::{
   helpers::{get_map, split_into_lines, GeneratedInfo, StreamChunks},
   linear_map::LinearMap,
+  rope::Rope,
   MapOptions, Mapping, OriginalLocation, Source, SourceMap,
 };
 
@@ -37,7 +39,8 @@ use crate::{
 /// ```
 pub struct ReplaceSource<T> {
   inner: Arc<T>,
-  replacements: Mutex<Vec<Replacement>>,
+  replacements: Vec<Replacement>,
+  sorted_index: Mutex<Vec<usize>>,
   /// Whether `replacements` is sorted.
   is_sorted: AtomicBool,
 }
@@ -86,7 +89,8 @@ impl<T> ReplaceSource<T> {
   pub fn new(source: T) -> Self {
     Self {
       inner: Arc::new(source),
-      replacements: Mutex::new(Vec::new()),
+      replacements: Vec::new(),
+      sorted_index: Mutex::new(Vec::new()),
       is_sorted: AtomicBool::new(true),
     }
   }
@@ -96,18 +100,30 @@ impl<T> ReplaceSource<T> {
     &self.inner
   }
 
-  fn replacements(&self) -> MutexGuard<Vec<Replacement>> {
-    self.replacements.lock().unwrap()
-  }
-
   fn sort_replacement(&self) {
     if self.is_sorted.load(Ordering::SeqCst) {
       return;
     }
-    self.replacements().sort_by(|a, b| {
-      (a.start, a.end, a.enforce).cmp(&(b.start, b.end, b.enforce))
-    });
+    let sorted_index = self
+      .replacements
+      .iter()
+      .enumerate()
+      .sorted_by(|(a_idx, a), (b_idx, b)| {
+        (a.start, a.end, a.enforce).cmp(&(b.start, b.end, b.enforce))
+      })
+      .map(|replacement| replacement.0)
+      .collect::<Vec<_>>();
+    *self.sorted_index.lock().unwrap() = sorted_index;
     self.is_sorted.store(true, Ordering::SeqCst)
+  }
+
+  fn sorted_replacement(&self) -> Vec<&Replacement> {
+    self.sort_replacement();
+    let sorted_index = self.sorted_index.lock().unwrap();
+    sorted_index
+      .iter()
+      .map(|idx| &self.replacements[*idx])
+      .collect()
   }
 }
 
@@ -136,7 +152,7 @@ impl<T: Source> ReplaceSource<T> {
     content: &str,
     name: Option<&str>,
   ) {
-    self.replacements().push(Replacement::new(
+    self.replacements.push(Replacement::new(
       start,
       end,
       content.into(),
@@ -155,7 +171,7 @@ impl<T: Source> ReplaceSource<T> {
     name: Option<&str>,
     enforce: ReplacementEnforce,
   ) {
-    self.replacements().push(Replacement::new(
+    self.replacements.push(Replacement::new(
       start,
       end,
       content.into(),
@@ -168,13 +184,11 @@ impl<T: Source> ReplaceSource<T> {
 
 impl<T: Source + Hash + PartialEq + Eq + 'static> Source for ReplaceSource<T> {
   fn source(&self) -> Cow<str> {
-    self.sort_replacement();
-
     let inner_source_code = self.inner.source();
 
     // mut_string_push_str is faster that vec join
     // concatenate strings benchmark, see https://github.com/hoodie/concatenation_benchmarks-rs
-    let replacements = self.replacements.lock().unwrap();
+    let replacements = self.sorted_replacement();
     if replacements.is_empty() {
       return inner_source_code;
     }
@@ -205,6 +219,43 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for ReplaceSource<T> {
     source_code.into()
   }
 
+  fn rope(&self) -> crate::rope::Rope<'_> {
+    let inner_source_code = self.inner.rope();
+
+    // mut_string_push_str is faster that vec join
+    // concatenate strings benchmark, see https://github.com/hoodie/concatenation_benchmarks-rs
+    let replacements = self.sorted_replacement();
+    if replacements.is_empty() {
+      return inner_source_code;
+    }
+    let max_len = replacements
+      .iter()
+      .map(|replacement| replacement.content.len())
+      .sum::<usize>()
+      + inner_source_code.len();
+    let mut source_code = Rope::new();
+    let mut inner_pos = 0;
+    for replacement in replacements.iter() {
+      if inner_pos < replacement.start {
+        let end_pos = (replacement.start as usize).min(inner_source_code.len());
+        let slice = inner_source_code.byte_slice(inner_pos as usize..end_pos);
+        source_code.extend(slice.chunks());
+      }
+      source_code.append(&replacement.content);
+      #[allow(clippy::manual_clamp)]
+      {
+        inner_pos = inner_pos
+          .max(replacement.end)
+          .min(inner_source_code.len() as u32);
+      }
+    }
+    let slice =
+      inner_source_code.byte_slice(inner_pos as usize..inner_source_code.len());
+    source_code.extend(slice.chunks());
+
+    source_code
+  }
+
   fn buffer(&self) -> Cow<[u8]> {
     match self.source() {
       Cow::Borrowed(s) => Cow::Borrowed(s.as_bytes()),
@@ -217,11 +268,10 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for ReplaceSource<T> {
   }
 
   fn map(&self, options: &crate::MapOptions) -> Option<SourceMap> {
-    let replacements = self.replacements.lock().unwrap();
+    let replacements = &self.replacements;
     if replacements.is_empty() {
       return self.inner.map(options);
     }
-    drop(replacements);
     get_map(self, options)
   }
 
@@ -239,7 +289,7 @@ impl<T: std::fmt::Debug> std::fmt::Debug for ReplaceSource<T> {
       .field("inner", self.inner.as_ref())
       .field(
         "replacements",
-        &self.replacements.lock().iter().take(3).collect::<Vec<_>>(),
+        &self.replacements.iter().take(3).collect::<Vec<_>>(),
       )
       .field("is_sorted", &self.is_sorted.load(Ordering::SeqCst))
       .finish()
@@ -281,9 +331,8 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
     on_source: crate::helpers::OnSource<'_, 'a>,
     on_name: crate::helpers::OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {
-    self.sort_replacement();
     let on_name = RefCell::new(on_name);
-    let repls = self.replacements();
+    let repls = &self.sorted_replacement();
     let mut pos: u32 = 0;
     let mut i: usize = 0;
     let mut replacement_end: Option<u32> = None;
@@ -706,7 +755,8 @@ impl<T: Source> Clone for ReplaceSource<T> {
   fn clone(&self) -> Self {
     Self {
       inner: self.inner.clone(),
-      replacements: Mutex::new(self.replacements().clone()),
+      replacements: self.replacements.clone(),
+      sorted_index: Mutex::new(self.sorted_index.lock().unwrap().clone()),
       is_sorted: AtomicBool::new(self.is_sorted.load(Ordering::SeqCst)),
     }
   }
@@ -714,9 +764,8 @@ impl<T: Source> Clone for ReplaceSource<T> {
 
 impl<T: Hash> Hash for ReplaceSource<T> {
   fn hash<H: Hasher>(&self, state: &mut H) {
-    self.sort_replacement();
     "ReplaceSource".hash(state);
-    for repl in self.replacements().iter() {
+    for repl in self.sorted_replacement() {
       repl.hash(state);
     }
     self.inner.hash(state);
@@ -725,7 +774,7 @@ impl<T: Hash> Hash for ReplaceSource<T> {
 
 impl<T: PartialEq> PartialEq for ReplaceSource<T> {
   fn eq(&self, other: &Self) -> bool {
-    self.inner == other.inner && *self.replacements() == *other.replacements()
+    self.inner == other.inner && self.replacements == other.replacements
   }
 }
 

@@ -55,6 +55,10 @@ impl Source for OriginalSource {
     Cow::Borrowed(&self.value)
   }
 
+  fn rope(&self) -> crate::rope::Rope<'_> {
+    crate::rope::Rope::from(&self.value)
+  }
+
   fn buffer(&self) -> Cow<[u8]> {
     Cow::Borrowed(self.value.as_bytes())
   }

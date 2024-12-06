@@ -14,18 +14,18 @@ readme = "README.md"
 include = ["/src/**/*.rs", "/*.toml", "/LICENSE", "/README.md"]
 
 [lints.rust]
-unsafe_code  = "warn"
+unsafe_code = "warn"
 missing_docs = "warn"
 
 [lints.clippy]
-dbg_macro     = "warn"
-todo          = "warn"
+dbg_macro = "warn"
+todo = "warn"
 unimplemented = "warn"
-print_stdout  = "warn"
-print_stderr  = "warn"
+print_stdout = "warn"
+print_stderr = "warn"
 
 [[bench]]
-name    = "bench"
+name = "bench"
 path = "benches/bench.rs"
 harness = false
 
@@ -36,6 +36,9 @@ dyn-clone = "1"
 rustc-hash = "1"
 dashmap = "5"
 memchr = "2.6.4"
+ouroboros = "0.18"
+itertools = "0.13"
+
 
 codspeed-criterion-compat = { version = "2.3.3", default-features = false, optional = true }
 static_assertions = "1.1.0"

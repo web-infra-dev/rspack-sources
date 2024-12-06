@@ -109,6 +109,20 @@ impl Source for ConcatSource {
     }
   }
 
+  fn rope(&self) -> crate::rope::Rope<'_> {
+    let children = self.children();
+    if children.len() == 1 {
+      children[0].rope()
+    } else {
+      let mut rope = crate::rope::Rope::new();
+      for child in children {
+        let child_rope = child.rope();
+        rope.extend(child_rope.chunks());
+      }
+      rope
+    }
+  }
+
   fn buffer(&self) -> Cow<[u8]> {
     let children = self.children();
     if children.len() == 1 {

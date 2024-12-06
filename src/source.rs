@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
   helpers::{decode_mappings, StreamChunks},
+  rope::Rope,
   Result,
 };
 
@@ -31,6 +32,8 @@ pub trait Source:
 {
   /// Get the source code.
   fn source(&self) -> Cow<str>;
+
+  fn rope(&self) -> Rope<'_>;
 
   /// Get the source buffer.
   fn buffer(&self) -> Cow<[u8]>;
@@ -53,6 +56,10 @@ pub trait Source:
 impl Source for BoxSource {
   fn source(&self) -> Cow<str> {
     self.as_ref().source()
+  }
+
+  fn rope(&self) -> Rope<'_> {
+    self.as_ref().rope()
   }
 
   fn buffer(&self) -> Cow<[u8]> {
