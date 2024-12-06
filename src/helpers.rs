@@ -1,6 +1,7 @@
 use std::{
   borrow::{BorrowMut, Cow},
   cell::{OnceCell, RefCell},
+  ops::Range,
 };
 
 use rustc_hash::FxHashMap as HashMap;
@@ -11,7 +12,7 @@ use crate::{
   linear_map::LinearMap,
   source::{Mapping, OriginalLocation},
   with_indices::WithIndices,
-  MapOptions, SourceMap,
+  MapOptions, Rope, SourceMap,
 };
 
 // Adding this type because sourceContentLine not happy
@@ -208,6 +209,51 @@ fn split(haystack: &str, needle: u8) -> impl Iterator<Item = &str> {
   }
 
   Split { haystack, needle }
+}
+
+fn split_new<'a>(
+  haystack: Rope<'a>,
+  needle: u8,
+) -> impl Iterator<Item = Rope<'a>> {
+  struct Split<'a> {
+    haystack: Rope<'a>,
+    bytes: Vec<u8>,
+    range: Range<usize>,
+    needle: u8,
+  }
+
+  impl<'a> Iterator for Split<'a> {
+    type Item = Rope<'a>;
+
+    fn next(&mut self) -> Option<Rope<'a>> {
+      if self.haystack.is_empty() {
+        return None;
+      }
+      let (ret, remaining, remaining_range) =
+        match memchr::memchr(self.needle, &self.bytes[self.range.clone()]) {
+          Some(pos) => (
+            self.haystack.byte_slice(0..pos + 1),
+            self.haystack.byte_slice(pos + 1..self.haystack.len()),
+            pos + 1..self.haystack.len(),
+          ),
+          None => {
+            (std::mem::take(&mut self.haystack), EMPTY_ROPE.clone(), 0..0)
+          }
+        };
+      self.haystack = remaining;
+      self.range = remaining_range;
+      Some(ret)
+    }
+  }
+
+  let bytes = haystack.to_bytes();
+  let len = bytes.len();
+  Split {
+    haystack,
+    bytes,
+    range: 0..len,
+    needle,
+  }
 }
 
 // /[^\n]+\n?|\n/g

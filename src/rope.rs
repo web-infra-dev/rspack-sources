@@ -7,7 +7,7 @@ pub struct Rope<'a> {
 
 impl<'a> Rope<'a> {
   /// Create a [Rope].
-  pub fn new() -> Self {
+  pub const fn new() -> Self {
     Self { data: Vec::new() }
   }
 
@@ -52,6 +52,10 @@ impl<'a> Rope<'a> {
     } else {
       false
     }
+  }
+
+  pub fn is_empty(&self) -> bool {
+    self.data.is_empty()
   }
 
   pub fn len(&self) -> usize {
