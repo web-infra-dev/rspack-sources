@@ -9,7 +9,7 @@ use crate::{
     get_generated_source_info, stream_chunks_of_raw_source, OnChunk, OnName,
     OnSource, StreamChunks,
   },
-  MapOptions, Source, SourceMap,
+  MapOptions, Rope, Source, SourceMap,
 };
 
 #[derive(Clone, PartialEq, Eq)]
@@ -123,6 +123,17 @@ impl Source for RawSource {
     }
   }
 
+  fn rope(&self) -> Rope<'_> {
+    match &self.value {
+      RawValue::Buffer(v) => Rope::from(
+        self
+          .value_as_string
+          .get_or_init(|| String::from_utf8_lossy(v).to_string()),
+      ),
+      RawValue::String(s) => Rope::from(s),
+    }
+  }
+
   fn buffer(&self) -> Cow<[u8]> {
     match &self.value {
       RawValue::String(v) => Cow::Borrowed(v.as_bytes()),
@@ -187,8 +198,8 @@ impl std::fmt::Debug for RawSource {
   }
 }
 
-impl<'a> StreamChunks<'a> for RawSource {
-  fn stream_chunks(
+impl StreamChunks for RawSource {
+  fn stream_chunks<'a>(
     &'a self,
     options: &MapOptions,
     on_chunk: OnChunk<'_, 'a>,
@@ -196,7 +207,15 @@ impl<'a> StreamChunks<'a> for RawSource {
     on_name: OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {
     if options.final_source {
-      get_generated_source_info(&self.source())
+      match &self.value {
+        RawValue::Buffer(buffer) => {
+          let source = self
+            .value_as_string
+            .get_or_init(|| String::from_utf8_lossy(buffer).to_string());
+          get_generated_source_info(&**source)
+        }
+        RawValue::String(source) => get_generated_source_info(&**source),
+      }
     } else {
       match &self.value {
         RawValue::Buffer(buffer) => {
@@ -204,11 +223,11 @@ impl<'a> StreamChunks<'a> for RawSource {
             .value_as_string
             .get_or_init(|| String::from_utf8_lossy(buffer).to_string());
           stream_chunks_of_raw_source(
-            source, options, on_chunk, on_source, on_name,
+            &**source, options, on_chunk, on_source, on_name,
           )
         }
         RawValue::String(source) => stream_chunks_of_raw_source(
-          source, options, on_chunk, on_source, on_name,
+          &**source, options, on_chunk, on_source, on_name,
         ),
       }
     }
@@ -266,6 +285,10 @@ impl Source for RawStringSource {
     Cow::Borrowed(&self.0)
   }
 
+  fn rope(&self) -> Rope<'_> {
+    Rope::from(&self.0)
+  }
+
   fn buffer(&self) -> Cow<[u8]> {
     Cow::Borrowed(self.0.as_bytes())
   }
@@ -301,8 +324,8 @@ impl Hash for RawStringSource {
   }
 }
 
-impl<'a> StreamChunks<'a> for RawStringSource {
-  fn stream_chunks(
+impl StreamChunks for RawStringSource {
+  fn stream_chunks<'a>(
     &'a self,
     options: &MapOptions,
     on_chunk: OnChunk<'_, 'a>,
@@ -310,10 +333,10 @@ impl<'a> StreamChunks<'a> for RawStringSource {
     on_name: OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {
     if options.final_source {
-      get_generated_source_info(&self.source())
+      get_generated_source_info(&*self.0)
     } else {
       stream_chunks_of_raw_source(
-        &self.0, options, on_chunk, on_source, on_name,
+        &*self.0, options, on_chunk, on_source, on_name,
       )
     }
   }
@@ -365,6 +388,14 @@ impl Source for RawBufferSource {
     )
   }
 
+  fn rope(&self) -> Rope<'_> {
+    Rope::from(
+      self
+        .value_as_string
+        .get_or_init(|| String::from_utf8_lossy(&self.value).to_string()),
+    )
+  }
+
   fn buffer(&self) -> Cow<[u8]> {
     Cow::Borrowed(&self.value)
   }
@@ -400,8 +431,8 @@ impl Hash for RawBufferSource {
   }
 }
 
-impl<'a> StreamChunks<'a> for RawBufferSource {
-  fn stream_chunks(
+impl StreamChunks for RawBufferSource {
+  fn stream_chunks<'a>(
     &'a self,
     options: &MapOptions,
     on_chunk: OnChunk<'_, 'a>,
@@ -409,10 +440,10 @@ impl<'a> StreamChunks<'a> for RawBufferSource {
     on_name: OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {
     if options.final_source {
-      get_generated_source_info(&self.source())
+      get_generated_source_info(&*self.source())
     } else {
       stream_chunks_of_raw_source(
-        self
+        &**self
           .value_as_string
           .get_or_init(|| String::from_utf8_lossy(&self.value).to_string()),
         options,

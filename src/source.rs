@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
   helpers::{decode_mappings, StreamChunks},
+  rope::Rope,
   Result,
 };
 
@@ -20,17 +21,13 @@ pub type BoxSource = Arc<dyn Source>;
 
 /// [Source] abstraction, [webpack-sources docs](https://github.com/webpack/webpack-sources/#source).
 pub trait Source:
-  for<'a> StreamChunks<'a>
-  + DynHash
-  + AsAny
-  + DynEq
-  + DynClone
-  + fmt::Debug
-  + Sync
-  + Send
+  StreamChunks + DynHash + AsAny + DynEq + DynClone + fmt::Debug + Sync + Send
 {
   /// Get the source code.
   fn source(&self) -> Cow<str>;
+
+  /// Get the source code as a [Rope].
+  fn rope(&self) -> Rope<'_>;
 
   /// Get the source buffer.
   fn buffer(&self) -> Cow<[u8]>;
@@ -55,6 +52,10 @@ impl Source for BoxSource {
     self.as_ref().source()
   }
 
+  fn rope(&self) -> Rope<'_> {
+    self.as_ref().rope()
+  }
+
   fn buffer(&self) -> Cow<[u8]> {
     self.as_ref().buffer()
   }
@@ -74,8 +75,8 @@ impl Source for BoxSource {
 
 dyn_clone::clone_trait_object!(Source);
 
-impl<'a> StreamChunks<'a> for BoxSource {
-  fn stream_chunks(
+impl StreamChunks for BoxSource {
+  fn stream_chunks<'a>(
     &'a self,
     options: &MapOptions,
     on_chunk: crate::helpers::OnChunk<'_, 'a>,

@@ -12,6 +12,7 @@ use crate::{
     stream_and_get_source_and_map, stream_chunks_of_raw_source,
     stream_chunks_of_source_map, StreamChunks,
   },
+  rope::Rope,
   MapOptions, Source, SourceMap,
 };
 
@@ -50,8 +51,6 @@ use crate::{
 /// ```
 pub struct CachedSource<T> {
   inner: Arc<T>,
-  cached_buffer: Arc<OnceLock<Vec<u8>>>,
-  cached_source: Arc<OnceLock<Arc<str>>>,
   cached_hash: Arc<OnceLock<u64>>,
   cached_maps:
     Arc<DashMap<MapOptions, Option<SourceMap>, BuildHasherDefault<FxHasher>>>,
@@ -62,8 +61,6 @@ impl<T> CachedSource<T> {
   pub fn new(inner: T) -> Self {
     Self {
       inner: Arc::new(inner),
-      cached_buffer: Default::default(),
-      cached_source: Default::default(),
       cached_hash: Default::default(),
       cached_maps: Default::default(),
     }
@@ -77,17 +74,15 @@ impl<T> CachedSource<T> {
 
 impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
   fn source(&self) -> Cow<str> {
-    let cached = self
-      .cached_source
-      .get_or_init(|| self.inner.source().into());
-    Cow::Borrowed(cached)
+    self.inner.source()
+  }
+
+  fn rope(&self) -> Rope<'_> {
+    self.inner.rope()
   }
 
   fn buffer(&self) -> Cow<[u8]> {
-    let cached = self
-      .cached_buffer
-      .get_or_init(|| self.inner.buffer().to_vec());
-    Cow::Borrowed(cached)
+    self.inner.buffer()
   }
 
   fn size(&self) -> usize {
@@ -109,7 +104,7 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
   }
 }
 
-impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks<'_>
+impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks
   for CachedSource<T>
 {
   fn stream_chunks<'a>(
@@ -122,9 +117,7 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks<'_>
     let cached_map = self.cached_maps.entry(options.clone());
     match cached_map {
       Entry::Occupied(entry) => {
-        let source = self
-          .cached_source
-          .get_or_init(|| self.inner.source().into());
+        let source = self.rope();
         if let Some(map) = entry.get() {
           #[allow(unsafe_code)]
           // SAFETY: We guarantee that once a `SourceMap` is stored in the cache, it will never be removed.
@@ -162,8 +155,6 @@ impl<T> Clone for CachedSource<T> {
   fn clone(&self) -> Self {
     Self {
       inner: self.inner.clone(),
-      cached_buffer: self.cached_buffer.clone(),
-      cached_source: self.cached_source.clone(),
       cached_hash: self.cached_hash.clone(),
       cached_maps: self.cached_maps.clone(),
     }
@@ -196,8 +187,7 @@ impl<T: std::fmt::Debug> std::fmt::Debug for CachedSource<T> {
   ) -> Result<(), std::fmt::Error> {
     f.debug_struct("CachedSource")
       .field("inner", self.inner.as_ref())
-      .field("cached_buffer", &self.cached_buffer.get().is_some())
-      .field("cached_source", &self.cached_source.get().is_some())
+      .field("cached_hash", self.cached_hash.as_ref())
       .field("cached_maps", &(!self.cached_maps.is_empty()))
       .finish()
   }
@@ -205,8 +195,6 @@ impl<T: std::fmt::Debug> std::fmt::Debug for CachedSource<T> {
 
 #[cfg(test)]
 mod tests {
-  use std::borrow::Borrow;
-
   use crate::{
     ConcatSource, OriginalSource, RawSource, ReplaceSource, SourceExt,
     SourceMapSource, WithoutOriginalOptions,
@@ -247,11 +235,6 @@ mod tests {
     source.size();
     source.map(&map_options);
 
-    assert_eq!(clone.cached_source.get().unwrap().borrow(), source.source());
-    assert_eq!(
-      *clone.cached_buffer.get().unwrap(),
-      source.buffer().to_vec()
-    );
     assert_eq!(
       *clone.cached_maps.get(&map_options).unwrap().value(),
       source.map(&map_options)
