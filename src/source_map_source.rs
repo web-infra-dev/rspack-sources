@@ -92,8 +92,8 @@ impl Source for SourceMapSource {
     Cow::Borrowed(&self.value)
   }
 
-  fn rope(&self) -> crate::rope::Rope<'_> {
-    crate::rope::Rope::from(&self.value)
+  fn rope(&self) -> Rope<'_> {
+    Rope::from(&self.value)
   }
 
   fn buffer(&self) -> Cow<[u8]> {

@@ -123,14 +123,14 @@ impl Source for RawSource {
     }
   }
 
-  fn rope(&self) -> crate::rope::Rope<'_> {
+  fn rope(&self) -> Rope<'_> {
     match &self.value {
-      RawValue::Buffer(v) => crate::rope::Rope::from(
+      RawValue::Buffer(v) => Rope::from(
         self
           .value_as_string
           .get_or_init(|| String::from_utf8_lossy(v).to_string()),
       ),
-      RawValue::String(s) => crate::rope::Rope::from(s),
+      RawValue::String(s) => Rope::from(s),
     }
   }
 
@@ -295,8 +295,8 @@ impl Source for RawStringSource {
     Cow::Borrowed(&self.0)
   }
 
-  fn rope(&self) -> crate::rope::Rope<'_> {
-    crate::rope::Rope::from(&self.0)
+  fn rope(&self) -> Rope<'_> {
+    Rope::from(&self.0)
   }
 
   fn buffer(&self) -> Cow<[u8]> {
@@ -402,8 +402,8 @@ impl Source for RawBufferSource {
     )
   }
 
-  fn rope(&self) -> crate::rope::Rope<'_> {
-    crate::rope::Rope::from(
+  fn rope(&self) -> Rope<'_> {
+    Rope::from(
       self
         .value_as_string
         .get_or_init(|| String::from_utf8_lossy(&self.value).to_string()),

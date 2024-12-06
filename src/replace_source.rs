@@ -219,7 +219,7 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for ReplaceSource<T> {
     source_code.into()
   }
 
-  fn rope(&self) -> crate::rope::Rope<'_> {
+  fn rope(&self) -> Rope<'_> {
     let inner_source_code = self.inner.rope();
 
     // mut_string_push_str is faster that vec join

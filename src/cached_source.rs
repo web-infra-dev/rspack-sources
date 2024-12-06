@@ -140,7 +140,6 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks<'_>
     let cached_map = self.inner.borrow_cached_maps().entry(options.clone());
     match cached_map {
       Entry::Occupied(entry) => {
-        // let source = self.rope();
         let source = self.get_rope();
         if let Some(map) = entry.get() {
           #[allow(unsafe_code)]

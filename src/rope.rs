@@ -401,14 +401,19 @@ mod tests {
     // empty slice
     let rope = a.byte_slice(0..0);
     assert_eq!(rope.to_string(), "".to_string());
+
+    // slice with len
+    let rope = Rope::from_str("abc");
+    let rope = rope.byte_slice(3..3);
+    assert_eq!(rope.to_string(), "".to_string())
   }
 
   #[test]
   #[should_panic]
-  fn slice_panics_range_start_out_of_bound() {
+  fn slice_panics_range_start_out_of_bounds() {
     let mut a = Rope::new();
     a.append("abc");
-    a.byte_slice(3..3);
+    a.byte_slice(3..4);
   }
 
   #[test]
@@ -421,7 +426,7 @@ mod tests {
 
   #[test]
   #[should_panic]
-  fn slice_panics_range_end_out_of_bound() {
+  fn slice_panics_range_end_out_of_bounds() {
     let mut a = Rope::new();
     a.append("abc");
     a.byte_slice(0..4);
@@ -434,6 +439,7 @@ mod tests {
     a.append("def");
     a.append("ghi");
     assert_eq!(&a, "abcdefghi");
+    assert_eq!(a, "abcdefghi");
 
     let mut b = Rope::new();
     b.append("abcde");

@@ -10,7 +10,7 @@ use crate::{
   helpers::{get_map, GeneratedInfo, OnChunk, OnName, OnSource, StreamChunks},
   linear_map::LinearMap,
   source::{Mapping, OriginalLocation},
-  BoxSource, MapOptions, Source, SourceExt, SourceMap,
+  BoxSource, MapOptions, Rope, Source, SourceExt, SourceMap,
 };
 
 /// Concatenate multiple [Source]s to a single [Source].
@@ -109,12 +109,12 @@ impl Source for ConcatSource {
     }
   }
 
-  fn rope(&self) -> crate::rope::Rope<'_> {
+  fn rope(&self) -> Rope<'_> {
     let children = self.children();
     if children.len() == 1 {
       children[0].rope()
     } else {
-      let mut rope = crate::rope::Rope::new();
+      let mut rope = Rope::new();
       for child in children {
         let child_rope = child.rope();
         rope.extend(child_rope.chunks().map(|(s, _)| s));
