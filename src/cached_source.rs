@@ -127,7 +127,7 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
   }
 }
 
-impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks<'_>
+impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks
   for CachedSource<T>
 {
   fn stream_chunks<'a>(

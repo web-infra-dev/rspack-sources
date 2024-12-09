@@ -37,8 +37,8 @@ impl Source for CompatSource {
   }
 }
 
-impl<'a> StreamChunks<'a> for CompatSource {
-  fn stream_chunks(
+impl StreamChunks for CompatSource {
+  fn stream_chunks<'a>(
     &'a self,
     options: &MapOptions,
     on_chunk: OnChunk<'_, 'a>,

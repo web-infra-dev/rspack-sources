@@ -102,8 +102,8 @@ impl std::fmt::Debug for OriginalSource {
   }
 }
 
-impl<'a> StreamChunks<'a> for OriginalSource {
-  fn stream_chunks(
+impl StreamChunks for OriginalSource {
+  fn stream_chunks<'a>(
     &'a self,
     options: &MapOptions,
     on_chunk: OnChunk<'_, 'a>,
@@ -275,6 +275,7 @@ mod tests {
   fn should_omit_mappings_for_columns_with_node() {
     let source = OriginalSource::new("Line1\n\nLine3\n", "file.js");
     let result_map = source.map(&MapOptions::new(false)).unwrap();
+    dbg!(source.rope());
     assert_eq!(result_map.mappings(), "AAAA;AACA;AACA");
   }
 
