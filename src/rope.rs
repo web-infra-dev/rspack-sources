@@ -1,4 +1,3 @@
-use core::panic;
 use std::{
   borrow::Cow,
   cell::RefCell,
@@ -401,6 +400,7 @@ impl<'a, 'b: 'a> Iterator for Chunks<'a, 'b> {
   }
 }
 
+#[inline(always)]
 fn start_bound_to_range_start(start: Bound<&usize>) -> Option<usize> {
   match start {
     Bound::Included(&start) => Some(start),
@@ -409,6 +409,7 @@ fn start_bound_to_range_start(start: Bound<&usize>) -> Option<usize> {
   }
 }
 
+#[inline(always)]
 fn end_bound_to_range_end(end: Bound<&usize>) -> Option<usize> {
   match end {
     Bound::Included(&end) => Some(end + 1),
@@ -416,19 +417,6 @@ fn end_bound_to_range_end(end: Bound<&usize>) -> Option<usize> {
     Bound::Unbounded => None,
   }
 }
-
-// impl std::io::Write for Rope<'_> {
-//   fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-//     let s =
-//       std::str::from_utf8(buf).map_err(|_| std::io::ErrorKind::InvalidData)?;
-//     self.append(s);
-//     Ok(buf.len())
-//   }
-
-//   fn flush(&mut self) -> std::io::Result<()> {
-//     Ok(())
-//   }
-// }
 
 #[cfg(test)]
 mod tests {

@@ -177,41 +177,12 @@ pub fn split_into_potential_tokens(source: Rope) -> PotentialTokens {
   PotentialTokens { source, index: 0 }
 }
 
+const EMPTY_ROPE: Rope = Rope::new();
+
 /// Split the string with a needle, each string will contain the needle.
 ///
 /// Copied and modified from https://github.com/rust-lang/cargo/blob/30efe860c0e4adc1a6d7057ad223dc6e47d34edf/src/cargo/sources/registry/index.rs#L1048-L1072
-fn split(haystack: &str, needle: u8) -> impl Iterator<Item = &str> {
-  struct Split<'a> {
-    haystack: &'a str,
-    needle: u8,
-  }
-
-  impl<'a> Iterator for Split<'a> {
-    type Item = &'a str;
-
-    fn next(&mut self) -> Option<&'a str> {
-      if self.haystack.is_empty() {
-        return None;
-      }
-      let (ret, remaining) =
-        match memchr::memchr(self.needle, self.haystack.as_bytes()) {
-          Some(pos) => (&self.haystack[..=pos], &self.haystack[pos + 1..]),
-          None => (self.haystack, ""),
-        };
-      self.haystack = remaining;
-      Some(ret)
-    }
-  }
-
-  Split { haystack, needle }
-}
-
-const EMPTY_ROPE: Rope = Rope::new();
-
-fn split_new<'a>(
-  haystack: Rope<'a>,
-  needle: u8,
-) -> impl Iterator<Item = Rope<'a>> {
+fn split<'a>(haystack: Rope<'a>, needle: u8) -> impl Iterator<Item = Rope<'a>> {
   struct Split<'a> {
     haystack: Rope<'a>,
     bytes: Vec<u8>,
@@ -260,16 +231,16 @@ fn split_new<'a>(
 pub fn split_into_lines<'a>(
   source: Rope<'a>,
 ) -> impl Iterator<Item = Rope<'a>> {
-  split_new(source, b'\n')
+  split(source, b'\n')
 }
 
 pub fn get_generated_source_info(source: Rope) -> GeneratedInfo {
   let (generated_line, generated_column) = if source.ends_with("\n") {
-    (split_new(source.clone(), b'\n').count() + 1, 0)
+    (split(source.clone(), b'\n').count() + 1, 0)
   } else {
     let mut line_count = 0;
     let mut last_line = EMPTY_ROPE;
-    for line in split_new(source, b'\n') {
+    for line in split(source, b'\n') {
       line_count += 1;
       last_line = line;
     }
@@ -1245,14 +1216,12 @@ pub fn stream_and_get_source_and_map<'a, S: StreamChunks>(
 
 #[cfg(test)]
 mod test {
-  use itertools::Itertools;
-
   use crate::Rope;
 
-  use super::split_new;
+  use super::split;
 
   #[test]
   fn should_split() {
-    assert_eq!(split_new(Rope::from("Line1\n\nLine3\n"), b'\n').count(), 3);
+    assert_eq!(split(Rope::from("Line1\n\nLine3\n"), b'\n').count(), 3);
   }
 }
