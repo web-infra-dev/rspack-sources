@@ -272,24 +272,15 @@ mod tests {
     source.size();
     source.map(&map_options);
 
-    // FIXME:: ADD BACK
-    // assert_eq!(
-    //   clone.inner.borrow_cached_source().get().unwrap().borrow(),
-    //   source.source()
-    // );
-    // assert_eq!(
-    //   *clone.inner.borrow_cached_buffer().get().unwrap(),
-    //   source.buffer().to_vec()
-    // );
-    // assert_eq!(
-    //   *clone
-    //     .inner
-    //     .borrow_cached_maps()
-    //     .get(&map_options)
-    //     .unwrap()
-    //     .value(),
-    //   source.map(&map_options)
-    // );
+    assert_eq!(
+      *clone
+        .inner
+        .borrow_cached_maps()
+        .get(&map_options)
+        .unwrap()
+        .value(),
+      source.map(&map_options)
+    );
   }
 
   #[test]

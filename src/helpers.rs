@@ -1247,14 +1247,12 @@ pub fn stream_and_get_source_and_map<'a, S: StreamChunks>(
 mod test {
   use itertools::Itertools;
 
-  use crate::{helpers::split, Rope};
+  use crate::Rope;
 
   use super::split_new;
 
   #[test]
   fn should_split() {
-    // assert_eq!(split_new(Rope::from("Line1\n\nLine3\n"), b'\n').count(), 3);
-    dbg!(split_new(Rope::from("Line1\n\nLine3\n"), b'\n').collect_vec());
-    // dbg!(split("Line1\n\nLine3\n", b'\n').collect_vec());
+    assert_eq!(split_new(Rope::from("Line1\n\nLine3\n"), b'\n').count(), 3);
   }
 }
