@@ -25,7 +25,7 @@ impl<'a> Rope<'a> {
   /// Create a [Rope].
   pub fn new() -> Self {
     Self {
-      repr: Repr::Complex(Arc::new(Vec::new())),
+      repr: Repr::Simple(""),
     }
   }
 
@@ -374,7 +374,13 @@ impl<'a, 'b> Iterator for CharIndices<'a, 'b> {
           return None;
         }
 
+        // skip empty chunks
+        while *chunk_index < chunks.len() && chunks[*chunk_index].0.is_empty() {
+          *chunk_index += 1;
+        }
+
         let (chunk, start_pos) = chunks[*chunk_index];
+
         char_indices
           .extend(chunk.char_indices().map(|(i, c)| (start_pos + i, c)));
         *chunk_index += 1;
