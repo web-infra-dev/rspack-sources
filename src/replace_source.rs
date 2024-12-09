@@ -309,7 +309,8 @@ fn check_content_at_position(
       .map(|(byte_index, _)| byte_index)
     {
       Some(byte_index) => {
-        line.byte_slice(byte_index..byte_index + expected.len()) == expected
+        line.get_byte_slice(byte_index..byte_index + expected.len())
+          == Some(expected)
       }
       None => false,
     }

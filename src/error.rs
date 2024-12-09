@@ -1,4 +1,4 @@
-use std::{error, fmt, result};
+use std::{borrow::Cow, error, fmt, result};
 
 /// An alias for [std::result::Result<T, rspack_sources::Error>].
 pub type Result<T> = result::Result<T, Error>;
@@ -8,12 +8,14 @@ pub type Result<T> = result::Result<T, Error>;
 pub enum Error {
   /// a JSON parsing related failure
   BadJson(simd_json::Error),
+  Rope(Cow<'static, str>),
 }
 
 impl fmt::Display for Error {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
       Error::BadJson(err) => write!(f, "bad json: {err}"),
+      Error::Rope(err) => write!(f, "rope error: {err}"),
     }
   }
 }

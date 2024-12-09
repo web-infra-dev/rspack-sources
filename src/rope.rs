@@ -1,11 +1,14 @@
+use core::panic;
 use std::{
   borrow::Cow,
   cell::RefCell,
   collections::VecDeque,
   fmt::Display,
   hash::Hash,
-  ops::{Index, Range},
+  ops::{Bound, Index, Range, RangeBounds},
 };
+
+use crate::Error;
 
 #[derive(Clone, Debug)]
 pub struct Rope<'a> {
@@ -103,38 +106,68 @@ impl<'a> Rope<'a> {
   /// # Panics
   ///
   /// Panics if the start of the range is greater than the end, or if the end is out of bounds.
-  pub fn byte_slice(&self, range: Range<usize>) -> Rope<'a> {
-    if range.end == self.len() && range.start == self.len() {
-      return Default::default();
+  pub fn byte_slice<R>(&self, range: R) -> Rope<'a>
+  where
+    R: RangeBounds<usize>,
+  {
+    self.get_byte_slice_impl(range).unwrap_or_else(|e| {
+      panic!("byte_slice: {}", e);
+    })
+  }
+
+  pub fn get_byte_slice<R>(&self, range: R) -> Option<Rope<'a>>
+  where
+    R: RangeBounds<usize>,
+  {
+    self.get_byte_slice_impl(range).ok()
+  }
+
+  pub(crate) fn get_byte_slice_impl<R>(
+    &self,
+    range: R,
+  ) -> Result<Rope<'a>, Error>
+  where
+    R: RangeBounds<usize>,
+  {
+    let start_range = start_bound_to_range_start(range.start_bound());
+    let end_range = end_bound_to_range_end(range.end_bound());
+
+    match (start_range, end_range) {
+      (Some(start), Some(end)) => {
+        if start > end {
+          return Err(Error::Rope("start >= end".into()));
+        } else if end > self.len() {
+          return Err(Error::Rope("end out of bounds".into()));
+        }
+      }
+      (None, Some(end)) => {
+        if end > self.len() {
+          return Err(Error::Rope("end out of bounds".into()));
+        }
+      }
+      (Some(start), None) => {
+        if start > self.len() {
+          return Err(Error::Rope("start out of bounds".into()));
+        }
+      }
+      _ => {}
     }
 
-    if range.end > self.len() {
-      panic!("byte_slice end out of bounds");
-    }
-
-    if range.start >= self.len() {
-      panic!("byte_slice start out of bounds");
-    }
-
-    if range.start > range.end {
-      panic!("byte_slice start >= end");
-    }
+    let start_range = start_range.unwrap_or(0);
+    let end_range = end_range.unwrap_or_else(|| self.len());
 
     // [start_chunk
     let start_chunk_index = self
       .data
-      .binary_search_by(|(_, start_pos)| start_pos.cmp(&range.start))
-      .unwrap_or_else(|insert_pos| {
-        // insert pos could be 0
-        insert_pos.saturating_sub(1)
-      });
+      .binary_search_by(|(_, start_pos)| start_pos.cmp(&start_range))
+      .unwrap_or_else(|insert_pos| insert_pos.saturating_sub(1));
 
     // end_chunk)
     let end_chunk_index = self
       .data
       .binary_search_by(|(text, start_pos)| {
         let end_pos = start_pos + text.len(); // exclusive
-        end_pos.cmp(&range.end)
+        end_pos.cmp(&end_range)
       })
       .unwrap_or_else(|insert_pos| insert_pos);
 
@@ -145,21 +178,21 @@ impl<'a> Rope<'a> {
       let (text, start_pos) = self.data[i];
 
       if start_chunk_index == i && end_chunk_index == i {
-        let start = range.start - start_pos;
-        let end = range.end - start_pos;
+        let start = start_range - start_pos;
+        let end = end_range - start_pos;
         rope.append(&text[start..end]);
       } else if start_chunk_index == i {
-        let start = range.start - start_pos;
+        let start = start_range - start_pos;
         rope.append(&text[start..]);
       } else if end_chunk_index == i {
-        let end = range.end - start_pos;
+        let end = end_range - start_pos;
         rope.append(&text[..end]);
       } else {
         rope.append(text);
       }
     });
 
-    rope
+    Ok(rope)
   }
 
   pub fn to_bytes(&self) -> Vec<u8> {
@@ -351,6 +384,22 @@ impl<'a, 'b: 'a> Iterator for Chunks<'a, 'b> {
     } else {
       None
     }
+  }
+}
+
+fn start_bound_to_range_start(start: Bound<&usize>) -> Option<usize> {
+  match start {
+    Bound::Included(&start) => Some(start),
+    Bound::Excluded(&start) => Some(start + 1),
+    Bound::Unbounded => None,
+  }
+}
+
+fn end_bound_to_range_end(end: Bound<&usize>) -> Option<usize> {
+  match end {
+    Bound::Included(&end) => Some(end + 1),
+    Bound::Excluded(&end) => Some(end),
+    Bound::Unbounded => None,
   }
 }
 
