@@ -268,21 +268,26 @@ impl<'a> Rope<'a> {
           })
           .unwrap_or_else(|insert_pos| insert_pos);
 
+        // same chunk
+        if start_chunk_index == end_chunk_index {
+          let (text, start_pos) = data[start_chunk_index];
+          let start = start_range - start_pos;
+          let end = end_range - start_pos;
+          if text.is_char_boundary(start) && text.is_char_boundary(end) {
+            return Ok(Rope::from_str(&text[start..end]));
+          } else {
+            return Err(Error::Rope("invalid char boundary"));
+          }
+        }
+
         let mut rope = Rope::default();
 
+        // different chunk
         // [start_chunk, end_chunk]
         (start_chunk_index..=end_chunk_index).try_for_each(|i| {
           let (text, start_pos) = data[i];
 
-          if start_chunk_index == i && end_chunk_index == i {
-            let start = start_range - start_pos;
-            let end = end_range - start_pos;
-            if text.is_char_boundary(start) && text.is_char_boundary(end) {
-              rope.add(&text[start..end]);
-            } else {
-              return Err(Error::Rope("invalid char boundary"));
-            }
-          } else if start_chunk_index == i {
+          if start_chunk_index == i {
             let start = start_range - start_pos;
             if text.is_char_boundary(start) {
               rope.add(&text[start..]);
