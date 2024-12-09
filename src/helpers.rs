@@ -177,7 +177,7 @@ pub fn split_into_potential_tokens(source: Rope) -> PotentialTokens {
   PotentialTokens { source, index: 0 }
 }
 
-// const EMPTY_ROPE: Rope = Rope::new();
+const EMPTY_ROPE: Rope = Rope::new();
 
 /// Split the string with a needle, each string will contain the needle.
 ///
@@ -207,7 +207,7 @@ fn split<'a, 'b>(
             self.haystack.byte_slice(pos + 1..self.haystack.len()),
             self.range.start + pos + 1..self.bytes.len(),
           ),
-          None => (std::mem::take(&mut self.haystack), Rope::new(), 0..0),
+          None => (std::mem::take(&mut self.haystack), EMPTY_ROPE, 0..0),
         };
       self.haystack = remaining;
       self.range = remaining_range;
@@ -215,7 +215,6 @@ fn split<'a, 'b>(
     }
   }
 
-  // FIXME: memory issue
   let bytes = haystack.to_bytes();
   let len = bytes.len();
   Split {
@@ -224,6 +223,32 @@ fn split<'a, 'b>(
     range: 0..len,
     needle,
   }
+}
+
+fn split_str(haystack: &str, needle: u8) -> impl Iterator<Item = &str> {
+  struct Split<'a> {
+    haystack: &'a str,
+    needle: u8,
+  }
+
+  impl<'a> Iterator for Split<'a> {
+    type Item = &'a str;
+
+    fn next(&mut self) -> Option<&'a str> {
+      if self.haystack.is_empty() {
+        return None;
+      }
+      let (ret, remaining) =
+        match memchr::memchr(self.needle, self.haystack.as_bytes()) {
+          Some(pos) => (&self.haystack[..=pos], &self.haystack[pos + 1..]),
+          None => (self.haystack, ""),
+        };
+      self.haystack = remaining;
+      Some(ret)
+    }
+  }
+
+  Split { haystack, needle }
 }
 
 // /[^\n]+\n?|\n/g
@@ -235,15 +260,29 @@ pub fn split_into_lines<'a>(
 
 pub fn get_generated_source_info(source: &Rope) -> GeneratedInfo {
   let (generated_line, generated_column) = if source.ends_with("\n") {
-    (split(source, b'\n').count() + 1, 0)
-  } else {
-    let mut line_count = 0;
-    let mut last_line = Rope::new();
-    for line in split(source, b'\n') {
-      line_count += 1;
-      last_line = line;
+    if let Some(haystack) = source.get_simple() {
+      (split_str(haystack, b'\n').count() + 1, 0)
+    } else {
+      (split(source, b'\n').count() + 1, 0)
     }
-    (line_count.max(1), last_line.len())
+  } else {
+    if let Some(haystack) = source.get_simple() {
+      let mut line_count = 0;
+      let mut last_line = "";
+      for line in split_str(haystack, b'\n') {
+        line_count += 1;
+        last_line = line;
+      }
+      (line_count.max(1), last_line.len())
+    } else {
+      let mut line_count = 0;
+      let mut last_line = EMPTY_ROPE;
+      for line in split(source, b'\n') {
+        line_count += 1;
+        last_line = line;
+      }
+      (line_count.max(1), last_line.len())
+    }
   };
   GeneratedInfo {
     generated_line: generated_line as u32,
@@ -916,7 +955,7 @@ pub fn stream_chunks_of_combined_source_map<'a>(
                   name_index_value_mapping.get(&name_index).cloned().unwrap();
                 let original_name = original_source_lines
                   .get(inner_original_line as usize - 1)
-                  .map_or(Rope::new(), |i| {
+                  .map_or(EMPTY_ROPE, |i| {
                     let start = inner_original_column as usize;
                     let end = start + name.len();
                     i.substring(start, end)

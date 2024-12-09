@@ -23,7 +23,7 @@ pub struct Rope<'a> {
 
 impl<'a> Rope<'a> {
   /// Create a [Rope].
-  pub fn new() -> Self {
+  pub const fn new() -> Self {
     Self {
       repr: Repr::Simple(""),
     }
@@ -323,6 +323,13 @@ impl<'a> Rope<'a> {
         }
         Cow::Owned(bytes)
       }
+    }
+  }
+
+  pub fn get_simple(&self) -> Option<&str> {
+    match &self.repr {
+      Repr::Simple(s) => Some(s),
+      _ => None,
     }
   }
 }
