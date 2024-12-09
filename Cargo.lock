@@ -535,6 +535,7 @@ name = "rspack_sources"
 version = "0.3.6"
 dependencies = [
  "base64-simd",
+ "bumpalo",
  "codspeed-criterion-compat",
  "criterion",
  "dashmap",
