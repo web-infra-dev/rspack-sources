@@ -57,7 +57,7 @@ impl<'a> MappingsDecoder<'a> {
   }
 }
 
-impl<'a> Iterator for MappingsDecoder<'a> {
+impl Iterator for MappingsDecoder<'_> {
   type Item = Mapping;
 
   fn next(&mut self) -> Option<Self::Item> {

@@ -312,7 +312,7 @@ pub fn stream_chunks_of_source_map<'a>(
 fn get_source<'a>(source_map: &SourceMap, source: &'a str) -> Cow<'a, str> {
   let source_root = source_map.source_root();
   match source_root {
-    Some(root) if root.is_empty() => Cow::Borrowed(source),
+    Some("") => Cow::Borrowed(source),
     Some(root) if root.ends_with('/') => {
       Cow::Owned(format!("{}{}", root, source))
     }
