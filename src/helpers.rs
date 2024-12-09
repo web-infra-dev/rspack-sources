@@ -177,7 +177,7 @@ pub fn split_into_potential_tokens(source: Rope) -> PotentialTokens {
   PotentialTokens { source, index: 0 }
 }
 
-const EMPTY_ROPE: Rope = Rope::new();
+// const EMPTY_ROPE: Rope = Rope::new();
 
 /// Split the string with a needle, each string will contain the needle.
 ///
@@ -208,7 +208,7 @@ fn split<'a>(haystack: Rope<'a>, needle: u8) -> impl Iterator<Item = Rope<'a>> {
             self.haystack.byte_slice(pos + 1..self.haystack.len()),
             self.range.start + pos + 1..self.bytes.len(),
           ),
-          None => (std::mem::take(&mut self.haystack), EMPTY_ROPE, 0..0),
+          None => (std::mem::take(&mut self.haystack), Rope::new(), 0..0),
         };
       self.haystack = remaining;
       self.range = remaining_range;
@@ -239,7 +239,7 @@ pub fn get_generated_source_info(source: Rope) -> GeneratedInfo {
     (split(source.clone(), b'\n').count() + 1, 0)
   } else {
     let mut line_count = 0;
-    let mut last_line = EMPTY_ROPE;
+    let mut last_line = Rope::new();
     for line in split(source, b'\n') {
       line_count += 1;
       last_line = line;
@@ -917,7 +917,7 @@ pub fn stream_chunks_of_combined_source_map<'a>(
                   name_index_value_mapping.get(&name_index).cloned().unwrap();
                 let original_name = original_source_lines
                   .get(inner_original_line as usize - 1)
-                  .map_or(EMPTY_ROPE, |i| {
+                  .map_or(Rope::new(), |i| {
                     let start = inner_original_column as usize;
                     let end = start + name.len();
                     i.substring(start, end)

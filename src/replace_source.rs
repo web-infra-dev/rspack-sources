@@ -234,9 +234,9 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for ReplaceSource<T> {
       if inner_pos < replacement.start {
         let end_pos = (replacement.start as usize).min(inner_source_code.len());
         let slice = inner_source_code.byte_slice(inner_pos as usize..end_pos);
-        source_code.extend(slice.chunks().map(|(s, _)| s));
+        source_code.append(slice);
       }
-      source_code.append(&replacement.content);
+      source_code.add(&replacement.content);
       #[allow(clippy::manual_clamp)]
       {
         inner_pos = inner_pos
@@ -246,7 +246,7 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for ReplaceSource<T> {
     }
     let slice =
       inner_source_code.byte_slice(inner_pos as usize..inner_source_code.len());
-    source_code.extend(slice.chunks().map(|(s, _)| s));
+    source_code.append(slice);
 
     source_code
   }
@@ -686,7 +686,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
     // Handle remaining replacements
     let mut remainder = Rope::new();
     while i < repls.len() {
-      remainder.append(&repls[i].content);
+      remainder.add(&repls[i].content);
       i += 1;
     }
 

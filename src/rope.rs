@@ -5,34 +5,47 @@ use std::{
   fmt::Display,
   hash::Hash,
   ops::{Bound, Index, RangeBounds},
+  sync::Arc,
 };
 
 use crate::Error;
 
 #[derive(Clone, Debug)]
 pub struct Rope<'a> {
-  data: Vec<(&'a str, usize)>,
+  data: Arc<Vec<(&'a str, usize)>>,
 }
 
 impl<'a> Rope<'a> {
   /// Create a [Rope].
-  pub const fn new() -> Self {
-    Self { data: Vec::new() }
-  }
-
-  pub fn from_str(s: &'a str) -> Self {
-    Self { data: vec![(s, 0)] }
-  }
-
-  pub fn append(&mut self, value: &'a str) {
-    if !value.is_empty() {
-      self.data.push((value, self.len()));
+  pub fn new() -> Self {
+    Self {
+      data: Arc::new(Vec::new()),
     }
   }
 
-  pub fn extend(&mut self, value: impl IntoIterator<Item = &'a str>) {
-    for value in value {
-      self.append(value);
+  pub fn from_str(s: &'a str) -> Self {
+    Self {
+      data: Arc::new(vec![(s, 0)]),
+    }
+  }
+
+  pub fn add(&mut self, value: &'a str) {
+    if !value.is_empty() {
+      let len = self.len();
+      Arc::make_mut(&mut self.data).push((value, len));
+    }
+  }
+
+  pub fn append(&mut self, value: Rope<'a>) {
+    if !value.data.is_empty() {
+      let mut len = self.len();
+      let cur = Arc::make_mut(&mut self.data);
+      cur.reserve_exact(value.data.len());
+
+      for &(value, _) in value.data.iter() {
+        cur.push((value, len));
+        len += value.len();
+      }
     }
   }
 
@@ -75,6 +88,7 @@ impl<'a> Rope<'a> {
     }
   }
 
+  #[inline]
   pub fn starts_with(&self, value: &str) -> bool {
     if let Some((first, _)) = self.data.first() {
       first.starts_with(value)
@@ -83,6 +97,7 @@ impl<'a> Rope<'a> {
     }
   }
 
+  #[inline]
   pub fn ends_with(&self, value: &str) -> bool {
     if let Some((last, _)) = self.data.last() {
       last.ends_with(value)
@@ -91,10 +106,12 @@ impl<'a> Rope<'a> {
     }
   }
 
+  #[inline]
   pub fn is_empty(&self) -> bool {
     self.data.iter().all(|(s, _)| s.is_empty())
   }
 
+  #[inline]
   pub fn len(&self) -> usize {
     self
       .data
@@ -180,26 +197,26 @@ impl<'a> Rope<'a> {
         let start = start_range - start_pos;
         let end = end_range - start_pos;
         if text.is_char_boundary(start) && text.is_char_boundary(end) {
-          rope.append(&text[start..end]);
+          rope.add(&text[start..end]);
         } else {
           return Err(Error::Rope("invalid char boundary"));
         }
       } else if start_chunk_index == i {
         let start = start_range - start_pos;
         if text.is_char_boundary(start) {
-          rope.append(&text[start..]);
+          rope.add(&text[start..]);
         } else {
           return Err(Error::Rope("invalid char boundary"));
         }
       } else if end_chunk_index == i {
         let end = end_range - start_pos;
         if text.is_char_boundary(end) {
-          rope.append(&text[..end]);
+          rope.add(&text[..end]);
         } else {
           return Err(Error::Rope("invalid char boundary"));
         }
       } else {
-        rope.append(text);
+        rope.add(text);
       }
 
       Ok(())
@@ -219,7 +236,7 @@ impl<'a> Rope<'a> {
 
 impl Hash for Rope<'_> {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-    for (s, _) in &self.data {
+    for (s, _) in self.data.iter() {
       s.hash(state);
     }
   }
@@ -287,7 +304,7 @@ impl PartialEq<Rope<'_>> for Rope<'_> {
     let other_chunk_index = RefCell::new(0);
     let mut other_chunk_byte_index = 0;
     let other_chunk = || other_chunks[*other_chunk_index.borrow()].0.as_bytes();
-    for (chunk, start_pos) in chunks {
+    for (chunk, start_pos) in chunks.iter() {
       let chunk = chunk.as_bytes();
       while (cur - start_pos) < chunk.len() {
         if other_chunk_byte_index >= other_chunk().len() {
@@ -316,7 +333,7 @@ impl PartialEq<str> for Rope<'_> {
     let other = other.as_bytes();
 
     let mut idx = 0;
-    for (chunk, _) in &self.data {
+    for (chunk, _) in self.data.iter() {
       let chunk = chunk.as_bytes();
       if chunk != &other[idx..(idx + chunk.len())] {
         return false;
@@ -337,7 +354,7 @@ impl PartialEq<&str> for Rope<'_> {
     let other = other.as_bytes();
 
     let mut idx = 0;
-    for (chunk, _) in &self.data {
+    for (chunk, _) in self.data.iter() {
       let chunk = chunk.as_bytes();
       if chunk != &other[idx..(idx + chunk.len())] {
         return false;
@@ -352,7 +369,7 @@ impl PartialEq<&str> for Rope<'_> {
 impl<'a> From<&'a str> for Rope<'a> {
   fn from(value: &'a str) -> Self {
     Rope {
-      data: vec![(value, 0)],
+      data: Arc::new(vec![(value, 0)]),
     }
   }
 }
@@ -360,7 +377,7 @@ impl<'a> From<&'a str> for Rope<'a> {
 impl<'a> From<&'a String> for Rope<'a> {
   fn from(value: &'a String) -> Self {
     Rope {
-      data: vec![(&**value, 0)],
+      data: Arc::new(vec![(&**value, 0)]),
     }
   }
 }
@@ -368,7 +385,7 @@ impl<'a> From<&'a String> for Rope<'a> {
 impl<'a> From<&'a Cow<'a, str>> for Rope<'a> {
   fn from(value: &'a Cow<'a, str>) -> Self {
     Rope {
-      data: vec![(&**value, 0)],
+      data: Arc::new(vec![(&**value, 0)]),
     }
   }
 }
@@ -423,19 +440,19 @@ mod tests {
   use crate::rope::Rope;
 
   #[test]
-  fn append() {
+  fn add() {
     let mut r = Rope::new();
-    r.append("a");
-    r.append("b");
+    r.add("a");
+    r.add("b");
     assert_eq!(r.to_string(), "ab".to_string());
   }
 
   #[test]
   fn slice() {
     let mut a = Rope::new();
-    a.append("abc");
-    a.append("def");
-    a.append("ghi");
+    a.add("abc");
+    a.add("def");
+    a.add("ghi");
 
     // same chunk start
     let rope = a.byte_slice(0..1);
@@ -463,7 +480,7 @@ mod tests {
   #[should_panic]
   fn slice_panics_range_start_out_of_bounds() {
     let mut a = Rope::new();
-    a.append("abc");
+    a.add("abc");
     a.byte_slice(3..4);
   }
 
@@ -471,7 +488,7 @@ mod tests {
   #[should_panic]
   fn slice_panics_range_start_greater_than_end() {
     let mut a = Rope::new();
-    a.append("abc");
+    a.add("abc");
     a.byte_slice(1..0);
   }
 
@@ -479,22 +496,22 @@ mod tests {
   #[should_panic]
   fn slice_panics_range_end_out_of_bounds() {
     let mut a = Rope::new();
-    a.append("abc");
+    a.add("abc");
     a.byte_slice(0..4);
   }
 
   #[test]
   fn eq() {
     let mut a = Rope::new();
-    a.append("abc");
-    a.append("def");
-    a.append("ghi");
+    a.add("abc");
+    a.add("def");
+    a.add("ghi");
     assert_eq!(&a, "abcdefghi");
     assert_eq!(a, "abcdefghi");
 
     let mut b = Rope::new();
-    b.append("abcde");
-    b.append("fghi");
+    b.add("abcde");
+    b.add("fghi");
 
     assert_eq!(a, b);
   }
@@ -509,15 +526,15 @@ mod tests {
   fn byte() {
     let mut a = Rope::from_str("abc");
     assert_eq!(a.byte(0), b'a');
-    a.append("d");
+    a.add("d");
     assert_eq!(a.byte(3), b'd');
   }
 
   #[test]
   fn char_indices() {
     let mut a = Rope::new();
-    a.append("abc");
-    a.append("def");
+    a.add("abc");
+    a.add("def");
 
     let a = a.char_indices().collect::<Vec<_>>();
     let b = "abcdef".char_indices().collect::<Vec<_>>();
