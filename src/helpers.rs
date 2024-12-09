@@ -1,7 +1,7 @@
 use std::{
   borrow::{BorrowMut, Cow},
   cell::{OnceCell, RefCell},
-  ops::Range,
+  ops::{Range, RangeFrom},
 };
 
 use rustc_hash::FxHashMap as HashMap;
@@ -137,12 +137,12 @@ impl<'a> Iterator for PotentialTokens<'a> {
   type Item = Rope<'a>;
 
   fn next(&mut self) -> Option<Self::Item> {
-    if let Some(c) = self.source.try_byte(self.index) {
+    if let Some(c) = self.source.get_byte(self.index) {
       let start = self.index;
       let mut c = char::from(c);
       while c != '\n' && c != ';' && c != '{' && c != '}' {
         self.index += 1;
-        if let Some(ch) = self.source.try_byte(self.index) {
+        if let Some(ch) = self.source.get_byte(self.index) {
           c = char::from(ch);
         } else {
           return Some(self.source.byte_slice(start..self.index));
@@ -156,7 +156,7 @@ impl<'a> Iterator for PotentialTokens<'a> {
         || c == '\t'
       {
         self.index += 1;
-        if let Some(ch) = self.source.try_byte(self.index) {
+        if let Some(ch) = self.source.get_byte(self.index) {
           c = char::from(ch);
         } else {
           return Some(self.source.byte_slice(start..self.index));
@@ -226,12 +226,16 @@ fn split_new<'a>(
       if self.haystack.is_empty() {
         return None;
       }
+      debug_assert_eq!(
+        &self.bytes[self.range.clone()],
+        self.haystack.to_bytes()
+      );
       let (ret, remaining, remaining_range) =
         match memchr::memchr(self.needle, &self.bytes[self.range.clone()]) {
           Some(pos) => (
             self.haystack.byte_slice(0..pos + 1),
             self.haystack.byte_slice(pos + 1..self.haystack.len()),
-            pos + 1..self.haystack.len(),
+            self.range.start + pos + 1..self.bytes.len(),
           ),
           None => (std::mem::take(&mut self.haystack), EMPTY_ROPE, 0..0),
         };
@@ -1237,4 +1241,20 @@ pub fn stream_and_get_source_and_map<'a, S: StreamChunks>(
     Some(SourceMap::new(mappings, sources, sources_content, names))
   };
   (generated_info, map)
+}
+
+#[cfg(test)]
+mod test {
+  use itertools::Itertools;
+
+  use crate::{helpers::split, Rope};
+
+  use super::split_new;
+
+  #[test]
+  fn should_split() {
+    // assert_eq!(split_new(Rope::from("Line1\n\nLine3\n"), b'\n').count(), 3);
+    dbg!(split_new(Rope::from("Line1\n\nLine3\n"), b'\n').collect_vec());
+    // dbg!(split("Line1\n\nLine3\n", b'\n').collect_vec());
+  }
 }

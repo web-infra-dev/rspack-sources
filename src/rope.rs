@@ -49,10 +49,10 @@ impl<'a> Rope<'a> {
   ///
   /// Panics if the index is out of bounds.
   pub fn byte(&self, byte_index: usize) -> u8 {
-    self.try_byte(byte_index).expect("byte out of bounds")
+    self.get_byte(byte_index).expect("byte out of bounds")
   }
 
-  pub fn try_byte(&self, byte_index: usize) -> Option<u8> {
+  pub fn get_byte(&self, byte_index: usize) -> Option<u8> {
     if byte_index >= self.len() {
       return None;
     }
@@ -90,7 +90,7 @@ impl<'a> Rope<'a> {
   }
 
   pub fn is_empty(&self) -> bool {
-    self.data.is_empty()
+    self.data.iter().all(|(s, _)| s.is_empty())
   }
 
   pub fn len(&self) -> usize {

@@ -275,7 +275,6 @@ mod tests {
   fn should_omit_mappings_for_columns_with_node() {
     let source = OriginalSource::new("Line1\n\nLine3\n", "file.js");
     let result_map = source.map(&MapOptions::new(false)).unwrap();
-    dbg!(source.rope());
     assert_eq!(result_map.mappings(), "AAAA;AACA;AACA");
   }
 
