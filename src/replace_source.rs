@@ -376,7 +376,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
         {
           match source_content {
             SourceContent::Raw(source) => {
-              let lines = split_into_lines(source.clone()).collect::<Vec<_>>();
+              let lines = split_into_lines(source).collect::<Vec<_>>();
               let matched =
                 check_content_at_position(&lines, line, column, expected_chunk);
               *source_content = SourceContent::Lines(lines);
@@ -502,7 +502,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
           };
 
           let lines: Vec<Rope> =
-            split_into_lines(Rope::from_str(&repl.content)).collect();
+            split_into_lines(&Rope::from_str(&repl.content)).collect();
           let mut replacement_name_index = mapping
             .original
             .as_ref()
@@ -692,7 +692,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
 
     // Insert remaining replacements content split into chunks by lines
     let mut line = result.generated_line as i64 + generated_line_offset;
-    let matches: Vec<Rope> = split_into_lines(remainder).collect();
+    let matches: Vec<Rope> = split_into_lines(&remainder).collect();
     for (m, content_line) in matches.iter().enumerate() {
       on_chunk(
         Some(content_line.clone()),

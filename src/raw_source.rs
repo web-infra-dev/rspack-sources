@@ -212,10 +212,10 @@ impl StreamChunks for RawSource {
           let source = self
             .value_as_string
             .get_or_init(|| String::from_utf8_lossy(buffer).to_string());
-          get_generated_source_info(Rope::from_str(source))
+          get_generated_source_info(&Rope::from_str(source))
         }
         RawValue::String(source) => {
-          get_generated_source_info(Rope::from_str(source))
+          get_generated_source_info(&Rope::from_str(source))
         }
       }
     } else {
@@ -343,7 +343,7 @@ impl StreamChunks for RawStringSource {
     on_name: OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {
     if options.final_source {
-      get_generated_source_info(Rope::from_str(&self.source()))
+      get_generated_source_info(&Rope::from_str(&self.source()))
     } else {
       stream_chunks_of_raw_source(
         Rope::from_str(&self.0),
@@ -454,7 +454,7 @@ impl StreamChunks for RawBufferSource {
     on_name: OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {
     if options.final_source {
-      get_generated_source_info(Rope::from_str(&self.source()))
+      get_generated_source_info(&Rope::from_str(&self.source()))
     } else {
       stream_chunks_of_raw_source(
         Rope::from_str(

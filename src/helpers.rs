@@ -182,10 +182,13 @@ pub fn split_into_potential_tokens(source: Rope) -> PotentialTokens {
 /// Split the string with a needle, each string will contain the needle.
 ///
 /// Copied and modified from https://github.com/rust-lang/cargo/blob/30efe860c0e4adc1a6d7057ad223dc6e47d34edf/src/cargo/sources/registry/index.rs#L1048-L1072
-fn split<'a>(haystack: Rope<'a>, needle: u8) -> impl Iterator<Item = Rope<'a>> {
+fn split<'a, 'b>(
+  haystack: &'b Rope<'a>,
+  needle: u8,
+) -> impl Iterator<Item = Rope<'a>> {
   struct Split<'a> {
     haystack: Rope<'a>,
-    bytes: Vec<u8>,
+    bytes: Cow<'a, [u8]>,
     range: Range<usize>,
     needle: u8,
   }
@@ -197,10 +200,6 @@ fn split<'a>(haystack: Rope<'a>, needle: u8) -> impl Iterator<Item = Rope<'a>> {
       if self.haystack.is_empty() {
         return None;
       }
-      debug_assert_eq!(
-        &self.bytes[self.range.clone()],
-        self.haystack.to_bytes()
-      );
       let (ret, remaining, remaining_range) =
         match memchr::memchr(self.needle, &self.bytes[self.range.clone()]) {
           Some(pos) => (
@@ -220,7 +219,7 @@ fn split<'a>(haystack: Rope<'a>, needle: u8) -> impl Iterator<Item = Rope<'a>> {
   let bytes = haystack.to_bytes();
   let len = bytes.len();
   Split {
-    haystack,
+    haystack: haystack.clone(),
     bytes,
     range: 0..len,
     needle,
@@ -229,14 +228,14 @@ fn split<'a>(haystack: Rope<'a>, needle: u8) -> impl Iterator<Item = Rope<'a>> {
 
 // /[^\n]+\n?|\n/g
 pub fn split_into_lines<'a>(
-  source: Rope<'a>,
+  source: &Rope<'a>,
 ) -> impl Iterator<Item = Rope<'a>> {
-  split(source, b'\n')
+  split(&source, b'\n')
 }
 
-pub fn get_generated_source_info(source: Rope) -> GeneratedInfo {
+pub fn get_generated_source_info(source: &Rope) -> GeneratedInfo {
   let (generated_line, generated_column) = if source.ends_with("\n") {
-    (split(source.clone(), b'\n').count() + 1, 0)
+    (split(source, b'\n').count() + 1, 0)
   } else {
     let mut line_count = 0;
     let mut last_line = Rope::new();
@@ -260,12 +259,12 @@ pub fn stream_chunks_of_raw_source<'a>(
   _on_name: OnName<'_, 'a>,
 ) -> GeneratedInfo {
   if options.final_source {
-    return get_generated_source_info(source);
+    return get_generated_source_info(&source);
   }
 
   let mut line = 1;
   let mut last_line = None;
-  for l in split_into_lines(source) {
+  for l in split_into_lines(&source) {
     on_chunk(
       Some(l.clone()),
       Mapping {
@@ -347,7 +346,7 @@ fn stream_chunks_of_source_map_final<'a>(
   on_source: OnSource<'_, 'a>,
   on_name: OnName<'_, 'a>,
 ) -> GeneratedInfo {
-  let result = get_generated_source_info(source);
+  let result = get_generated_source_info(&source);
   if result.generated_line == 1 && result.generated_column == 0 {
     return result;
   }
@@ -403,7 +402,7 @@ fn stream_chunks_of_source_map_full<'a>(
   on_source: OnSource<'_, 'a>,
   on_name: OnName<'_, 'a>,
 ) -> GeneratedInfo {
-  let lines = split_into_lines(source);
+  let lines = split_into_lines(&source);
   let line_with_indices_list = lines.map(WithIndices::new).collect::<Vec<_>>();
 
   if line_with_indices_list.is_empty() {
@@ -552,7 +551,7 @@ fn stream_chunks_of_source_map_lines_final<'a>(
   on_source: OnSource<'_, 'a>,
   _on_name: OnName,
 ) -> GeneratedInfo {
-  let result = get_generated_source_info(source);
+  let result = get_generated_source_info(&source);
   if result.generated_line == 1 && result.generated_column == 0 {
     return GeneratedInfo {
       generated_line: 1,
@@ -597,7 +596,7 @@ fn stream_chunks_of_source_map_lines_full<'a>(
   on_source: OnSource<'_, 'a>,
   _on_name: OnName,
 ) -> GeneratedInfo {
-  let lines: Vec<Rope<'a>> = split_into_lines(source).collect();
+  let lines: Vec<Rope<'a>> = split_into_lines(&source).collect();
   if lines.is_empty() {
     return GeneratedInfo {
       generated_line: 1,
@@ -801,7 +800,7 @@ pub fn stream_chunks_of_combined_source_map<'a>(
                     let inner_source_contents = inner_source_contents.borrow();
                     match inner_source_contents.get(&inner_source_index) {
                       Some(Some(source_content)) => Some(
-                        split_into_lines(source_content.clone())
+                        split_into_lines(source_content)
                           .map(WithIndices::new)
                           .collect(),
                       ),
@@ -901,7 +900,7 @@ pub fn stream_chunks_of_combined_source_map<'a>(
                     let inner_source_contents = inner_source_contents.borrow();
                     match inner_source_contents.get(&inner_source_index) {
                       Some(Some(source_content)) => Some(
-                        split_into_lines(source_content.clone())
+                        split_into_lines(source_content)
                           .map(WithIndices::new)
                           .collect(),
                       ),
@@ -1222,6 +1221,6 @@ mod test {
 
   #[test]
   fn should_split() {
-    assert_eq!(split(Rope::from("Line1\n\nLine3\n"), b'\n').count(), 3);
+    assert_eq!(split(&Rope::from("Line1\n\nLine3\n"), b'\n').count(), 3);
   }
 }

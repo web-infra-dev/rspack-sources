@@ -54,7 +54,7 @@ impl<'a> Rope<'a> {
       Repr::Complex(data) => {
         let len = data
           .last()
-          .map_or(0, |(text, start_pos)| *start_pos + text.len());
+          .map_or(0, |(chunk, start_pos)| *start_pos + chunk.len());
         Arc::make_mut(data).push((value, len));
       }
     }
@@ -72,7 +72,7 @@ impl<'a> Rope<'a> {
         if !value_data.is_empty() {
           let mut len = data
             .last()
-            .map_or(0, |(text, start_pos)| *start_pos + text.len());
+            .map_or(0, |(chunk, start_pos)| *start_pos + chunk.len());
 
           let cur = Arc::make_mut(data);
           cur.reserve_exact(value_data.len());
@@ -87,7 +87,7 @@ impl<'a> Rope<'a> {
         if !other.is_empty() {
           let len = data
             .last()
-            .map_or(0, |(text, start_pos)| *start_pos + text.len());
+            .map_or(0, |(chunk, start_pos)| *start_pos + chunk.len());
           Arc::make_mut(data).push((other, len));
         }
       }
@@ -187,7 +187,7 @@ impl<'a> Rope<'a> {
       Repr::Simple(s) => s.len(),
       Repr::Complex(data) => data
         .last()
-        .map_or(0, |(text, start_pos)| start_pos + text.len()),
+        .map_or(0, |(chunk, start_pos)| start_pos + chunk.len()),
     }
   }
 
@@ -262,19 +262,19 @@ impl<'a> Rope<'a> {
 
         // end_chunk)
         let end_chunk_index = data
-          .binary_search_by(|(text, start_pos)| {
-            let end_pos = start_pos + text.len(); // exclusive
+          .binary_search_by(|(chunk, start_pos)| {
+            let end_pos = start_pos + chunk.len(); // exclusive
             end_pos.cmp(&end_range)
           })
           .unwrap_or_else(|insert_pos| insert_pos);
 
         // same chunk
         if start_chunk_index == end_chunk_index {
-          let (text, start_pos) = data[start_chunk_index];
+          let (chunk, start_pos) = data[start_chunk_index];
           let start = start_range - start_pos;
           let end = end_range - start_pos;
-          if text.is_char_boundary(start) && text.is_char_boundary(end) {
-            return Ok(Rope::from_str(&text[start..end]));
+          if chunk.is_char_boundary(start) && chunk.is_char_boundary(end) {
+            return Ok(Rope::from_str(&chunk[start..end]));
           } else {
             return Err(Error::Rope("invalid char boundary"));
           }
@@ -285,24 +285,24 @@ impl<'a> Rope<'a> {
         // different chunk
         // [start_chunk, end_chunk]
         (start_chunk_index..=end_chunk_index).try_for_each(|i| {
-          let (text, start_pos) = data[i];
+          let (chunk, start_pos) = data[i];
 
           if start_chunk_index == i {
             let start = start_range - start_pos;
-            if text.is_char_boundary(start) {
-              rope.add(&text[start..]);
+            if chunk.is_char_boundary(start) {
+              rope.add(&chunk[start..]);
             } else {
               return Err(Error::Rope("invalid char boundary"));
             }
           } else if end_chunk_index == i {
             let end = end_range - start_pos;
-            if text.is_char_boundary(end) {
-              rope.add(&text[..end]);
+            if chunk.is_char_boundary(end) {
+              rope.add(&chunk[..end]);
             } else {
               return Err(Error::Rope("invalid char boundary"));
             }
           } else {
-            rope.add(text);
+            rope.add(chunk);
           }
 
           Ok(())
@@ -313,17 +313,17 @@ impl<'a> Rope<'a> {
     }
   }
 
-  pub fn to_bytes(&self) -> Vec<u8> {
-    let mut bytes = Vec::new();
+  pub fn to_bytes(&self) -> Cow<'a, [u8]> {
     match &self.repr {
-      Repr::Simple(s) => bytes.extend_from_slice(s.as_bytes()),
+      Repr::Simple(s) => Cow::Borrowed(s.as_bytes()),
       Repr::Complex(data) => {
+        let mut bytes = vec![];
         for (chunk, _) in data.iter() {
           bytes.extend_from_slice(chunk.as_bytes());
         }
+        Cow::Owned(bytes)
       }
     }
-    bytes
   }
 }
 
