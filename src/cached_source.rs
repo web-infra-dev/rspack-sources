@@ -195,7 +195,7 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Hash for CachedSource<T> {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
     (self.inner.borrow_cached_hash().get_or_init(|| {
       let mut hasher = FxHasher::default();
-      self.inner.hash(&mut hasher);
+      self.original().hash(&mut hasher);
       hasher.finish()
     }))
     .hash(state);
