@@ -5,7 +5,7 @@ use std::{
   collections::VecDeque,
   fmt::Display,
   hash::Hash,
-  ops::{Bound, Index, Range, RangeBounds},
+  ops::{Bound, Index, RangeBounds},
 };
 
 use crate::Error;

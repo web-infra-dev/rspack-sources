@@ -1,4 +1,4 @@
-use std::{borrow::Cow, error, fmt, result};
+use std::{error, fmt, result};
 
 /// An alias for [std::result::Result<T, rspack_sources::Error>].
 pub type Result<T> = result::Result<T, Error>;

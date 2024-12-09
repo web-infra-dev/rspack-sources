@@ -1,7 +1,7 @@
 use std::{
   borrow::{BorrowMut, Cow},
   cell::{OnceCell, RefCell},
-  ops::{Range, RangeFrom},
+  ops::Range,
 };
 
 use rustc_hash::FxHashMap as HashMap;

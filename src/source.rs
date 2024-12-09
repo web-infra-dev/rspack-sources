@@ -21,14 +21,7 @@ pub type BoxSource = Arc<dyn Source>;
 
 /// [Source] abstraction, [webpack-sources docs](https://github.com/webpack/webpack-sources/#source).
 pub trait Source:
-  StreamChunks
-  + DynHash
-  + AsAny
-  + DynEq
-  + DynClone
-  + fmt::Debug
-  + Sync
-  + Send
+  StreamChunks + DynHash + AsAny + DynEq + DynClone + fmt::Debug + Sync + Send
 {
   /// Get the source code.
   fn source(&self) -> Cow<str>;
