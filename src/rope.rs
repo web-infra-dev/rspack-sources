@@ -4,59 +4,103 @@ use std::{
   collections::VecDeque,
   fmt::Display,
   hash::Hash,
-  ops::{Bound, Index, RangeBounds},
+  ops::{Bound, RangeBounds},
   sync::Arc,
 };
 
 use crate::Error;
 
 #[derive(Clone, Debug)]
+enum Repr<'a> {
+  Simple(&'a str),
+  Complex(Arc<Vec<(&'a str, usize)>>),
+}
+
+#[derive(Clone, Debug)]
 pub struct Rope<'a> {
-  data: Arc<Vec<(&'a str, usize)>>,
+  repr: Repr<'a>,
 }
 
 impl<'a> Rope<'a> {
   /// Create a [Rope].
   pub fn new() -> Self {
     Self {
-      data: Arc::new(Vec::new()),
+      repr: Repr::Complex(Arc::new(Vec::new())),
     }
   }
 
   pub fn from_str(s: &'a str) -> Self {
     Self {
-      data: Arc::new(vec![(s, 0)]),
+      repr: if s.is_empty() {
+        Repr::Complex(Arc::new(Vec::new()))
+      } else {
+        Repr::Simple(s)
+      },
     }
   }
 
   pub fn add(&mut self, value: &'a str) {
-    if !value.is_empty() {
-      let len = self.len();
-      Arc::make_mut(&mut self.data).push((value, len));
+    if value.is_empty() {
+      return;
     }
-  }
 
-  pub fn append(&mut self, value: Rope<'a>) {
-    if !value.data.is_empty() {
-      let mut len = self.len();
-      let cur = Arc::make_mut(&mut self.data);
-      cur.reserve_exact(value.data.len());
-
-      for &(value, _) in value.data.iter() {
-        cur.push((value, len));
-        len += value.len();
+    match &mut self.repr {
+      Repr::Simple(s) => {
+        let mut vec = Vec::with_capacity(2);
+        vec.push((*s, 0));
+        vec.push((value, s.len()));
+        self.repr = Repr::Complex(Arc::new(vec));
+      }
+      Repr::Complex(data) => {
+        let len = data
+          .last()
+          .map_or(0, |(text, start_pos)| *start_pos + text.len());
+        Arc::make_mut(data).push((value, len));
       }
     }
   }
 
-  pub fn chunks(&self) -> Chunks<'_, 'a> {
-    self.iter()
-  }
+  pub fn append(&mut self, value: Rope<'a>) {
+    match (&mut self.repr, value.repr) {
+      (Repr::Simple(s), Repr::Simple(other)) => {
+        let mut vec = Vec::with_capacity(2);
+        vec.push((*s, 0));
+        vec.push((other, s.len()));
+        self.repr = Repr::Complex(Arc::new(vec));
+      }
+      (Repr::Complex(data), Repr::Complex(value_data)) => {
+        if !value_data.is_empty() {
+          let mut len = data
+            .last()
+            .map_or(0, |(text, start_pos)| *start_pos + text.len());
 
-  pub fn iter(&self) -> Chunks<'_, 'a> {
-    Chunks {
-      data: &self.data,
-      index: 0,
+          let cur = Arc::make_mut(data);
+          cur.reserve_exact(value_data.len());
+
+          for &(value, _) in value_data.iter() {
+            cur.push((value, len));
+            len += value.len();
+          }
+        }
+      }
+      (Repr::Complex(data), Repr::Simple(other)) => {
+        if !other.is_empty() {
+          let len = data
+            .last()
+            .map_or(0, |(text, start_pos)| *start_pos + text.len());
+          Arc::make_mut(data).push((other, len));
+        }
+      }
+      (Repr::Simple(s), Repr::Complex(other_data)) => {
+        let mut vec = Vec::with_capacity(other_data.len() + 1);
+        vec.push((*s, 0));
+        let s_len = s.len();
+
+        for &(value, _) in other_data.iter() {
+          vec.push((value, s_len + other_data[0].1));
+        }
+        self.repr = Repr::Complex(Arc::new(vec));
+      }
     }
   }
 
@@ -71,52 +115,80 @@ impl<'a> Rope<'a> {
     if byte_index >= self.len() {
       return None;
     }
-    let chunk_index = self
-      .data
-      .binary_search_by(|(_, start_pos)| start_pos.cmp(&byte_index))
-      .unwrap_or_else(|index| index.saturating_sub(1));
-    let (s, start_pos) = &self.data.get(chunk_index)?;
-    let pos = byte_index - start_pos;
-    Some(s.as_bytes()[pos])
+    match &self.repr {
+      Repr::Simple(s) => Some(s.as_bytes()[byte_index]),
+      Repr::Complex(data) => {
+        let chunk_index = data
+          .binary_search_by(|(_, start_pos)| start_pos.cmp(&byte_index))
+          .unwrap_or_else(|index| index.saturating_sub(1));
+        let (s, start_pos) = &data.get(chunk_index)?;
+        let pos = byte_index - start_pos;
+        Some(s.as_bytes()[pos])
+      }
+    }
   }
 
   pub fn char_indices(&self) -> CharIndices<'_, 'a> {
-    CharIndices {
-      chunks: &self.data,
-      char_indices: Default::default(),
-      chunk_index: 0,
+    match &self.repr {
+      Repr::Simple(s) => CharIndices {
+        repr: CharIndicesRepr::Simple {
+          iter: s.char_indices(),
+        },
+      },
+      Repr::Complex(data) => CharIndices {
+        repr: CharIndicesRepr::Complex {
+          chunks: data,
+          char_indices: VecDeque::new(),
+          chunk_index: 0,
+        },
+      },
     }
   }
 
   #[inline]
   pub fn starts_with(&self, value: &str) -> bool {
-    if let Some((first, _)) = self.data.first() {
-      first.starts_with(value)
-    } else {
-      false
+    match &self.repr {
+      Repr::Simple(s) => s.starts_with(value),
+      Repr::Complex(data) => {
+        if let Some((first, _)) = data.first() {
+          first.starts_with(value)
+        } else {
+          false
+        }
+      }
     }
   }
 
   #[inline]
   pub fn ends_with(&self, value: &str) -> bool {
-    if let Some((last, _)) = self.data.last() {
-      last.ends_with(value)
-    } else {
-      false
+    match &self.repr {
+      Repr::Simple(s) => s.ends_with(value),
+      Repr::Complex(data) => {
+        if let Some((last, _)) = data.last() {
+          last.ends_with(value)
+        } else {
+          false
+        }
+      }
     }
   }
 
   #[inline]
   pub fn is_empty(&self) -> bool {
-    self.data.iter().all(|(s, _)| s.is_empty())
+    match &self.repr {
+      Repr::Simple(s) => s.is_empty(),
+      Repr::Complex(data) => data.iter().all(|(s, _)| s.is_empty()),
+    }
   }
 
   #[inline]
   pub fn len(&self) -> usize {
-    self
-      .data
-      .last()
-      .map_or(0, |(text, start_pos)| start_pos + text.len())
+    match &self.repr {
+      Repr::Simple(s) => s.len(),
+      Repr::Complex(data) => data
+        .last()
+        .map_or(0, |(text, start_pos)| start_pos + text.len()),
+    }
   }
 
   /// # Panics
@@ -172,63 +244,79 @@ impl<'a> Rope<'a> {
     let start_range = start_range.unwrap_or(0);
     let end_range = end_range.unwrap_or_else(|| self.len());
 
-    // [start_chunk
-    let start_chunk_index = self
-      .data
-      .binary_search_by(|(_, start_pos)| start_pos.cmp(&start_range))
-      .unwrap_or_else(|insert_pos| insert_pos.saturating_sub(1));
-
-    // end_chunk)
-    let end_chunk_index = self
-      .data
-      .binary_search_by(|(text, start_pos)| {
-        let end_pos = start_pos + text.len(); // exclusive
-        end_pos.cmp(&end_range)
-      })
-      .unwrap_or_else(|insert_pos| insert_pos);
-
-    let mut rope = Rope::default();
-
-    // [start_chunk, end_chunk]
-    (start_chunk_index..=end_chunk_index).try_for_each(|i| {
-      let (text, start_pos) = self.data[i];
-
-      if start_chunk_index == i && end_chunk_index == i {
-        let start = start_range - start_pos;
-        let end = end_range - start_pos;
-        if text.is_char_boundary(start) && text.is_char_boundary(end) {
-          rope.add(&text[start..end]);
+    match &self.repr {
+      Repr::Simple(s) => {
+        let start = start_range;
+        let end = end_range;
+        if s.is_char_boundary(start) && s.is_char_boundary(end) {
+          Ok(Rope::from_str(&s[start..end]))
         } else {
-          return Err(Error::Rope("invalid char boundary"));
+          Err(Error::Rope("invalid char boundary"))
         }
-      } else if start_chunk_index == i {
-        let start = start_range - start_pos;
-        if text.is_char_boundary(start) {
-          rope.add(&text[start..]);
-        } else {
-          return Err(Error::Rope("invalid char boundary"));
-        }
-      } else if end_chunk_index == i {
-        let end = end_range - start_pos;
-        if text.is_char_boundary(end) {
-          rope.add(&text[..end]);
-        } else {
-          return Err(Error::Rope("invalid char boundary"));
-        }
-      } else {
-        rope.add(text);
       }
+      Repr::Complex(data) => {
+        // [start_chunk
+        let start_chunk_index = data
+          .binary_search_by(|(_, start_pos)| start_pos.cmp(&start_range))
+          .unwrap_or_else(|insert_pos| insert_pos.saturating_sub(1));
 
-      Ok(())
-    })?;
+        // end_chunk)
+        let end_chunk_index = data
+          .binary_search_by(|(text, start_pos)| {
+            let end_pos = start_pos + text.len(); // exclusive
+            end_pos.cmp(&end_range)
+          })
+          .unwrap_or_else(|insert_pos| insert_pos);
 
-    Ok(rope)
+        let mut rope = Rope::default();
+
+        // [start_chunk, end_chunk]
+        (start_chunk_index..=end_chunk_index).try_for_each(|i| {
+          let (text, start_pos) = data[i];
+
+          if start_chunk_index == i && end_chunk_index == i {
+            let start = start_range - start_pos;
+            let end = end_range - start_pos;
+            if text.is_char_boundary(start) && text.is_char_boundary(end) {
+              rope.add(&text[start..end]);
+            } else {
+              return Err(Error::Rope("invalid char boundary"));
+            }
+          } else if start_chunk_index == i {
+            let start = start_range - start_pos;
+            if text.is_char_boundary(start) {
+              rope.add(&text[start..]);
+            } else {
+              return Err(Error::Rope("invalid char boundary"));
+            }
+          } else if end_chunk_index == i {
+            let end = end_range - start_pos;
+            if text.is_char_boundary(end) {
+              rope.add(&text[..end]);
+            } else {
+              return Err(Error::Rope("invalid char boundary"));
+            }
+          } else {
+            rope.add(text);
+          }
+
+          Ok(())
+        })?;
+
+        Ok(rope)
+      }
+    }
   }
 
   pub fn to_bytes(&self) -> Vec<u8> {
     let mut bytes = Vec::new();
-    for (chunk, _) in self.data.iter() {
-      bytes.extend_from_slice(chunk.as_bytes());
+    match &self.repr {
+      Repr::Simple(s) => bytes.extend_from_slice(s.as_bytes()),
+      Repr::Complex(data) => {
+        for (chunk, _) in data.iter() {
+          bytes.extend_from_slice(chunk.as_bytes());
+        }
+      }
     }
     bytes
   }
@@ -236,39 +324,58 @@ impl<'a> Rope<'a> {
 
 impl Hash for Rope<'_> {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-    for (s, _) in self.data.iter() {
-      s.hash(state);
+    match &self.repr {
+      Repr::Simple(s) => s.hash(state),
+      Repr::Complex(data) => {
+        for (s, _) in data.iter() {
+          s.hash(state);
+        }
+      }
     }
   }
 }
 
+enum CharIndicesRepr<'a, 'b> {
+  Simple {
+    iter: std::str::CharIndices<'b>,
+  },
+  Complex {
+    chunks: &'a [(&'b str, usize)],
+    char_indices: VecDeque<(usize, char)>,
+    chunk_index: usize,
+  },
+}
+
 pub struct CharIndices<'a, 'b> {
-  chunks: &'a [(&'b str, usize)],
-  char_indices: VecDeque<(usize, char)>,
-  chunk_index: usize,
+  repr: CharIndicesRepr<'a, 'b>,
 }
 
 impl<'a, 'b> Iterator for CharIndices<'a, 'b> {
   type Item = (usize, char);
 
   fn next(&mut self) -> Option<Self::Item> {
-    if let Some(item) = self.char_indices.pop_front() {
-      return Some(item);
-    }
+    match &mut self.repr {
+      CharIndicesRepr::Simple { iter } => iter.next(),
+      CharIndicesRepr::Complex {
+        chunks,
+        char_indices,
+        chunk_index,
+      } => {
+        if let Some(item) = char_indices.pop_front() {
+          return Some(item);
+        }
 
-    if self.chunk_index >= self.chunks.len() {
-      return None;
-    }
+        if *chunk_index >= chunks.len() {
+          return None;
+        }
 
-    if self.char_indices.is_empty() {
-      let (chunk, start_pos) = self.chunks[self.chunk_index];
-      self
-        .char_indices
-        .extend(chunk.char_indices().map(|(i, c)| (start_pos + i, c)));
-      self.chunk_index += 1;
+        let (chunk, start_pos) = chunks[*chunk_index];
+        char_indices
+          .extend(chunk.char_indices().map(|(i, c)| (start_pos + i, c)));
+        *chunk_index += 1;
+        char_indices.pop_front()
+      }
     }
-
-    self.char_indices.pop_front()
   }
 }
 
@@ -280,10 +387,15 @@ impl Default for Rope<'_> {
 
 impl<'a> Display for Rope<'a> {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    for (chunk, _) in self.data.iter() {
-      write!(f, "{}", chunk)?;
+    match &self.repr {
+      Repr::Simple(s) => write!(f, "{}", s),
+      Repr::Complex(data) => {
+        for (chunk, _) in data.iter() {
+          write!(f, "{}", chunk)?;
+        }
+        Ok(())
+      }
     }
-    Ok(())
   }
 }
 
@@ -297,8 +409,14 @@ impl PartialEq<Rope<'_>> for Rope<'_> {
       return true;
     }
 
-    let chunks = &self.data;
-    let other_chunks = &other.data;
+    let chunks = match &self.repr {
+      Repr::Simple(s) => &[(*s, 0)][..],
+      Repr::Complex(data) => &data[..],
+    };
+    let other_chunks = match &other.repr {
+      Repr::Simple(s) => &[(*s, 0)][..],
+      Repr::Complex(data) => &data[..],
+    };
 
     let mut cur = 0;
     let other_chunk_index = RefCell::new(0);
@@ -332,13 +450,22 @@ impl PartialEq<str> for Rope<'_> {
 
     let other = other.as_bytes();
 
-    let mut idx = 0;
-    for (chunk, _) in self.data.iter() {
-      let chunk = chunk.as_bytes();
-      if chunk != &other[idx..(idx + chunk.len())] {
-        return false;
+    match &self.repr {
+      Repr::Simple(s) => {
+        if s.as_bytes() != other {
+          return false;
+        }
       }
-      idx += chunk.len();
+      Repr::Complex(data) => {
+        let mut idx = 0;
+        for (chunk, _) in data.iter() {
+          let chunk = chunk.as_bytes();
+          if chunk != &other[idx..(idx + chunk.len())] {
+            return false;
+          }
+          idx += chunk.len();
+        }
+      }
     }
 
     true
@@ -353,13 +480,22 @@ impl PartialEq<&str> for Rope<'_> {
 
     let other = other.as_bytes();
 
-    let mut idx = 0;
-    for (chunk, _) in self.data.iter() {
-      let chunk = chunk.as_bytes();
-      if chunk != &other[idx..(idx + chunk.len())] {
-        return false;
+    match &self.repr {
+      Repr::Simple(s) => {
+        if s.as_bytes() != other {
+          return false;
+        }
       }
-      idx += chunk.len();
+      Repr::Complex(data) => {
+        let mut idx = 0;
+        for (chunk, _) in data.iter() {
+          let chunk = chunk.as_bytes();
+          if chunk != &other[idx..(idx + chunk.len())] {
+            return false;
+          }
+          idx += chunk.len();
+        }
+      }
     }
 
     true
@@ -369,7 +505,11 @@ impl PartialEq<&str> for Rope<'_> {
 impl<'a> From<&'a str> for Rope<'a> {
   fn from(value: &'a str) -> Self {
     Rope {
-      data: Arc::new(vec![(value, 0)]),
+      repr: if value.is_empty() {
+        Repr::Complex(Arc::new(Vec::new()))
+      } else {
+        Repr::Simple(value)
+      },
     }
   }
 }
@@ -377,7 +517,11 @@ impl<'a> From<&'a str> for Rope<'a> {
 impl<'a> From<&'a String> for Rope<'a> {
   fn from(value: &'a String) -> Self {
     Rope {
-      data: Arc::new(vec![(&**value, 0)]),
+      repr: if value.is_empty() {
+        Repr::Complex(Arc::new(Vec::new()))
+      } else {
+        Repr::Simple(value)
+      },
     }
   }
 }
@@ -385,34 +529,11 @@ impl<'a> From<&'a String> for Rope<'a> {
 impl<'a> From<&'a Cow<'a, str>> for Rope<'a> {
   fn from(value: &'a Cow<'a, str>) -> Self {
     Rope {
-      data: Arc::new(vec![(&**value, 0)]),
-    }
-  }
-}
-
-pub struct Chunks<'a, 'b: 'a> {
-  data: &'a Vec<(&'b str, usize)>,
-  index: usize,
-}
-
-impl<'a, 'b: 'a> Index<usize> for Chunks<'a, 'b> {
-  type Output = (&'b str, usize);
-
-  fn index(&self, index: usize) -> &Self::Output {
-    &self.data[index]
-  }
-}
-
-impl<'a, 'b: 'a> Iterator for Chunks<'a, 'b> {
-  type Item = (&'b str, usize);
-
-  fn next(&mut self) -> Option<Self::Item> {
-    if self.index < self.data.len() {
-      let (value, pos) = self.data[self.index];
-      self.index += 1;
-      Some((value, pos))
-    } else {
-      None
+      repr: if value.is_empty() {
+        Repr::Complex(Arc::new(Vec::new()))
+      } else {
+        Repr::Simple(value)
+      },
     }
   }
 }
