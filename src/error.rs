@@ -8,7 +8,7 @@ pub type Result<T> = result::Result<T, Error>;
 pub enum Error {
   /// a JSON parsing related failure
   BadJson(simd_json::Error),
-  Rope(Cow<'static, str>),
+  Rope(&'static str),
 }
 
 impl fmt::Display for Error {

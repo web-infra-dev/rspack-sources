@@ -135,19 +135,19 @@ impl<'a> Rope<'a> {
     match (start_range, end_range) {
       (Some(start), Some(end)) => {
         if start > end {
-          return Err(Error::Rope("start >= end".into()));
+          return Err(Error::Rope("start >= end"));
         } else if end > self.len() {
-          return Err(Error::Rope("end out of bounds".into()));
+          return Err(Error::Rope("end out of bounds"));
         }
       }
       (None, Some(end)) => {
         if end > self.len() {
-          return Err(Error::Rope("end out of bounds".into()));
+          return Err(Error::Rope("end out of bounds"));
         }
       }
       (Some(start), None) => {
         if start > self.len() {
-          return Err(Error::Rope("start out of bounds".into()));
+          return Err(Error::Rope("start out of bounds"));
         }
       }
       _ => {}
@@ -174,23 +174,37 @@ impl<'a> Rope<'a> {
     let mut rope = Rope::default();
 
     // [start_chunk, end_chunk]
-    (start_chunk_index..=end_chunk_index).for_each(|i| {
+    (start_chunk_index..=end_chunk_index).try_for_each(|i| {
       let (text, start_pos) = self.data[i];
 
       if start_chunk_index == i && end_chunk_index == i {
         let start = start_range - start_pos;
         let end = end_range - start_pos;
-        rope.append(&text[start..end]);
+        if text.is_char_boundary(start) && text.is_char_boundary(end) {
+          rope.append(&text[start..end]);
+        } else {
+          return Err(Error::Rope("invalid char boundary"));
+        }
       } else if start_chunk_index == i {
         let start = start_range - start_pos;
-        rope.append(&text[start..]);
+        if text.is_char_boundary(start) {
+          rope.append(&text[start..]);
+        } else {
+          return Err(Error::Rope("invalid char boundary"));
+        }
       } else if end_chunk_index == i {
         let end = end_range - start_pos;
-        rope.append(&text[..end]);
+        if text.is_char_boundary(end) {
+          rope.append(&text[..end]);
+        } else {
+          return Err(Error::Rope("invalid char boundary"));
+        }
       } else {
         rope.append(text);
       }
-    });
+
+      Ok(())
+    })?;
 
     Ok(rope)
   }
