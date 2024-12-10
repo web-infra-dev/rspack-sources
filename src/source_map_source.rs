@@ -160,7 +160,7 @@ impl StreamChunks for SourceMapSource {
   ) -> crate::helpers::GeneratedInfo {
     if let Some(inner_source_map) = &self.inner_source_map {
       stream_chunks_of_combined_source_map(
-        &Rope::from_str(&self.value),
+        &*self.value,
         &self.source_map,
         &self.name,
         self.original_source.as_deref().map(Rope::from_str),
@@ -173,7 +173,7 @@ impl StreamChunks for SourceMapSource {
       )
     } else {
       stream_chunks_of_source_map(
-        &Rope::from_str(&self.value),
+        self.value.as_str(),
         &self.source_map,
         on_chunk,
         on_source,

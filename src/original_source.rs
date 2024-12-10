@@ -10,6 +10,7 @@ use crate::{
     StreamChunks,
   },
   source::{Mapping, OriginalLocation},
+  source_text::SourceText,
   MapOptions, Rope, Source, SourceMap,
 };
 
@@ -115,12 +116,12 @@ impl StreamChunks for OriginalSource {
       // With column info we need to read all lines and split them
       let mut line = 1;
       let mut column = 0;
-      for token in split_into_potential_tokens(Rope::from_str(&self.value)) {
+      for token in split_into_potential_tokens(&*self.value) {
         let is_end_of_line = token.ends_with("\n");
         if is_end_of_line && token.len() == 1 {
           if !options.final_source {
             on_chunk(
-              Some(token.clone()),
+              Some(token.clone().into_rope()),
               Mapping {
                 generated_line: line,
                 generated_column: column,
@@ -130,7 +131,7 @@ impl StreamChunks for OriginalSource {
           }
         } else {
           on_chunk(
-            (!options.final_source).then_some(token.clone()),
+            (!options.final_source).then_some(token.clone().into_rope()),
             Mapping {
               generated_line: line,
               generated_column: column,
@@ -157,7 +158,7 @@ impl StreamChunks for OriginalSource {
     } else if options.final_source {
       // Without column info and with final source we only
       // need meta info to generate mapping
-      let result = get_generated_source_info(&Rope::from_str(&self.value));
+      let result = get_generated_source_info(&*self.value);
       if result.generated_column == 0 {
         for line in 1..result.generated_line {
           on_chunk(
@@ -197,9 +198,9 @@ impl StreamChunks for OriginalSource {
       // we need to split source by lines
       let mut line = 1;
       let mut last_line = None;
-      for l in split_into_lines(&Rope::from_str(&self.value)) {
+      for l in split_into_lines(&self.value.as_str()) {
         on_chunk(
-          (!options.final_source).then_some(l.clone()),
+          (!options.final_source).then_some(l.clone().into_rope()),
           Mapping {
             generated_line: line,
             generated_column: 0,

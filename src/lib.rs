@@ -14,6 +14,7 @@ mod rope;
 mod source;
 mod source_map_source;
 mod with_indices;
+mod source_text;
 
 pub use cached_source::CachedSource;
 pub use concat_source::ConcatSource;

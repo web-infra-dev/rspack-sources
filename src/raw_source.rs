@@ -212,11 +212,9 @@ impl StreamChunks for RawSource {
           let source = self
             .value_as_string
             .get_or_init(|| String::from_utf8_lossy(buffer).to_string());
-          get_generated_source_info(&Rope::from_str(source))
+          get_generated_source_info(&**source)
         }
-        RawValue::String(source) => {
-          get_generated_source_info(&Rope::from_str(source))
-        }
+        RawValue::String(source) => get_generated_source_info(&**source),
       }
     } else {
       match &self.value {
@@ -225,19 +223,11 @@ impl StreamChunks for RawSource {
             .value_as_string
             .get_or_init(|| String::from_utf8_lossy(buffer).to_string());
           stream_chunks_of_raw_source(
-            &Rope::from_str(source),
-            options,
-            on_chunk,
-            on_source,
-            on_name,
+            &**source, options, on_chunk, on_source, on_name,
           )
         }
         RawValue::String(source) => stream_chunks_of_raw_source(
-          &Rope::from_str(source),
-          options,
-          on_chunk,
-          on_source,
-          on_name,
+          &**source, options, on_chunk, on_source, on_name,
         ),
       }
     }
@@ -343,14 +333,10 @@ impl StreamChunks for RawStringSource {
     on_name: OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {
     if options.final_source {
-      get_generated_source_info(&Rope::from_str(&self.source()))
+      get_generated_source_info(&*self.0)
     } else {
       stream_chunks_of_raw_source(
-        &Rope::from_str(&self.0),
-        options,
-        on_chunk,
-        on_source,
-        on_name,
+        &*self.0, options, on_chunk, on_source, on_name,
       )
     }
   }
@@ -454,14 +440,12 @@ impl StreamChunks for RawBufferSource {
     on_name: OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {
     if options.final_source {
-      get_generated_source_info(&Rope::from_str(&self.source()))
+      get_generated_source_info(&*self.source())
     } else {
       stream_chunks_of_raw_source(
-        &Rope::from_str(
-          self
-            .value_as_string
-            .get_or_init(|| String::from_utf8_lossy(&self.value).to_string()),
-        ),
+        &**self
+          .value_as_string
+          .get_or_init(|| String::from_utf8_lossy(&self.value).to_string()),
         options,
         on_chunk,
         on_source,

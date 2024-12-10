@@ -15,6 +15,7 @@ use crate::{
   helpers::{get_map, split_into_lines, GeneratedInfo, StreamChunks},
   linear_map::LinearMap,
   rope::Rope,
+  source_text::SourceText,
   MapOptions, Mapping, OriginalLocation, Source, SourceMap,
 };
 
@@ -501,8 +502,8 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
             std::mem::transmute::<&Replacement, &'a Replacement>(&repls[i])
           };
 
-          let lines: Vec<Rope> =
-            split_into_lines(&Rope::from_str(&repl.content)).collect();
+          let lines =
+            split_into_lines(&repl.content.as_str()).collect::<Vec<_>>();
           let mut replacement_name_index = mapping
             .original
             .as_ref()
@@ -522,7 +523,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
           }
           for (m, content_line) in lines.iter().enumerate() {
             on_chunk(
-              Some(content_line.clone()),
+              Some(content_line.clone().into_rope()),
               Mapping {
                 generated_line: line as u32,
                 generated_column: ((mapping.generated_column as i64)

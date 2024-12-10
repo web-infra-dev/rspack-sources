@@ -325,7 +325,7 @@ impl<'a> Rope<'a> {
     }
   }
 
-  pub fn get_simple(&self) -> Option<&str> {
+  pub fn get_simple(&self) -> Option<&'a str> {
     match &self.repr {
       Repr::Simple(s) => Some(s),
       _ => None,
