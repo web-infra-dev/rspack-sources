@@ -285,7 +285,13 @@ impl<'a> Rope<'a> {
           }
         }
 
-        let mut rope = Rope::default();
+        if end_chunk_index < start_chunk_index {
+          return Ok(Rope::new());
+        }
+
+        let mut raw =
+          Vec::with_capacity(end_chunk_index - start_chunk_index + 1);
+        let mut len = 0;
 
         // different chunk
         // [start_chunk, end_chunk]
@@ -295,25 +301,30 @@ impl<'a> Rope<'a> {
           if start_chunk_index == i {
             let start = start_range - start_pos;
             if chunk.is_char_boundary(start) {
-              rope.add(&chunk[start..]);
+              let chunk = &chunk[start..];
+              raw.push((chunk, len));
+              len += chunk.len();
             } else {
               return Err(Error::Rope("invalid char boundary"));
             }
           } else if end_chunk_index == i {
             let end = end_range - start_pos;
             if chunk.is_char_boundary(end) {
-              rope.add(&chunk[..end]);
+              let chunk = &chunk[..end];
+              raw.push((chunk, len));
+              len += chunk.len();
             } else {
               return Err(Error::Rope("invalid char boundary"));
             }
           } else {
-            rope.add(chunk);
+            raw.push((chunk, len));
+            len += chunk.len();
           }
 
           Ok(())
         })?;
 
-        Ok(rope)
+        Ok(Rope(Repr::Complex(Rc::new(raw))))
       }
     }
   }
