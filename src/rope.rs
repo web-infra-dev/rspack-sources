@@ -288,7 +288,7 @@ impl<'a> Rope<'a> {
 
         // different chunk
         // [start_chunk, end_chunk]
-        (start_chunk_index..=end_chunk_index).try_for_each(|i| {
+        (start_chunk_index..end_chunk_index + 1).try_for_each(|i| {
           let (chunk, start_pos) = data[i];
 
           if start_chunk_index == i {
