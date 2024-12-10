@@ -250,15 +250,10 @@ impl<'a> Rope<'a> {
     let end_range = end_range.unwrap_or_else(|| self.len());
 
     match &self.0 {
-      Repr::Simple(s) => {
-        let start = start_range;
-        let end = end_range;
-        if s.is_char_boundary(start) && s.is_char_boundary(end) {
-          Ok(Rope::from(&s[start..end]))
-        } else {
-          Err(Error::Rope("invalid char boundary"))
-        }
-      }
+      Repr::Simple(s) => s
+        .get(start_range..end_range)
+        .map(Rope::from)
+        .ok_or_else(|| Error::Rope("invalid char boundary")),
       Repr::Complex(data) => {
         // [start_chunk
         let start_chunk_index = data
@@ -278,11 +273,10 @@ impl<'a> Rope<'a> {
           let (chunk, start_pos) = data[start_chunk_index];
           let start = start_range - start_pos;
           let end = end_range - start_pos;
-          if chunk.is_char_boundary(start) && chunk.is_char_boundary(end) {
-            return Ok(Rope::from(&chunk[start..end]));
-          } else {
-            return Err(Error::Rope("invalid char boundary"));
-          }
+          return chunk
+            .get(start..end)
+            .map(Rope::from)
+            .ok_or_else(|| Error::Rope("invalid char boundary"));
         }
 
         if end_chunk_index < start_chunk_index {
@@ -300,8 +294,7 @@ impl<'a> Rope<'a> {
 
           if start_chunk_index == i {
             let start = start_range - start_pos;
-            if chunk.is_char_boundary(start) {
-              let chunk = &chunk[start..];
+            if let Some(chunk) = chunk.get(start..) {
               raw.push((chunk, len));
               len += chunk.len();
             } else {
@@ -309,8 +302,7 @@ impl<'a> Rope<'a> {
             }
           } else if end_chunk_index == i {
             let end = end_range - start_pos;
-            if chunk.is_char_boundary(end) {
-              let chunk = &chunk[..end];
+            if let Some(chunk) = chunk.get(..end) {
               raw.push((chunk, len));
               len += chunk.len();
             } else {
@@ -542,31 +534,19 @@ impl PartialEq<&str> for Rope<'_> {
 
 impl<'a> From<&'a str> for Rope<'a> {
   fn from(value: &'a str) -> Self {
-    Rope(if value.is_empty() {
-      Repr::Complex(Rc::new(Vec::new()))
-    } else {
-      Repr::Simple(value)
-    })
+    Rope(Repr::Simple(value))
   }
 }
 
 impl<'a> From<&'a String> for Rope<'a> {
   fn from(value: &'a String) -> Self {
-    Rope(if value.is_empty() {
-      Repr::Complex(Rc::new(Vec::new()))
-    } else {
-      Repr::Simple(value)
-    })
+    Rope(Repr::Simple(value))
   }
 }
 
 impl<'a> From<&'a Cow<'a, str>> for Rope<'a> {
   fn from(value: &'a Cow<'a, str>) -> Self {
-    Rope(if value.is_empty() {
-      Repr::Complex(Rc::new(Vec::new()))
-    } else {
-      Repr::Simple(value)
-    })
+    Rope(Repr::Simple(value))
   }
 }
 
