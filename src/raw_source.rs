@@ -225,7 +225,7 @@ impl StreamChunks for RawSource {
             .value_as_string
             .get_or_init(|| String::from_utf8_lossy(buffer).to_string());
           stream_chunks_of_raw_source(
-            Rope::from_str(source),
+            &Rope::from_str(source),
             options,
             on_chunk,
             on_source,
@@ -233,7 +233,7 @@ impl StreamChunks for RawSource {
           )
         }
         RawValue::String(source) => stream_chunks_of_raw_source(
-          Rope::from_str(source),
+          &Rope::from_str(source),
           options,
           on_chunk,
           on_source,
@@ -346,7 +346,7 @@ impl StreamChunks for RawStringSource {
       get_generated_source_info(&Rope::from_str(&self.source()))
     } else {
       stream_chunks_of_raw_source(
-        Rope::from_str(&self.0),
+        &Rope::from_str(&self.0),
         options,
         on_chunk,
         on_source,
@@ -457,7 +457,7 @@ impl StreamChunks for RawBufferSource {
       get_generated_source_info(&Rope::from_str(&self.source()))
     } else {
       stream_chunks_of_raw_source(
-        Rope::from_str(
+        &Rope::from_str(
           self
             .value_as_string
             .get_or_init(|| String::from_utf8_lossy(&self.value).to_string()),

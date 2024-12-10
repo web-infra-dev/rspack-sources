@@ -5,6 +5,7 @@ use std::{
   fmt::Display,
   hash::Hash,
   ops::{Bound, RangeBounds},
+  rc::Rc,
   sync::Arc,
 };
 
@@ -13,7 +14,7 @@ use crate::Error;
 #[derive(Clone, Debug)]
 enum Repr<'a> {
   Simple(&'a str),
-  Complex(Arc<Vec<(&'a str, usize)>>),
+  Complex(Rc<Vec<(&'a str, usize)>>),
 }
 
 #[derive(Clone, Debug)]
@@ -29,13 +30,10 @@ impl<'a> Rope<'a> {
     }
   }
 
+  #[inline]
   pub fn from_str(s: &'a str) -> Self {
     Self {
-      repr: if s.is_empty() {
-        Repr::Complex(Arc::new(Vec::new()))
-      } else {
-        Repr::Simple(s)
-      },
+      repr: Repr::Simple(s),
     }
   }
 
@@ -49,13 +47,13 @@ impl<'a> Rope<'a> {
         let mut vec = Vec::with_capacity(2);
         vec.push((*s, 0));
         vec.push((value, s.len()));
-        self.repr = Repr::Complex(Arc::new(vec));
+        self.repr = Repr::Complex(Rc::new(vec));
       }
       Repr::Complex(data) => {
         let len = data
           .last()
           .map_or(0, |(chunk, start_pos)| *start_pos + chunk.len());
-        Arc::make_mut(data).push((value, len));
+        Rc::make_mut(data).push((value, len));
       }
     }
   }
@@ -66,7 +64,7 @@ impl<'a> Rope<'a> {
         let mut vec = Vec::with_capacity(2);
         vec.push((*s, 0));
         vec.push((other, s.len()));
-        self.repr = Repr::Complex(Arc::new(vec));
+        self.repr = Repr::Complex(Rc::new(vec));
       }
       (Repr::Complex(data), Repr::Complex(value_data)) => {
         if !value_data.is_empty() {
@@ -74,7 +72,7 @@ impl<'a> Rope<'a> {
             .last()
             .map_or(0, |(chunk, start_pos)| *start_pos + chunk.len());
 
-          let cur = Arc::make_mut(data);
+          let cur = Rc::make_mut(data);
           cur.reserve_exact(value_data.len());
 
           for &(value, _) in value_data.iter() {
@@ -88,7 +86,7 @@ impl<'a> Rope<'a> {
           let len = data
             .last()
             .map_or(0, |(chunk, start_pos)| *start_pos + chunk.len());
-          Arc::make_mut(data).push((other, len));
+          Rc::make_mut(data).push((other, len));
         }
       }
       (Repr::Simple(s), Repr::Complex(other_data)) => {
@@ -99,7 +97,7 @@ impl<'a> Rope<'a> {
         for &(value, _) in other_data.iter() {
           vec.push((value, s_len + other_data[0].1));
         }
-        self.repr = Repr::Complex(Arc::new(vec));
+        self.repr = Repr::Complex(Rc::new(vec));
       }
     }
   }
@@ -210,6 +208,7 @@ impl<'a> Rope<'a> {
     self.get_byte_slice_impl(range).ok()
   }
 
+  #[inline]
   pub(crate) fn get_byte_slice_impl<R>(
     &self,
     range: R,
@@ -524,7 +523,7 @@ impl<'a> From<&'a str> for Rope<'a> {
   fn from(value: &'a str) -> Self {
     Rope {
       repr: if value.is_empty() {
-        Repr::Complex(Arc::new(Vec::new()))
+        Repr::Complex(Rc::new(Vec::new()))
       } else {
         Repr::Simple(value)
       },
@@ -536,7 +535,7 @@ impl<'a> From<&'a String> for Rope<'a> {
   fn from(value: &'a String) -> Self {
     Rope {
       repr: if value.is_empty() {
-        Repr::Complex(Arc::new(Vec::new()))
+        Repr::Complex(Rc::new(Vec::new()))
       } else {
         Repr::Simple(value)
       },
@@ -548,7 +547,7 @@ impl<'a> From<&'a Cow<'a, str>> for Rope<'a> {
   fn from(value: &'a Cow<'a, str>) -> Self {
     Rope {
       repr: if value.is_empty() {
-        Repr::Complex(Arc::new(Vec::new()))
+        Repr::Complex(Rc::new(Vec::new()))
       } else {
         Repr::Simple(value)
       },

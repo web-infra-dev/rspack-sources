@@ -89,7 +89,7 @@ pub type OnName<'a, 'b> = &'a mut dyn FnMut(u32, Cow<'b, str>);
 
 /// Default stream chunks behavior impl, see [webpack-sources streamChunks](https://github.com/webpack/webpack-sources/blob/9f98066311d53a153fdc7c633422a1d086528027/lib/helpers/streamChunks.js#L15-L35).
 pub fn stream_chunks_default<'a>(
-  source: Rope<'a>,
+  source: &Rope<'a>,
   source_map: Option<&'a SourceMap>,
   options: &MapOptions,
   on_chunk: OnChunk<'_, 'a>,
@@ -291,19 +291,19 @@ pub fn get_generated_source_info(source: &Rope) -> GeneratedInfo {
 }
 
 pub fn stream_chunks_of_raw_source<'a>(
-  source: Rope<'a>,
+  source: &Rope<'a>,
   options: &MapOptions,
   on_chunk: OnChunk<'_, 'a>,
   _on_source: OnSource<'_, 'a>,
   _on_name: OnName<'_, 'a>,
 ) -> GeneratedInfo {
   if options.final_source {
-    return get_generated_source_info(&source);
+    return get_generated_source_info(source);
   }
 
   let mut line = 1;
   let mut last_line = None;
-  for l in split_into_lines(&source) {
+  for l in split_into_lines(source) {
     on_chunk(
       Some(l.clone()),
       Mapping {
@@ -331,7 +331,7 @@ pub fn stream_chunks_of_raw_source<'a>(
 }
 
 pub fn stream_chunks_of_source_map<'a>(
-  source: Rope<'a>,
+  source: &Rope<'a>,
   source_map: &'a SourceMap,
   on_chunk: OnChunk<'_, 'a>,
   on_source: OnSource<'_, 'a>,
@@ -379,13 +379,13 @@ fn get_source<'a>(source_map: &SourceMap, source: &'a str) -> Cow<'a, str> {
 }
 
 fn stream_chunks_of_source_map_final<'a>(
-  source: Rope<'a>,
+  source: &Rope<'a>,
   source_map: &'a SourceMap,
   on_chunk: OnChunk,
   on_source: OnSource<'_, 'a>,
   on_name: OnName<'_, 'a>,
 ) -> GeneratedInfo {
-  let result = get_generated_source_info(&source);
+  let result = get_generated_source_info(source);
   if result.generated_line == 1 && result.generated_column == 0 {
     return result;
   }
@@ -435,13 +435,13 @@ fn stream_chunks_of_source_map_final<'a>(
 }
 
 fn stream_chunks_of_source_map_full<'a>(
-  source: Rope<'a>,
+  source: &Rope<'a>,
   source_map: &'a SourceMap,
   on_chunk: OnChunk<'_, 'a>,
   on_source: OnSource<'_, 'a>,
   on_name: OnName<'_, 'a>,
 ) -> GeneratedInfo {
-  let lines = split_into_lines(&source);
+  let lines = split_into_lines(source);
   let line_with_indices_list = lines.map(WithIndices::new).collect::<Vec<_>>();
 
   if line_with_indices_list.is_empty() {
@@ -584,13 +584,13 @@ fn stream_chunks_of_source_map_full<'a>(
 }
 
 fn stream_chunks_of_source_map_lines_final<'a>(
-  source: Rope<'a>,
+  source: &Rope<'a>,
   source_map: &'a SourceMap,
   on_chunk: OnChunk,
   on_source: OnSource<'_, 'a>,
   _on_name: OnName,
 ) -> GeneratedInfo {
-  let result = get_generated_source_info(&source);
+  let result = get_generated_source_info(source);
   if result.generated_line == 1 && result.generated_column == 0 {
     return GeneratedInfo {
       generated_line: 1,
@@ -629,13 +629,13 @@ fn stream_chunks_of_source_map_lines_final<'a>(
 }
 
 fn stream_chunks_of_source_map_lines_full<'a>(
-  source: Rope<'a>,
+  source: &Rope<'a>,
   source_map: &'a SourceMap,
   on_chunk: OnChunk<'_, 'a>,
   on_source: OnSource<'_, 'a>,
   _on_name: OnName,
 ) -> GeneratedInfo {
-  let lines: Vec<Rope<'a>> = split_into_lines(&source).collect();
+  let lines: Vec<Rope<'a>> = split_into_lines(source).collect();
   if lines.is_empty() {
     return GeneratedInfo {
       generated_line: 1,
@@ -723,7 +723,7 @@ type InnerSourceIndexValueMapping<'a> =
 
 #[allow(clippy::too_many_arguments)]
 pub fn stream_chunks_of_combined_source_map<'a>(
-  source: Rope<'a>,
+  source: &Rope<'a>,
   source_map: &'a SourceMap,
   inner_source_name: &'a str,
   inner_source: Option<Rope<'a>>,
@@ -785,7 +785,7 @@ pub fn stream_chunks_of_combined_source_map<'a>(
   };
 
   stream_chunks_of_source_map(
-    source.clone(),
+    source,
     source_map,
     &mut |chunk, mapping| {
       let source_index = mapping
@@ -1105,7 +1105,7 @@ pub fn stream_chunks_of_combined_source_map<'a>(
         }
         source_index_mapping.borrow_mut().insert(i, -2);
         stream_chunks_of_source_map(
-          source_content.unwrap(),
+          &source_content.unwrap(),
           inner_source_map,
           &mut |chunk, mapping| {
             let mut inner_source_map_line_data =
