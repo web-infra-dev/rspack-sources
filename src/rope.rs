@@ -2,7 +2,6 @@ use std::{
   borrow::Cow,
   cell::RefCell,
   collections::VecDeque,
-  fmt::Display,
   hash::Hash,
   ops::{Bound, RangeBounds},
   rc::Rc,
@@ -415,15 +414,16 @@ impl Default for Rope<'_> {
   }
 }
 
-impl Display for Rope<'_> {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl ToString for Rope<'_> {
+  fn to_string(&self) -> String {
     match &self.0 {
-      Repr::Simple(s) => write!(f, "{}", s),
+      Repr::Simple(s) => s.to_string(),
       Repr::Complex(data) => {
+        let mut s = String::with_capacity(self.len());
         for (chunk, _) in data.iter() {
-          write!(f, "{}", chunk)?;
+          s.push_str(chunk);
         }
-        Ok(())
+        s
       }
     }
   }

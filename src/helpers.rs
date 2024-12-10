@@ -1,7 +1,6 @@
 use std::{
   borrow::{BorrowMut, Cow},
   cell::{OnceCell, RefCell},
-  fmt::Display,
   marker::PhantomData,
   ops::Range,
 };
@@ -1287,7 +1286,7 @@ pub fn stream_and_get_source_and_map<'a, S: StreamChunks>(
   (generated_info, map)
 }
 
-pub trait SourceText<'a>: Default + Clone + Display {
+pub trait SourceText<'a>: Default + Clone + ToString {
   fn split_into_lines(&self) -> impl Iterator<Item = Self>;
   fn len(&self) -> usize;
   fn ends_with(&self, value: &str) -> bool;
