@@ -1,10 +1,12 @@
 use std::{
   borrow::{BorrowMut, Cow},
   cell::{OnceCell, RefCell},
+  fmt::Display,
   marker::PhantomData,
   ops::Range,
 };
 
+use itertools::Either;
 use rustc_hash::FxHashMap as HashMap;
 
 use crate::{
@@ -12,9 +14,8 @@ use crate::{
   encoder::create_encoder,
   linear_map::LinearMap,
   source::{Mapping, OriginalLocation},
-  source_text::SourceText,
   with_indices::WithIndices,
-  MapOptions, Rope, Source, SourceMap,
+  MapOptions, Rope, SourceMap,
 };
 
 // Adding this type because sourceContentLine not happy
@@ -201,8 +202,8 @@ const EMPTY_ROPE: Rope = Rope::new();
 /// Split the string with a needle, each string will contain the needle.
 ///
 /// Copied and modified from https://github.com/rust-lang/cargo/blob/30efe860c0e4adc1a6d7057ad223dc6e47d34edf/src/cargo/sources/registry/index.rs#L1048-L1072
-pub fn split<'a, 'b>(
-  haystack: &'b Rope<'a>,
+pub fn split<'a>(
+  haystack: &Rope<'a>,
   needle: u8,
 ) -> impl Iterator<Item = Rope<'a>> {
   struct Split<'a> {
@@ -244,7 +245,7 @@ pub fn split<'a, 'b>(
   }
 }
 
-pub fn split_str<'a>(haystack: &str, needle: u8) -> impl Iterator<Item = &str> {
+pub fn split_str(haystack: &str, needle: u8) -> impl Iterator<Item = &str> {
   struct Split<'a> {
     haystack: &'a str,
     needle: u8,
@@ -415,7 +416,7 @@ where
     on_source(
       i as u32,
       get_source(source_map, source),
-      source_map.get_source_content(i).map(Rope::from_str),
+      source_map.get_source_content(i).map(Rope::from),
     )
   }
   for (i, name) in source_map.names().iter().enumerate() {
@@ -479,7 +480,7 @@ where
     on_source(
       i as u32,
       get_source(source_map, source),
-      source_map.get_source_content(i).map(Rope::from_str),
+      source_map.get_source_content(i).map(Rope::from),
     )
   }
   for (i, name) in source_map.names().iter().enumerate() {
@@ -629,7 +630,7 @@ where
     on_source(
       i as u32,
       get_source(source_map, source),
-      source_map.get_source_content(i).map(Rope::from_str),
+      source_map.get_source_content(i).map(Rope::from),
     )
   }
   let final_line = if result.generated_column == 0 {
@@ -677,7 +678,7 @@ where
     on_source(
       i as u32,
       get_source(source_map, source),
-      source_map.get_source_content(i).map(Rope::from_str),
+      source_map.get_source_content(i).map(Rope::from),
     )
   }
   let mut current_generated_line = 1;
@@ -994,7 +995,7 @@ where
                     let end = start + name.len();
                     i.substring(start, end)
                   });
-                if Rope::from_str(&name) == original_name {
+                if Rope::from(&name) == original_name {
                   let mut name_index_mapping = name_index_mapping.borrow_mut();
                   final_name_index =
                     name_index_mapping.get(&name_index).copied().unwrap_or(-2);
@@ -1284,6 +1285,90 @@ pub fn stream_and_get_source_and_map<'a, S: StreamChunks>(
     Some(SourceMap::new(mappings, sources, sources_content, names))
   };
   (generated_info, map)
+}
+
+pub trait SourceText<'a>: Default + Clone + Display {
+  fn split_into_lines(&self) -> impl Iterator<Item = Self>;
+  fn len(&self) -> usize;
+  fn ends_with(&self, value: &str) -> bool;
+  fn char_indices(&self) -> impl Iterator<Item = (usize, char)>;
+  fn byte_slice(&self, range: Range<usize>) -> Self;
+  fn is_empty(&self) -> bool;
+  fn into_rope(self) -> Rope<'a>
+  where
+    Self: Sized;
+  fn get_byte(&self, byte_index: usize) -> Option<u8>;
+}
+
+impl<'a> SourceText<'a> for Rope<'a> {
+  fn split_into_lines(&self) -> impl Iterator<Item = Self> {
+    if let Some(s) = self.get_simple() {
+      return Either::Left(split_str(s, b'\n').map(Rope::from));
+    }
+    Either::Right(split(self, b'\n'))
+  }
+
+  fn len(&self) -> usize {
+    self.len()
+  }
+
+  fn ends_with(&self, value: &str) -> bool {
+    (*self).ends_with(value)
+  }
+
+  fn char_indices(&self) -> impl Iterator<Item = (usize, char)> {
+    self.char_indices()
+  }
+
+  fn byte_slice(&self, range: Range<usize>) -> Self {
+    self.byte_slice(range)
+  }
+
+  fn is_empty(&self) -> bool {
+    self.is_empty()
+  }
+
+  fn into_rope(self) -> Rope<'a> {
+    self
+  }
+
+  fn get_byte(&self, byte_index: usize) -> Option<u8> {
+    self.get_byte(byte_index)
+  }
+}
+
+impl<'a> SourceText<'a> for &'a str {
+  fn split_into_lines(&self) -> impl Iterator<Item = Self> {
+    split_str(self, b'\n')
+  }
+
+  fn len(&self) -> usize {
+    (*self).len()
+  }
+
+  fn ends_with(&self, value: &str) -> bool {
+    (*self).ends_with(value)
+  }
+
+  fn char_indices(&self) -> impl Iterator<Item = (usize, char)> {
+    (*self).char_indices()
+  }
+
+  fn byte_slice(&self, range: Range<usize>) -> Self {
+    self.get(range).unwrap_or_default()
+  }
+
+  fn is_empty(&self) -> bool {
+    (*self).is_empty()
+  }
+
+  fn into_rope(self) -> Rope<'a> {
+    Rope::from(self)
+  }
+
+  fn get_byte(&self, byte_index: usize) -> Option<u8> {
+    self.as_bytes().get(byte_index).copied()
+  }
 }
 
 #[cfg(test)]

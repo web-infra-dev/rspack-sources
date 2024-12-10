@@ -5,7 +5,6 @@ use std::{
 };
 
 use dashmap::{mapref::entry::Entry, DashMap};
-use ouroboros::self_referencing;
 use rustc_hash::FxHasher;
 
 use crate::{

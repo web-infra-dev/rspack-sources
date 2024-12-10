@@ -8,6 +8,7 @@ pub type Result<T> = result::Result<T, Error>;
 pub enum Error {
   /// a JSON parsing related failure
   BadJson(simd_json::Error),
+  /// rope related failure
   Rope(&'static str),
 }
 

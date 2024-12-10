@@ -1,6 +1,6 @@
 use std::{cell::OnceCell, marker::PhantomData};
 
-use crate::{source_text::SourceText, Rope};
+use crate::helpers::SourceText;
 
 #[derive(Debug, Clone)]
 pub struct WithIndices<'a, S>
@@ -52,7 +52,7 @@ mod tests {
   #[test]
   fn test_substring() {
     assert_eq!(
-      WithIndices::new(Rope::from_str("foobar")).substring(0, 3),
+      WithIndices::new(Rope::from("foobar")).substring(0, 3),
       "foo"
     );
   }
@@ -60,35 +60,26 @@ mod tests {
   #[test]
   fn test_out_of_bounds() {
     assert_eq!(
-      WithIndices::new(Rope::from_str("foobar")).substring(0, 10),
+      WithIndices::new(Rope::from("foobar")).substring(0, 10),
       "foobar"
     );
-    assert_eq!(
-      WithIndices::new(Rope::from_str("foobar")).substring(6, 10),
-      ""
-    );
+    assert_eq!(WithIndices::new(Rope::from("foobar")).substring(6, 10), "");
   }
 
   #[test]
   fn test_start_less_than_end() {
-    assert_eq!(
-      WithIndices::new(Rope::from_str("foobar")).substring(3, 2),
-      ""
-    );
+    assert_eq!(WithIndices::new(Rope::from("foobar")).substring(3, 2), "");
   }
 
   #[test]
   fn test_start_and_end_equal() {
-    assert_eq!(
-      WithIndices::new(Rope::from_str("foobar")).substring(3, 3),
-      ""
-    );
+    assert_eq!(WithIndices::new(Rope::from("foobar")).substring(3, 3), "");
   }
 
   #[test]
   fn test_multiple_byte_characters() {
     assert_eq!(
-      WithIndices::new(Rope::from_str("fõøbα®")).substring(2, 5),
+      WithIndices::new(Rope::from("fõøbα®")).substring(2, 5),
       "øbα"
     );
   }

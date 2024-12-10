@@ -12,10 +12,11 @@ use itertools::Itertools;
 use rustc_hash::FxHashMap as HashMap;
 
 use crate::{
-  helpers::{get_map, split_into_lines, GeneratedInfo, StreamChunks},
+  helpers::{
+    get_map, split_into_lines, GeneratedInfo, SourceText, StreamChunks,
+  },
   linear_map::LinearMap,
   rope::Rope,
-  source_text::SourceText,
   MapOptions, Mapping, OriginalLocation, Source, SourceMap,
 };
 
@@ -499,7 +500,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
           #[allow(unsafe_code)]
           // SAFETY: The safety of this operation relies on the fact that the `ReplaceSource` type will not delete the `replacements` during its entire lifetime.
           let repl = unsafe {
-            std::mem::transmute::<&Replacement, &'a Replacement>(&repls[i])
+            std::mem::transmute::<&Replacement, &'a Replacement>(repls[i])
           };
 
           let lines =
@@ -523,7 +524,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
           }
           for (m, content_line) in lines.iter().enumerate() {
             on_chunk(
-              Some(content_line.clone().into_rope()),
+              Some(content_line.into_rope()),
               Mapping {
                 generated_line: line as u32,
                 generated_column: ((mapping.generated_column as i64)

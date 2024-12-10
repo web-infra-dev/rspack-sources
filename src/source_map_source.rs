@@ -163,7 +163,7 @@ impl StreamChunks for SourceMapSource {
         &*self.value,
         &self.source_map,
         &self.name,
-        self.original_source.as_deref().map(Rope::from_str),
+        self.original_source.as_deref().map(Rope::from),
         inner_source_map,
         self.remove_original_source,
         on_chunk,

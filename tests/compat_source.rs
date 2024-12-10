@@ -17,7 +17,7 @@ impl Source for CompatSource {
   }
 
   fn rope(&self) -> Rope<'_> {
-    Rope::from_str(self.0)
+    Rope::from(self.0)
   }
 
   fn buffer(&self) -> Cow<[u8]> {

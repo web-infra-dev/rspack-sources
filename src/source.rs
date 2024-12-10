@@ -26,6 +26,7 @@ pub trait Source:
   /// Get the source code.
   fn source(&self) -> Cow<str>;
 
+  /// Get the source code as a [Rope].
   fn rope(&self) -> Rope<'_>;
 
   /// Get the source buffer.
