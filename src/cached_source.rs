@@ -60,8 +60,6 @@ pub struct CachedSourceInner<T: 'static> {
   // #[borrows(inner)]
   // cached_rope: Arc<OnceLock<Rope<'this>>>,
   cached_hash: Arc<OnceLock<u64>>,
-  cached_buffer: Arc<OnceLock<Vec<u8>>>,
-  cached_source: Arc<OnceLock<Arc<str>>>,
   cached_maps:
     Arc<DashMap<MapOptions, Option<SourceMap>, BuildHasherDefault<FxHasher>>>,
 }
@@ -79,8 +77,6 @@ impl<T> CachedSource<T> {
       inner: Arc::new(CachedSourceInner {
         inner: Arc::new(inner),
         cached_hash: Default::default(),
-        cached_buffer: Default::default(),
-        cached_source: Default::default(),
         cached_maps: Default::default(),
       }),
     }
@@ -92,28 +88,26 @@ impl<T> CachedSource<T> {
   }
 }
 
+impl<T: Source> CachedSource<T> {
+  // fn get_rope(&self) -> &Rope<'_> {
+  //   self
+  //     .inner
+  //     .with(|cache| cache.cached_rope.get_or_init(|| cache.inner.rope()))
+  // }
+}
+
 impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
   fn source(&self) -> Cow<str> {
-    Cow::Borrowed(
-      self
-        .inner
-        .cached_source
-        .get_or_init(|| Arc::from(self.inner.inner.source().to_string())),
-    )
+    self.inner.inner.source()
   }
 
   fn rope(&self) -> Rope<'_> {
+    // self.get_rope().clone()
     self.inner.inner.rope()
   }
 
   fn buffer(&self) -> Cow<[u8]> {
-    // self.inner.inner.buffer()
-    Cow::Borrowed(
-      self
-        .inner
-        .cached_buffer
-        .get_or_init(|| self.inner.inner.buffer().to_vec()),
-    )
+    self.inner.inner.buffer()
   }
 
   fn size(&self) -> usize {
