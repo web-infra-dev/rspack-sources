@@ -94,13 +94,43 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
     self.source().len()
   }
 
-  fn map(&self, options: &MapOptions) -> Option<SourceMap> {
+  fn map(&self, options: &MapOptions) -> Option<Cow<SourceMap>> {
     if let Some(map) = self.cached_maps.get(options) {
-      map.clone()
+      match map.as_ref() {
+        Some(map) => {
+          #[allow(unsafe_code)]
+          // SAFETY: We guarantee that once a `SourceMap` is stored in the cache, it will never be removed.
+          // Therefore, even if we force its lifetime to be longer, the reference remains valid.
+          // This is based on the following assumptions:
+          // 1. `SourceMap` will be valid for the entire duration of the application.
+          // 2. The cached `SourceMap` will not be manually removed or replaced, ensuring the reference's safety.
+          let map = unsafe {
+            std::mem::transmute::<&SourceMap, &'static SourceMap>(map)
+          };
+          Some(Cow::Borrowed(map))
+        }
+        None => None,
+      }
     } else {
       let map = self.inner.map(options);
-      self.cached_maps.insert(options.clone(), map.clone());
-      map
+      self
+        .cached_maps
+        .insert(options.clone(), map.map(|m| m.into_owned()));
+      match self.cached_maps.get(options).unwrap().as_ref() {
+        Some(map) => {
+          #[allow(unsafe_code)]
+          // SAFETY: We guarantee that once a `SourceMap` is stored in the cache, it will never be removed.
+          // Therefore, even if we force its lifetime to be longer, the reference remains valid.
+          // This is based on the following assumptions:
+          // 1. `SourceMap` will be valid for the entire duration of the application.
+          // 2. The cached `SourceMap` will not be manually removed or replaced, ensuring the reference's safety.
+          let map = unsafe {
+            std::mem::transmute::<&SourceMap, &'static SourceMap>(map)
+          };
+          Some(Cow::Borrowed(map))
+        }
+        None => None,
+      }
     }
   }
 
@@ -254,7 +284,7 @@ mod tests {
     );
     assert_eq!(
       *clone.cached_maps.get(&map_options).unwrap().value(),
-      source.map(&map_options)
+      source.map(&map_options).map(|map| map.into_owned())
     );
   }
 
