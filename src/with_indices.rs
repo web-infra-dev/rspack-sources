@@ -1,31 +1,35 @@
-use std::cell::OnceCell;
+use std::{cell::OnceCell, marker::PhantomData};
 
-use crate::Rope;
+use crate::{source_text::SourceText, Rope};
 
 #[derive(Debug, Clone)]
-pub struct WithIndices<'a> {
+pub struct WithIndices<'a, S>
+where
+  S: SourceText<'a>,
+{
   /// line is a string reference
-  pub line: Rope<'a>,
+  pub line: S,
   /// the byte position of each `char` in `line` string slice .
   pub indices_indexes: OnceCell<Vec<usize>>,
+  data: PhantomData<&'a S>,
 }
 
-impl<'a> WithIndices<'a> {
-  pub fn new(line: Rope<'a>) -> Self {
+impl<'a, S> WithIndices<'a, S>
+where
+  S: SourceText<'a>,
+{
+  pub fn new(line: S) -> Self {
     Self {
       indices_indexes: OnceCell::new(),
       line,
+      data: PhantomData,
     }
   }
 
   /// substring::SubString with cache
-  pub(crate) fn substring(
-    &self,
-    start_index: usize,
-    end_index: usize,
-  ) -> Rope<'a> {
+  pub(crate) fn substring(&self, start_index: usize, end_index: usize) -> S {
     if end_index <= start_index {
-      return Rope::default();
+      return S::default();
     }
 
     let indices_indexes = self.indices_indexes.get_or_init(|| {

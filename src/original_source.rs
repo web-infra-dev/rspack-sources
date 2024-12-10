@@ -157,7 +157,7 @@ impl StreamChunks for OriginalSource {
     } else if options.final_source {
       // Without column info and with final source we only
       // need meta info to generate mapping
-      let result = get_generated_source_info(&Rope::from_str(&self.value));
+      let result = get_generated_source_info(Rope::from_str(&self.value));
       if result.generated_column == 0 {
         for line in 1..result.generated_line {
           on_chunk(
