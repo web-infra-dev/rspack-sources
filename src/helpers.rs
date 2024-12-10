@@ -206,41 +206,46 @@ pub fn split<'a>(
   needle: u8,
 ) -> impl Iterator<Item = Rope<'a>> {
   struct Split<'a> {
-    haystack: Rope<'a>,
+    rope: Rope<'a>,
     bytes: Cow<'a, [u8]>,
-    range: Range<usize>,
     needle: u8,
+    base: usize,
   }
 
   impl<'a> Iterator for Split<'a> {
     type Item = Rope<'a>;
 
-    fn next(&mut self) -> Option<Rope<'a>> {
-      if self.haystack.is_empty() {
+    fn next(&mut self) -> Option<Self::Item> {
+      if self.rope.is_empty() {
         return None;
       }
-      let (ret, remaining, remaining_range) =
-        match memchr::memchr(self.needle, &self.bytes[self.range.clone()]) {
-          Some(pos) => (
-            self.haystack.byte_slice(0..pos + 1),
-            self.haystack.byte_slice(pos + 1..self.haystack.len()),
-            self.range.start + pos + 1..self.bytes.len(),
-          ),
-          None => (std::mem::take(&mut self.haystack), EMPTY_ROPE, 0..0),
-        };
-      self.haystack = remaining;
-      self.range = remaining_range;
-      Some(ret)
+      match memchr::memchr(self.needle, &self.bytes[self.base..]) {
+        Some(pos) => {
+          let end_pos = self.base + pos;
+          // SAFETY: base and end positions are guaranteed to be within the bounds of the rope.
+          // and both of them are on char boundaries.
+          let ret =
+            unsafe { self.rope.byte_slice_unchecked(self.base..end_pos + 1) };
+          self.base = end_pos + 1;
+
+          if self.base >= self.bytes.len() {
+            self.rope = EMPTY_ROPE;
+          }
+          Some(ret)
+        }
+        None => {
+          let ret = std::mem::replace(&mut self.rope, EMPTY_ROPE);
+          Some(ret)
+        }
+      }
     }
   }
 
-  let bytes = haystack.to_bytes();
-  let len = bytes.len();
   Split {
-    haystack: haystack.clone(),
-    bytes,
-    range: 0..len,
+    rope: haystack.clone(),
+    bytes: haystack.to_bytes(),
     needle,
+    base: 0,
   }
 }
 

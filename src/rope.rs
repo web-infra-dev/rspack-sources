@@ -320,6 +320,85 @@ impl<'a> Rope<'a> {
     }
   }
 
+  /// Unchecked version of [Rope::byte_slice].
+  /// Invariant: The range must be valid and on char boundaries.
+  pub unsafe fn byte_slice_unchecked<R>(&self, range: R) -> Rope<'a>
+  where
+    R: RangeBounds<usize>,
+  {
+    let start_range = start_bound_to_range_start(range.start_bound());
+    let end_range = end_bound_to_range_end(range.end_bound());
+
+    let start_range = start_range.unwrap_or(0);
+    let end_range = end_range.unwrap_or_else(|| self.len());
+
+    match &self.0 {
+      Repr::Simple(s) => {
+        // SAFETY: invariant guarantees valid range
+        Rope::from(unsafe { s.get_unchecked(start_range..end_range) })
+      }
+      Repr::Complex(data) => {
+        // [start_chunk
+        let start_chunk_index = data
+          .binary_search_by(|(_, start_pos)| start_pos.cmp(&start_range))
+          .unwrap_or_else(|insert_pos| insert_pos.saturating_sub(1));
+
+        // end_chunk)
+        let end_chunk_index = data
+          .binary_search_by(|(chunk, start_pos)| {
+            let end_pos = start_pos + chunk.len(); // exclusive
+            end_pos.cmp(&end_range)
+          })
+          .unwrap_or_else(|insert_pos| insert_pos);
+
+        // same chunk
+        if start_chunk_index == end_chunk_index {
+          // SAFETY: start_chunk_index guarantees valid range
+          let (chunk, start_pos) =
+            unsafe { data.get_unchecked(start_chunk_index) };
+          let start = start_range - start_pos;
+          let end = end_range - start_pos;
+          // SAFETY: invariant guarantees valid range
+          return Rope::from(unsafe { chunk.get_unchecked(start..end) });
+        }
+
+        if end_chunk_index < start_chunk_index {
+          return Rope::new();
+        }
+
+        let mut raw =
+          Vec::with_capacity(end_chunk_index - start_chunk_index + 1);
+        let mut len = 0;
+
+        // different chunk
+        // [start_chunk, end_chunk]
+        (start_chunk_index..end_chunk_index + 1).for_each(|i| {
+          // SAFETY: [start_chunk_index, end_chunk_index] guarantees valid range
+          let (chunk, start_pos) = unsafe { data.get_unchecked(i) };
+
+          if start_chunk_index == i {
+            let start = start_range - start_pos;
+            // SAFETY: invariant guarantees valid range
+            let chunk = unsafe { chunk.get_unchecked(start..) };
+            raw.push((chunk, len));
+            len += chunk.len();
+          } else if end_chunk_index == i {
+            let end = end_range - start_pos;
+            // SAFETY: invariant guarantees valid range
+            let chunk = unsafe { chunk.get_unchecked(..end) };
+            raw.push((chunk, len));
+            len += chunk.len();
+          } else {
+            raw.push((chunk, len));
+            len += chunk.len();
+          }
+        });
+
+        Rope(Repr::Complex(Rc::new(raw)))
+      }
+    }
+  }
+
   /// Converts the rope to bytes.
   ///
   /// Returns borrowed bytes for simple ropes and owned bytes for complex ropes.
