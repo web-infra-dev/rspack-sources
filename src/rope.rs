@@ -1,3 +1,5 @@
+#![allow(unsafe_code)]
+
 use std::{
   borrow::Cow,
   cell::RefCell,
@@ -17,12 +19,16 @@ enum Repr<'a> {
 
 /// A rope data structure.
 #[derive(Clone, Debug)]
-pub struct Rope<'a>(Repr<'a>);
+pub struct Rope<'a> {
+  repr: Repr<'a>,
+}
 
 impl<'a> Rope<'a> {
   /// Creates a new empty rope.
   pub const fn new() -> Self {
-    Self(Repr::Simple(""))
+    Self {
+      repr: Repr::Simple(""),
+    }
   }
 
   /// Adds a string slice to the end of the rope.
@@ -34,10 +40,10 @@ impl<'a> Rope<'a> {
       return;
     }
 
-    match &mut self.0 {
+    match &mut self.repr {
       Repr::Simple(s) => {
         let vec = Vec::from_iter([(*s, 0), (value, s.len())]);
-        self.0 = Repr::Complex(Rc::new(vec));
+        self.repr = Repr::Complex(Rc::new(vec));
       }
       Repr::Complex(data) => {
         let len = data
@@ -52,10 +58,10 @@ impl<'a> Rope<'a> {
   ///
   /// Handles all combinations of simple and complex representations efficiently.
   pub fn append(&mut self, value: Rope<'a>) {
-    match (&mut self.0, value.0) {
+    match (&mut self.repr, value.repr) {
       (Repr::Simple(s), Repr::Simple(other)) => {
         let vec = Vec::from_iter([(*s, 0), (other, s.len())]);
-        self.0 = Repr::Complex(Rc::new(vec));
+        self.repr = Repr::Complex(Rc::new(vec));
       }
       (Repr::Complex(data), Repr::Complex(value_data)) => {
         if !value_data.is_empty() {
@@ -88,7 +94,7 @@ impl<'a> Rope<'a> {
         for &(value, _) in other_data.iter() {
           vec.push((value, s_len + other_data[0].1));
         }
-        self.0 = Repr::Complex(Rc::new(vec));
+        self.repr = Repr::Complex(Rc::new(vec));
       }
     }
   }
@@ -108,7 +114,7 @@ impl<'a> Rope<'a> {
     if byte_index >= self.len() {
       return None;
     }
-    match &self.0 {
+    match &self.repr {
       Repr::Simple(s) => Some(s.as_bytes()[byte_index]),
       Repr::Complex(data) => {
         let chunk_index = data
@@ -123,7 +129,7 @@ impl<'a> Rope<'a> {
 
   /// Returns an iterator over the characters and their byte positions.
   pub fn char_indices(&self) -> CharIndices<'_, 'a> {
-    match &self.0 {
+    match &self.repr {
       Repr::Simple(s) => CharIndices {
         repr: CharIndicesRepr::Simple {
           iter: s.char_indices(),
@@ -142,7 +148,7 @@ impl<'a> Rope<'a> {
   /// Returns whether the rope starts with the given string.
   #[inline]
   pub fn starts_with(&self, value: &str) -> bool {
-    match &self.0 {
+    match &self.repr {
       Repr::Simple(s) => s.starts_with(value),
       Repr::Complex(data) => {
         if let Some((first, _)) = data.first() {
@@ -157,7 +163,7 @@ impl<'a> Rope<'a> {
   /// Returns whether the rope ends with the given string.
   #[inline]
   pub fn ends_with(&self, value: &str) -> bool {
-    match &self.0 {
+    match &self.repr {
       Repr::Simple(s) => s.ends_with(value),
       Repr::Complex(data) => {
         if let Some((last, _)) = data.last() {
@@ -172,7 +178,7 @@ impl<'a> Rope<'a> {
   /// Returns whether the rope is empty.
   #[inline]
   pub fn is_empty(&self) -> bool {
-    match &self.0 {
+    match &self.repr {
       Repr::Simple(s) => s.is_empty(),
       Repr::Complex(data) => data.iter().all(|(s, _)| s.is_empty()),
     }
@@ -181,7 +187,7 @@ impl<'a> Rope<'a> {
   /// Returns the length of the rope in bytes.
   #[inline]
   pub fn len(&self) -> usize {
-    match &self.0 {
+    match &self.repr {
       Repr::Simple(s) => s.len(),
       Repr::Complex(data) => data
         .last()
@@ -248,7 +254,7 @@ impl<'a> Rope<'a> {
     let start_range = start_range.unwrap_or(0);
     let end_range = end_range.unwrap_or_else(|| self.len());
 
-    match &self.0 {
+    match &self.repr {
       Repr::Simple(s) => s
         .get(start_range..end_range)
         .map(Rope::from)
@@ -315,7 +321,9 @@ impl<'a> Rope<'a> {
           Ok(())
         })?;
 
-        Ok(Rope(Repr::Complex(Rc::new(raw))))
+        Ok(Rope {
+          repr: Repr::Complex(Rc::new(raw)),
+        })
       }
     }
   }
@@ -332,7 +340,7 @@ impl<'a> Rope<'a> {
     let start_range = start_range.unwrap_or(0);
     let end_range = end_range.unwrap_or_else(|| self.len());
 
-    match &self.0 {
+    match &self.repr {
       Repr::Simple(s) => {
         // SAFETY: invariant guarantees valid range
         Rope::from(unsafe { s.get_unchecked(start_range..end_range) })
@@ -394,7 +402,9 @@ impl<'a> Rope<'a> {
           }
         });
 
-        Rope(Repr::Complex(Rc::new(raw)))
+        Rope {
+          repr: Repr::Complex(Rc::new(raw)),
+        }
       }
     }
   }
@@ -403,7 +413,7 @@ impl<'a> Rope<'a> {
   ///
   /// Returns borrowed bytes for simple ropes and owned bytes for complex ropes.
   pub fn to_bytes(&self) -> Cow<'a, [u8]> {
-    match &self.0 {
+    match &self.repr {
       Repr::Simple(s) => Cow::Borrowed(s.as_bytes()),
       Repr::Complex(data) => {
         let mut bytes = vec![];
@@ -417,7 +427,7 @@ impl<'a> Rope<'a> {
 
   /// Returns the underlying str if this is a simple rope.
   pub fn get_simple(&self) -> Option<&'a str> {
-    match &self.0 {
+    match &self.repr {
       Repr::Simple(s) => Some(s),
       _ => None,
     }
@@ -426,7 +436,7 @@ impl<'a> Rope<'a> {
 
 impl Hash for Rope<'_> {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-    match &self.0 {
+    match &self.repr {
       Repr::Simple(s) => s.hash(state),
       Repr::Complex(data) => {
         for (s, _) in data.iter() {
@@ -495,7 +505,7 @@ impl Default for Rope<'_> {
 
 impl ToString for Rope<'_> {
   fn to_string(&self) -> String {
-    match &self.0 {
+    match &self.repr {
       Repr::Simple(s) => s.to_string(),
       Repr::Complex(data) => {
         let mut s = String::with_capacity(self.len());
@@ -514,15 +524,11 @@ impl PartialEq<Rope<'_>> for Rope<'_> {
       return false;
     }
 
-    if self.is_empty() {
-      return true;
-    }
-
-    let chunks = match &self.0 {
+    let chunks = match &self.repr {
       Repr::Simple(s) => &[(*s, 0)][..],
       Repr::Complex(data) => &data[..],
     };
-    let other_chunks = match &other.0 {
+    let other_chunks = match &other.repr {
       Repr::Simple(s) => &[(*s, 0)][..],
       Repr::Complex(data) => &data[..],
     };
@@ -559,7 +565,7 @@ impl PartialEq<str> for Rope<'_> {
 
     let other = other.as_bytes();
 
-    match &self.0 {
+    match &self.repr {
       Repr::Simple(s) => {
         if s.as_bytes() != other {
           return false;
@@ -589,7 +595,7 @@ impl PartialEq<&str> for Rope<'_> {
 
     let other = other.as_bytes();
 
-    match &self.0 {
+    match &self.repr {
       Repr::Simple(s) => {
         if s.as_bytes() != other {
           return false;
@@ -613,19 +619,25 @@ impl PartialEq<&str> for Rope<'_> {
 
 impl<'a> From<&'a str> for Rope<'a> {
   fn from(value: &'a str) -> Self {
-    Rope(Repr::Simple(value))
+    Rope {
+      repr: Repr::Simple(value),
+    }
   }
 }
 
 impl<'a> From<&'a String> for Rope<'a> {
   fn from(value: &'a String) -> Self {
-    Rope(Repr::Simple(value))
+    Rope {
+      repr: Repr::Simple(value),
+    }
   }
 }
 
 impl<'a> From<&'a Cow<'a, str>> for Rope<'a> {
   fn from(value: &'a Cow<'a, str>) -> Self {
-    Rope(Repr::Simple(value))
+    Rope {
+      repr: Repr::Simple(value),
+    }
   }
 }
 
