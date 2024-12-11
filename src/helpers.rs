@@ -1298,9 +1298,6 @@ pub trait SourceText<'a>: Default + Clone + ToString {
   /// Each line includes its line ending character if present.
   fn split_into_lines(&self) -> impl Iterator<Item = Self>;
 
-  /// Returns the length of the text in bytes.
-  fn len(&self) -> usize;
-
   /// Checks if the text ends with the given string.
   fn ends_with(&self, value: &str) -> bool;
 
@@ -1316,6 +1313,9 @@ pub trait SourceText<'a>: Default + Clone + ToString {
   /// Returns true if the text is empty.
   fn is_empty(&self) -> bool;
 
+  /// Returns the length of the text in bytes.
+  fn len(&self) -> usize;
+
   /// Converts this text into a Rope.
   fn into_rope(self) -> Rope<'a>
   where
@@ -1330,10 +1330,7 @@ impl<'a> SourceText<'a> for Rope<'a> {
     Either::Right(split(self, b'\n'))
   }
 
-  fn len(&self) -> usize {
-    self.len()
-  }
-
+  #[inline]
   fn ends_with(&self, value: &str) -> bool {
     (*self).ends_with(value)
   }
@@ -1346,8 +1343,14 @@ impl<'a> SourceText<'a> for Rope<'a> {
     self.byte_slice(range)
   }
 
+  #[inline]
   fn is_empty(&self) -> bool {
     self.is_empty()
+  }
+
+  #[inline]
+  fn len(&self) -> usize {
+    self.len()
   }
 
   fn into_rope(self) -> Rope<'a> {
@@ -1364,10 +1367,7 @@ impl<'a> SourceText<'a> for &'a str {
     split_str(self, b'\n')
   }
 
-  fn len(&self) -> usize {
-    (*self).len()
-  }
-
+  #[inline]
   fn ends_with(&self, value: &str) -> bool {
     (*self).ends_with(value)
   }
@@ -1380,8 +1380,14 @@ impl<'a> SourceText<'a> for &'a str {
     self.get(range).unwrap_or_default()
   }
 
+  #[inline]
   fn is_empty(&self) -> bool {
     (*self).is_empty()
+  }
+
+  #[inline]
+  fn len(&self) -> usize {
+    (*self).len()
   }
 
   fn into_rope(self) -> Rope<'a> {

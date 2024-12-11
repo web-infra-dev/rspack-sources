@@ -12,7 +12,7 @@ use std::{
 use crate::Error;
 
 #[derive(Clone, Debug)]
-enum Repr<'a> {
+pub(crate) enum Repr<'a> {
   Simple(&'a str),
   Complex(Rc<Vec<(&'a str, usize)>>),
 }
@@ -60,41 +60,41 @@ impl<'a> Rope<'a> {
   pub fn append(&mut self, value: Rope<'a>) {
     match (&mut self.repr, value.repr) {
       (Repr::Simple(s), Repr::Simple(other)) => {
-        let vec = Vec::from_iter([(*s, 0), (other, s.len())]);
-        self.repr = Repr::Complex(Rc::new(vec));
+        let raw = Vec::from_iter([(*s, 0), (other, s.len())]);
+        self.repr = Repr::Complex(Rc::new(raw));
       }
-      (Repr::Complex(data), Repr::Complex(value_data)) => {
-        if !value_data.is_empty() {
-          let mut len = data
+      (Repr::Complex(s), Repr::Complex(other)) => {
+        if !other.is_empty() {
+          let mut len = s
             .last()
             .map_or(0, |(chunk, start_pos)| *start_pos + chunk.len());
 
-          let cur = Rc::make_mut(data);
-          cur.reserve_exact(value_data.len());
+          let cur = Rc::make_mut(s);
+          cur.reserve_exact(other.len());
 
-          for &(value, _) in value_data.iter() {
-            cur.push((value, len));
-            len += value.len();
+          for &(chunk, _) in other.iter() {
+            cur.push((chunk, len));
+            len += chunk.len();
           }
         }
       }
-      (Repr::Complex(data), Repr::Simple(other)) => {
+      (Repr::Complex(s), Repr::Simple(other)) => {
         if !other.is_empty() {
-          let len = data
+          let len = s
             .last()
             .map_or(0, |(chunk, start_pos)| *start_pos + chunk.len());
-          Rc::make_mut(data).push((other, len));
+          Rc::make_mut(s).push((other, len));
         }
       }
-      (Repr::Simple(s), Repr::Complex(other_data)) => {
-        let mut vec = Vec::with_capacity(other_data.len() + 1);
-        vec.push((*s, 0));
-        let s_len = s.len();
-
-        for &(value, _) in other_data.iter() {
-          vec.push((value, s_len + other_data[0].1));
+      (Repr::Simple(s), Repr::Complex(other)) => {
+        let mut raw = Vec::with_capacity(other.len() + 1);
+        raw.push((*s, 0));
+        let mut len = s.len();
+        for &(chunk, _) in other.iter() {
+          raw.push((chunk, len));
+          len += chunk.len();
         }
-        self.repr = Repr::Complex(Rc::new(vec));
+        self.repr = Repr::Complex(Rc::new(raw));
       }
     }
   }
@@ -654,6 +654,24 @@ impl<'a> From<&'a Cow<'a, str>> for Rope<'a> {
   }
 }
 
+impl<'a> FromIterator<&'a str> for Rope<'a> {
+  fn from_iter<T: IntoIterator<Item = &'a str>>(iter: T) -> Self {
+    let mut len = 0;
+    let raw = iter
+      .into_iter()
+      .map(|chunk| {
+        let cur = (chunk, len);
+        len += chunk.len();
+        cur
+      })
+      .collect::<Vec<_>>();
+
+    Self {
+      repr: Repr::Complex(Rc::new(raw)),
+    }
+  }
+}
+
 #[inline(always)]
 fn start_bound_to_range_start(start: Bound<&usize>) -> Option<usize> {
   match start {
@@ -674,14 +692,109 @@ fn end_bound_to_range_end(end: Bound<&usize>) -> Option<usize> {
 
 #[cfg(test)]
 mod tests {
-  use crate::rope::Rope;
+  use std::rc::Rc;
+
+  use crate::rope::{Repr, Rope};
+
+  impl<'a> PartialEq for Repr<'a> {
+    fn eq(&self, other: &Self) -> bool {
+      match (self, other) {
+        (Repr::Simple(a), Repr::Simple(b)) => a == b,
+        (Repr::Complex(a), Repr::Complex(b)) => a == b,
+        _ => false,
+      }
+    }
+  }
+
+  impl<'a> Eq for Repr<'a> {}
 
   #[test]
   fn add() {
-    let mut r = Rope::new();
-    r.add("a");
-    r.add("b");
-    assert_eq!(r.to_string(), "ab".to_string());
+    let mut simple = Rope::from("abc");
+    assert_eq!(simple.repr, Repr::Simple("abc"));
+    assert_eq!(simple.len(), 3);
+
+    simple.add("def");
+    assert_eq!(simple, "abcdef");
+    assert_eq!(
+      simple.repr,
+      Repr::Complex(Rc::new(Vec::from_iter([("abc", 0), ("def", 3)])))
+    );
+    assert_eq!(simple.len(), 6);
+
+    simple.add("ghi");
+    assert_eq!(simple, "abcdefghi");
+    assert_eq!(
+      simple.repr,
+      Repr::Complex(Rc::new(Vec::from_iter([
+        ("abc", 0),
+        ("def", 3),
+        ("ghi", 6),
+      ])))
+    );
+    assert_eq!(simple.len(), 9);
+  }
+
+  #[test]
+  fn append() {
+    let simple1 = Rope::from("abc");
+    let simple2 = Rope::from("def");
+
+    let complex1 = Rope::from_iter(["1", "2", "3"]);
+    let complex2 = Rope::from_iter(["4", "5", "6"]);
+
+    // simple - simple
+    let mut append1 = simple1.clone();
+    append1.append(simple2.clone());
+    assert_eq!(append1, "abcdef");
+    assert_eq!(
+      append1.repr,
+      Repr::Complex(Rc::new(Vec::from_iter([("abc", 0), ("def", 3),])))
+    );
+
+    // simple - complex
+    let mut append2 = simple1.clone();
+    append2.append(complex1.clone());
+    assert_eq!(append2, "abc123");
+    assert_eq!(
+      append2.repr,
+      Repr::Complex(Rc::new(Vec::from_iter([
+        ("abc", 0),
+        ("1", 3),
+        ("2", 4),
+        ("3", 5),
+      ])))
+    );
+
+    // complex - simple
+    let mut append3 = complex1.clone();
+    append3.append(simple1.clone());
+    assert_eq!(append3, "123abc");
+    assert_eq!(
+      append3.repr,
+      Repr::Complex(Rc::new(Vec::from_iter([
+        ("1", 0),
+        ("2", 1),
+        ("3", 2),
+        ("abc", 3),
+      ])))
+    );
+
+    // complex - complex
+    let mut append4 = complex1.clone();
+    append4.append(complex2.clone());
+    assert_eq!(append4, "123456");
+    assert_eq!(
+      append4.repr,
+      Repr::Complex(Rc::new(Vec::from_iter([
+        ("1", 0),
+        ("2", 1),
+        ("3", 2),
+        ("4", 3),
+        ("5", 4),
+        ("6", 5),
+      ])))
+    );
   }
 
   #[test]
@@ -757,6 +870,12 @@ mod tests {
   fn from() {
     let _ = Rope::from("abc");
     let _ = Rope::from("abc");
+    let rope = Rope::from_iter(["abc", "def"]);
+    assert_eq!(rope, "abcdef");
+    assert_eq!(
+      rope.repr,
+      Repr::Complex(Rc::new(Vec::from_iter([("abc", 0), ("def", 3)])))
+    );
   }
 
   #[test]
@@ -772,10 +891,21 @@ mod tests {
     let mut a = Rope::new();
     a.add("abc");
     a.add("def");
+    assert_eq!(
+      a.char_indices().collect::<Vec<_>>(),
+      "abcdef".char_indices().collect::<Vec<_>>()
+    );
 
-    let a = a.char_indices().collect::<Vec<_>>();
-    let b = "abcdef".char_indices().collect::<Vec<_>>();
-
-    assert_eq!(a, b);
+    let mut a = Rope::new();
+    a.add("こんにちは");
+    assert_eq!(
+      a.char_indices().collect::<Vec<_>>(),
+      "こんにちは".char_indices().collect::<Vec<_>>()
+    );
+    a.add("世界");
+    assert_eq!(
+      a.char_indices().collect::<Vec<_>>(),
+      "こんにちは世界".char_indices().collect::<Vec<_>>()
+    );
   }
 }
