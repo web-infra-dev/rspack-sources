@@ -1294,32 +1294,32 @@ pub fn stream_and_get_source_and_map<'a, S: StreamChunks>(
 
 /// Represents a text source that can be manipulated for source mapping purposes.
 pub trait SourceText<'a>: Default + Clone + ToString {
-    /// Splits the text into lines, returning an iterator over each line.
-    /// Each line includes its line ending character if present.
-    fn split_into_lines(&self) -> impl Iterator<Item = Self>;
+  /// Splits the text into lines, returning an iterator over each line.
+  /// Each line includes its line ending character if present.
+  fn split_into_lines(&self) -> impl Iterator<Item = Self>;
 
-    /// Returns the length of the text in bytes.
-    fn len(&self) -> usize;
+  /// Returns the length of the text in bytes.
+  fn len(&self) -> usize;
 
-    /// Checks if the text ends with the given string.
-    fn ends_with(&self, value: &str) -> bool;
+  /// Checks if the text ends with the given string.
+  fn ends_with(&self, value: &str) -> bool;
 
-    /// Returns an iterator over the char indices in the text.
-    fn char_indices(&self) -> impl Iterator<Item = (usize, char)>;
+  /// Returns an iterator over the char indices in the text.
+  fn char_indices(&self) -> impl Iterator<Item = (usize, char)>;
 
-    /// Gets the byte at the specified index, if it exists.
-    fn get_byte(&self, byte_index: usize) -> Option<u8>;
+  /// Gets the byte at the specified index, if it exists.
+  fn get_byte(&self, byte_index: usize) -> Option<u8>;
 
-    /// Returns a slice of the text specified by the byte range.
-    fn byte_slice(&self, range: Range<usize>) -> Self;
+  /// Returns a slice of the text specified by the byte range.
+  fn byte_slice(&self, range: Range<usize>) -> Self;
 
-    /// Returns true if the text is empty.
-    fn is_empty(&self) -> bool;
+  /// Returns true if the text is empty.
+  fn is_empty(&self) -> bool;
 
-    /// Converts this text into a Rope.
-    fn into_rope(self) -> Rope<'a>
-    where
-        Self: Sized;
+  /// Converts this text into a Rope.
+  fn into_rope(self) -> Rope<'a>
+  where
+    Self: Sized;
 }
 
 impl<'a> SourceText<'a> for Rope<'a> {

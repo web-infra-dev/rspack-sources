@@ -49,16 +49,8 @@ use crate::{
 ///   "Hello World\nconsole.log('test');\nconsole.log('test2');\nHello2\n"
 /// );
 /// ```
-pub struct CachedSource<T: 'static> {
-  inner: Arc<CachedSourceInner<T>>,
-}
-
-// #[self_referencing]
-pub struct CachedSourceInner<T: 'static> {
+pub struct CachedSource<T> {
   inner: Arc<T>,
-  // #[not_covariant]
-  // #[borrows(inner)]
-  // cached_rope: Arc<OnceLock<Rope<'this>>>,
   cached_hash: Arc<OnceLock<u64>>,
   cached_maps:
     Arc<DashMap<MapOptions, Option<SourceMap>, BuildHasherDefault<FxHasher>>>,
@@ -68,46 +60,29 @@ impl<T> CachedSource<T> {
   /// Create a [CachedSource] with the original [Source].
   pub fn new(inner: T) -> Self {
     Self {
-      // inner: Arc::new(CachedSourceInner::new(
-      //   Arc::new(inner),
-      //   |_| Default::default(),
-      //   Default::default(),
-      //   Default::default(),
-      // )),
-      inner: Arc::new(CachedSourceInner {
-        inner: Arc::new(inner),
-        cached_hash: Default::default(),
-        cached_maps: Default::default(),
-      }),
+      inner: Arc::new(inner),
+      cached_hash: Default::default(),
+      cached_maps: Default::default(),
     }
   }
 
   /// Get the original [Source].
   pub fn original(&self) -> &T {
-    &self.inner.inner
+    &self.inner
   }
-}
-
-impl<T: Source> CachedSource<T> {
-  // fn get_rope(&self) -> &Rope<'_> {
-  //   self
-  //     .inner
-  //     .with(|cache| cache.cached_rope.get_or_init(|| cache.inner.rope()))
-  // }
 }
 
 impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
   fn source(&self) -> Cow<str> {
-    self.inner.inner.source()
+    self.inner.source()
   }
 
   fn rope(&self) -> Rope<'_> {
-    // self.get_rope().clone()
-    self.inner.inner.rope()
+    self.inner.rope()
   }
 
   fn buffer(&self) -> Cow<[u8]> {
-    self.inner.inner.buffer()
+    self.inner.buffer()
   }
 
   fn size(&self) -> usize {
@@ -115,17 +90,17 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
   }
 
   fn map(&self, options: &MapOptions) -> Option<SourceMap> {
-    if let Some(map) = self.inner.cached_maps.get(options) {
+    if let Some(map) = self.cached_maps.get(options) {
       map.clone()
     } else {
-      let map = self.inner.inner.map(options);
-      self.inner.cached_maps.insert(options.clone(), map.clone());
+      let map = self.inner.map(options);
+      self.cached_maps.insert(options.clone(), map.clone());
       map
     }
   }
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
-    self.inner.inner.to_writer(writer)
+    self.inner.to_writer(writer)
   }
 }
 
@@ -139,7 +114,7 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks
     on_source: crate::helpers::OnSource<'_, 'a>,
     on_name: crate::helpers::OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {
-    let cached_map = self.inner.cached_maps.entry(options.clone());
+    let cached_map = self.cached_maps.entry(options.clone());
     match cached_map {
       Entry::Occupied(entry) => {
         let source = self.rope();
@@ -163,7 +138,7 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks
       }
       Entry::Vacant(entry) => {
         let (generated_info, map) = stream_and_get_source_and_map(
-          &self.inner.inner as &T,
+          &self.inner as &T,
           options,
           on_chunk,
           on_source,
@@ -180,24 +155,20 @@ impl<T> Clone for CachedSource<T> {
   fn clone(&self) -> Self {
     Self {
       inner: self.inner.clone(),
+      cached_hash: self.cached_hash.clone(),
+      cached_maps: self.cached_maps.clone(),
     }
   }
 }
 
 impl<T: Source + Hash + PartialEq + Eq + 'static> Hash for CachedSource<T> {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-    (self.inner.cached_hash.get_or_init(|| {
+    (self.cached_hash.get_or_init(|| {
       let mut hasher = FxHasher::default();
-      self.original().hash(&mut hasher);
+      self.inner.hash(&mut hasher);
       hasher.finish()
     }))
     .hash(state);
-  }
-}
-
-impl<T: PartialEq> PartialEq for CachedSourceInner<T> {
-  fn eq(&self, other: &Self) -> bool {
-    self.inner == other.inner
   }
 }
 
@@ -215,10 +186,9 @@ impl<T: std::fmt::Debug> std::fmt::Debug for CachedSource<T> {
     f: &mut std::fmt::Formatter<'_>,
   ) -> Result<(), std::fmt::Error> {
     f.debug_struct("CachedSource")
-      // .field("inner", self.inner.as_ref())
-      // .field("cached_buffer", &self.cached_buffer.get().is_some())
-      // .field("cached_source", &self.cached_source.get().is_some())
-      // .field("cached_maps", &(!self.cached_maps.is_empty()))
+      .field("inner", self.inner.as_ref())
+      .field("cached_hash", self.cached_hash.as_ref())
+      .field("cached_maps", &(!self.cached_maps.is_empty()))
       .finish()
   }
 }
@@ -266,7 +236,7 @@ mod tests {
     source.map(&map_options);
 
     assert_eq!(
-      *clone.inner.cached_maps.get(&map_options).unwrap().value(),
+      *clone.cached_maps.get(&map_options).unwrap().value(),
       source.map(&map_options)
     );
   }

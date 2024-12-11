@@ -36,7 +36,6 @@ dyn-clone = "1"
 rustc-hash = "1"
 dashmap = "5"
 memchr = "2.6.4"
-ouroboros = "0.18"
 itertools = "0.13"
 
 
