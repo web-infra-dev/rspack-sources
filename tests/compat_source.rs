@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 use std::borrow::Cow;
 use std::hash::Hash;
 

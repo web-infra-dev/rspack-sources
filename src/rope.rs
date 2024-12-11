@@ -258,7 +258,7 @@ impl<'a> Rope<'a> {
       Repr::Simple(s) => s
         .get(start_range..end_range)
         .map(Rope::from)
-        .ok_or_else(|| Error::Rope("invalid char boundary")),
+        .ok_or(Error::Rope("invalid char boundary")),
       Repr::Complex(data) => {
         // [start_chunk
         let start_chunk_index = data
@@ -275,13 +275,15 @@ impl<'a> Rope<'a> {
 
         // same chunk
         if start_chunk_index == end_chunk_index {
-          let (chunk, start_pos) = data[start_chunk_index];
+          // SAFETY: start_chunk_index guarantees valid range
+          let (chunk, start_pos) =
+            unsafe { data.get_unchecked(start_chunk_index) };
           let start = start_range - start_pos;
           let end = end_range - start_pos;
           return chunk
             .get(start..end)
             .map(Rope::from)
-            .ok_or_else(|| Error::Rope("invalid char boundary"));
+            .ok_or(Error::Rope("invalid char boundary"));
         }
 
         if end_chunk_index < start_chunk_index {
@@ -295,7 +297,8 @@ impl<'a> Rope<'a> {
         // different chunk
         // [start_chunk, end_chunk]
         (start_chunk_index..end_chunk_index + 1).try_for_each(|i| {
-          let (chunk, start_pos) = data[i];
+          // SAFETY: [start_chunk_index, end_chunk_index] guarantees valid range
+          let (chunk, start_pos) = unsafe { data.get_unchecked(i) };
 
           if start_chunk_index == i {
             let start = start_range - start_pos;
@@ -328,8 +331,15 @@ impl<'a> Rope<'a> {
     }
   }
 
-  /// Unchecked version of [Rope::byte_slice].
-  /// Invariant: The range must be valid and on char boundaries.
+  /// Range-unchecked version of [Rope::byte_slice].
+  ///
+  /// # Safety
+  ///
+  /// This is not safe, due to the following invariants that must be upheld:
+  ///
+  /// - Range must be within bounds.
+  /// - Range start must be less than or equal to the end.
+  /// - Both range start and end must be on char boundaries.
   pub unsafe fn byte_slice_unchecked<R>(&self, range: R) -> Rope<'a>
   where
     R: RangeBounds<usize>,
@@ -425,7 +435,7 @@ impl<'a> Rope<'a> {
     }
   }
 
-  /// Returns the underlying str if this is a simple rope.
+  /// Returns the underlying &str if this is a simple rope.
   pub fn get_simple(&self) -> Option<&'a str> {
     match &self.repr {
       Repr::Simple(s) => Some(s),
@@ -503,6 +513,9 @@ impl Default for Rope<'_> {
   }
 }
 
+// Implement `ToString` than `Display` to manually allocate the string with capacity.
+// This is faster than using `Display` and `write!` for large ropes.
+#[allow(clippy::to_string_trait_impl)]
 impl ToString for Rope<'_> {
   fn to_string(&self) -> String {
     match &self.repr {
