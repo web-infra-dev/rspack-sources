@@ -8,7 +8,7 @@ use crate::{
     get_map, stream_chunks_of_combined_source_map, stream_chunks_of_source_map,
     StreamChunks,
   },
-  MapOptions, Source, SourceMap,
+  MapOptions, Rope, Source, SourceMap,
 };
 
 /// Options for [SourceMapSource::new].
@@ -92,6 +92,10 @@ impl Source for SourceMapSource {
     Cow::Borrowed(&self.value)
   }
 
+  fn rope(&self) -> Rope<'_> {
+    Rope::from(&self.value)
+  }
+
   fn buffer(&self) -> Cow<[u8]> {
     Cow::Borrowed(self.value.as_bytes())
   }
@@ -146,8 +150,8 @@ impl std::fmt::Debug for SourceMapSource {
   }
 }
 
-impl<'a> StreamChunks<'a> for SourceMapSource {
-  fn stream_chunks(
+impl StreamChunks for SourceMapSource {
+  fn stream_chunks<'a>(
     &'a self,
     options: &MapOptions,
     on_chunk: crate::helpers::OnChunk<'_, 'a>,
@@ -156,10 +160,10 @@ impl<'a> StreamChunks<'a> for SourceMapSource {
   ) -> crate::helpers::GeneratedInfo {
     if let Some(inner_source_map) = &self.inner_source_map {
       stream_chunks_of_combined_source_map(
-        &self.value,
+        &*self.value,
         &self.source_map,
         &self.name,
-        self.original_source.as_deref(),
+        self.original_source.as_deref().map(Rope::from),
         inner_source_map,
         self.remove_original_source,
         on_chunk,
@@ -169,7 +173,7 @@ impl<'a> StreamChunks<'a> for SourceMapSource {
       )
     } else {
       stream_chunks_of_source_map(
-        &self.value,
+        self.value.as_str(),
         &self.source_map,
         on_chunk,
         on_source,

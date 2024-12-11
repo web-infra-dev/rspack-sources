@@ -4,15 +4,19 @@ use std::{
   hash::{Hash, Hasher},
   sync::{
     atomic::{AtomicBool, Ordering},
-    Arc, Mutex, MutexGuard,
+    Arc, Mutex,
   },
 };
 
+use itertools::Itertools;
 use rustc_hash::FxHashMap as HashMap;
 
 use crate::{
-  helpers::{get_map, split_into_lines, GeneratedInfo, StreamChunks},
+  helpers::{
+    get_map, split_into_lines, GeneratedInfo, SourceText, StreamChunks,
+  },
   linear_map::LinearMap,
+  rope::Rope,
   MapOptions, Mapping, OriginalLocation, Source, SourceMap,
 };
 
@@ -37,7 +41,8 @@ use crate::{
 /// ```
 pub struct ReplaceSource<T> {
   inner: Arc<T>,
-  replacements: Mutex<Vec<Replacement>>,
+  replacements: Vec<Replacement>,
+  sorted_index: Mutex<Vec<usize>>,
   /// Whether `replacements` is sorted.
   is_sorted: AtomicBool,
 }
@@ -86,7 +91,8 @@ impl<T> ReplaceSource<T> {
   pub fn new(source: T) -> Self {
     Self {
       inner: Arc::new(source),
-      replacements: Mutex::new(Vec::new()),
+      replacements: Vec::new(),
+      sorted_index: Mutex::new(Vec::new()),
       is_sorted: AtomicBool::new(true),
     }
   }
@@ -96,18 +102,30 @@ impl<T> ReplaceSource<T> {
     &self.inner
   }
 
-  fn replacements(&self) -> MutexGuard<Vec<Replacement>> {
-    self.replacements.lock().unwrap()
-  }
-
   fn sort_replacement(&self) {
     if self.is_sorted.load(Ordering::SeqCst) {
       return;
     }
-    self.replacements().sort_by(|a, b| {
-      (a.start, a.end, a.enforce).cmp(&(b.start, b.end, b.enforce))
-    });
+    let sorted_index = self
+      .replacements
+      .iter()
+      .enumerate()
+      .sorted_by(|(_, a), (_, b)| {
+        (a.start, a.end, a.enforce).cmp(&(b.start, b.end, b.enforce))
+      })
+      .map(|replacement| replacement.0)
+      .collect::<Vec<_>>();
+    *self.sorted_index.lock().unwrap() = sorted_index;
     self.is_sorted.store(true, Ordering::SeqCst)
+  }
+
+  fn sorted_replacement(&self) -> Vec<&Replacement> {
+    self.sort_replacement();
+    let sorted_index = self.sorted_index.lock().unwrap();
+    sorted_index
+      .iter()
+      .map(|idx| &self.replacements[*idx])
+      .collect()
   }
 }
 
@@ -136,7 +154,7 @@ impl<T: Source> ReplaceSource<T> {
     content: &str,
     name: Option<&str>,
   ) {
-    self.replacements().push(Replacement::new(
+    self.replacements.push(Replacement::new(
       start,
       end,
       content.into(),
@@ -155,7 +173,7 @@ impl<T: Source> ReplaceSource<T> {
     name: Option<&str>,
     enforce: ReplacementEnforce,
   ) {
-    self.replacements().push(Replacement::new(
+    self.replacements.push(Replacement::new(
       start,
       end,
       content.into(),
@@ -168,13 +186,11 @@ impl<T: Source> ReplaceSource<T> {
 
 impl<T: Source + Hash + PartialEq + Eq + 'static> Source for ReplaceSource<T> {
   fn source(&self) -> Cow<str> {
-    self.sort_replacement();
-
     let inner_source_code = self.inner.source();
 
     // mut_string_push_str is faster that vec join
     // concatenate strings benchmark, see https://github.com/hoodie/concatenation_benchmarks-rs
-    let replacements = self.replacements.lock().unwrap();
+    let replacements = self.sorted_replacement();
     if replacements.is_empty() {
       return inner_source_code;
     }
@@ -205,6 +221,38 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for ReplaceSource<T> {
     source_code.into()
   }
 
+  fn rope(&self) -> Rope<'_> {
+    let inner_source_code = self.inner.rope();
+
+    // mut_string_push_str is faster that vec join
+    // concatenate strings benchmark, see https://github.com/hoodie/concatenation_benchmarks-rs
+    let replacements = self.sorted_replacement();
+    if replacements.is_empty() {
+      return inner_source_code;
+    }
+    let mut source_code = Rope::new();
+    let mut inner_pos = 0;
+    for replacement in replacements.iter() {
+      if inner_pos < replacement.start {
+        let end_pos = (replacement.start as usize).min(inner_source_code.len());
+        let slice = inner_source_code.byte_slice(inner_pos as usize..end_pos);
+        source_code.append(slice);
+      }
+      source_code.add(&replacement.content);
+      #[allow(clippy::manual_clamp)]
+      {
+        inner_pos = inner_pos
+          .max(replacement.end)
+          .min(inner_source_code.len() as u32);
+      }
+    }
+    let slice =
+      inner_source_code.byte_slice(inner_pos as usize..inner_source_code.len());
+    source_code.append(slice);
+
+    source_code
+  }
+
   fn buffer(&self) -> Cow<[u8]> {
     match self.source() {
       Cow::Borrowed(s) => Cow::Borrowed(s.as_bytes()),
@@ -217,11 +265,10 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for ReplaceSource<T> {
   }
 
   fn map(&self, options: &crate::MapOptions) -> Option<SourceMap> {
-    let replacements = self.replacements.lock().unwrap();
+    let replacements = &self.replacements;
     if replacements.is_empty() {
       return self.inner.map(options);
     }
-    drop(replacements);
     get_map(self, options)
   }
 
@@ -239,7 +286,7 @@ impl<T: std::fmt::Debug> std::fmt::Debug for ReplaceSource<T> {
       .field("inner", self.inner.as_ref())
       .field(
         "replacements",
-        &self.replacements.lock().iter().take(3).collect::<Vec<_>>(),
+        &self.replacements.iter().take(3).collect::<Vec<_>>(),
       )
       .field("is_sorted", &self.is_sorted.load(Ordering::SeqCst))
       .finish()
@@ -247,15 +294,15 @@ impl<T: std::fmt::Debug> std::fmt::Debug for ReplaceSource<T> {
 }
 
 enum SourceContent<'a> {
-  Raw(&'a str),
-  Lines(Vec<&'a str>),
+  Raw(Rope<'a>),
+  Lines(Vec<Rope<'a>>),
 }
 
 fn check_content_at_position(
-  lines: &[&str],
+  lines: &[Rope],
   line: u32,
   column: u32,
-  expected: &str,
+  expected: Rope, // FIXME: memory
 ) -> bool {
   if let Some(line) = lines.get(line as usize - 1) {
     match line
@@ -264,7 +311,8 @@ fn check_content_at_position(
       .map(|(byte_index, _)| byte_index)
     {
       Some(byte_index) => {
-        line.get(byte_index..byte_index + expected.len()) == Some(expected)
+        line.get_byte_slice(byte_index..byte_index + expected.len())
+          == Some(expected)
       }
       None => false,
     }
@@ -273,17 +321,16 @@ fn check_content_at_position(
   }
 }
 
-impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
-  fn stream_chunks(
+impl<T: Source> StreamChunks for ReplaceSource<T> {
+  fn stream_chunks<'a>(
     &'a self,
     options: &crate::MapOptions,
     on_chunk: crate::helpers::OnChunk<'_, 'a>,
     on_source: crate::helpers::OnSource<'_, 'a>,
     on_name: crate::helpers::OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {
-    self.sort_replacement();
     let on_name = RefCell::new(on_name);
-    let repls = self.replacements();
+    let repls = &self.sorted_replacement();
     let mut pos: u32 = 0;
     let mut i: usize = 0;
     let mut replacement_end: Option<u32> = None;
@@ -325,7 +372,7 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
     // In this case, we can't split this mapping.
     // webpack-sources also have this function, refer https://github.com/webpack/webpack-sources/blob/main/lib/ReplaceSource.js#L158
     let check_original_content =
-      |source_index: u32, line: u32, column: u32, expected_chunk: &str| {
+      |source_index: u32, line: u32, column: u32, expected_chunk: Rope| {
         if let Some(Some(source_content)) =
           source_content_lines.borrow_mut().get_mut(&source_index)
         {
@@ -363,7 +410,7 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
           // Skip over the whole chunk
           if replacement_end >= end_pos {
             let line = mapping.generated_line as i64 + generated_line_offset;
-            if chunk.ends_with('\n') {
+            if chunk.ends_with("\n") {
               generated_line_offset -= 1;
               if generated_column_offset_line == line {
                 // undo exiting corrections form the current line
@@ -385,7 +432,7 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
               original.source_index,
               original.original_line,
               original.original_column,
-              &chunk[0..chunk_pos as usize],
+              chunk.byte_slice(0..chunk_pos as usize),
             )
           }) {
             original.original_column += chunk_pos;
@@ -409,15 +456,8 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
           if next_replacement_pos > pos {
             // Emit chunk until replacement
             let offset = next_replacement_pos - pos;
-            let chunk_slice = match &chunk {
-              Cow::Borrowed(c) => Cow::Borrowed(
-                &c[chunk_pos as usize..(chunk_pos + offset) as usize],
-              ),
-              Cow::Owned(c) => Cow::Owned(
-                c[chunk_pos as usize..(chunk_pos + offset) as usize]
-                  .to_string(),
-              ),
-            };
+            let chunk_slice = chunk
+              .byte_slice(chunk_pos as usize..(chunk_pos + offset) as usize);
             on_chunk(
               Some(chunk_slice.clone()),
               Mapping {
@@ -449,7 +489,7 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
                   original.source_index,
                   original.original_line,
                   original.original_column,
-                  &chunk_slice,
+                  chunk_slice.clone(),
                 )
               })
             {
@@ -460,10 +500,11 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
           #[allow(unsafe_code)]
           // SAFETY: The safety of this operation relies on the fact that the `ReplaceSource` type will not delete the `replacements` during its entire lifetime.
           let repl = unsafe {
-            std::mem::transmute::<&Replacement, &'a Replacement>(&repls[i])
+            std::mem::transmute::<&Replacement, &'a Replacement>(repls[i])
           };
 
-          let lines: Vec<&str> = split_into_lines(&repl.content).collect();
+          let lines =
+            split_into_lines(&repl.content.as_str()).collect::<Vec<_>>();
           let mut replacement_name_index = mapping
             .original
             .as_ref()
@@ -483,7 +524,7 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
           }
           for (m, content_line) in lines.iter().enumerate() {
             on_chunk(
-              Some(Cow::Borrowed(content_line)),
+              Some(content_line.into_rope()),
               Mapping {
                 generated_line: line as u32,
                 generated_column: ((mapping.generated_column as i64)
@@ -505,7 +546,7 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
             // Only the first chunk has name assigned
             replacement_name_index = None;
 
-            if m == lines.len() - 1 && !content_line.ends_with('\n') {
+            if m == lines.len() - 1 && !content_line.ends_with("\n") {
               if generated_column_offset_line == line {
                 generated_column_offset += content_line.len() as i64;
               } else {
@@ -545,7 +586,7 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
               .is_some_and(|replacement_end| replacement_end >= end_pos)
             {
               let line = mapping.generated_line as i64 + generated_line_offset;
-              if chunk.ends_with('\n') {
+              if chunk.ends_with("\n") {
                 generated_line_offset -= 1;
                 if generated_column_offset_line == line {
                   // undo exiting corrections form the current line
@@ -570,8 +611,9 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
                   original.source_index,
                   original.original_line,
                   original.original_column,
-                  &chunk
-                    [chunk_pos as usize..(chunk_pos + offset as u32) as usize],
+                  chunk.byte_slice(
+                    chunk_pos as usize..(chunk_pos + offset as u32) as usize,
+                  ),
                 )
               })
             {
@@ -594,10 +636,7 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
           let chunk_slice = if chunk_pos == 0 {
             chunk
           } else {
-            match chunk {
-              Cow::Borrowed(c) => Cow::Borrowed(&c[chunk_pos as usize..]),
-              Cow::Owned(c) => Cow::Owned(c[chunk_pos as usize..].to_string()),
-            }
+            chunk.byte_slice(chunk_pos as usize..chunk.len())
           };
           let line = mapping.generated_line as i64 + generated_line_offset;
           on_chunk(
@@ -627,7 +666,7 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
       },
       &mut |source_index, source, source_content| {
         let mut source_content_lines = source_content_lines.borrow_mut();
-        let lines = source_content.map(SourceContent::Raw);
+        let lines = source_content.clone().map(SourceContent::Raw);
         source_content_lines.insert(source_index, lines);
         on_source(source_index, source, source_content);
       },
@@ -647,22 +686,18 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
     );
 
     // Handle remaining replacements
-    let mut len = 0;
-    for replacement in &repls[i..] {
-      len += replacement.content.len();
-    }
-    let mut remainder = String::with_capacity(len);
+    let mut remainder = Rope::new();
     while i < repls.len() {
-      remainder += &repls[i].content;
+      remainder.add(&repls[i].content);
       i += 1;
     }
 
     // Insert remaining replacements content split into chunks by lines
     let mut line = result.generated_line as i64 + generated_line_offset;
-    let matches: Vec<&str> = split_into_lines(&remainder).collect();
+    let matches: Vec<Rope> = split_into_lines(&remainder).collect();
     for (m, content_line) in matches.iter().enumerate() {
       on_chunk(
-        Some(Cow::Owned(content_line.to_string())),
+        Some(content_line.clone()),
         Mapping {
           generated_line: line as u32,
           generated_column: ((result.generated_column as i64)
@@ -675,7 +710,7 @@ impl<'a, T: Source> StreamChunks<'a> for ReplaceSource<T> {
         },
       );
 
-      if m == matches.len() - 1 && !content_line.ends_with('\n') {
+      if m == matches.len() - 1 && !content_line.ends_with("\n") {
         if generated_column_offset_line == line {
           generated_column_offset += content_line.len() as i64;
         } else {
@@ -706,7 +741,8 @@ impl<T: Source> Clone for ReplaceSource<T> {
   fn clone(&self) -> Self {
     Self {
       inner: self.inner.clone(),
-      replacements: Mutex::new(self.replacements().clone()),
+      replacements: self.replacements.clone(),
+      sorted_index: Mutex::new(self.sorted_index.lock().unwrap().clone()),
       is_sorted: AtomicBool::new(self.is_sorted.load(Ordering::SeqCst)),
     }
   }
@@ -714,9 +750,8 @@ impl<T: Source> Clone for ReplaceSource<T> {
 
 impl<T: Hash> Hash for ReplaceSource<T> {
   fn hash<H: Hasher>(&self, state: &mut H) {
-    self.sort_replacement();
     "ReplaceSource".hash(state);
-    for repl in self.replacements().iter() {
+    for repl in self.sorted_replacement() {
       repl.hash(state);
     }
     self.inner.hash(state);
@@ -725,7 +760,7 @@ impl<T: Hash> Hash for ReplaceSource<T> {
 
 impl<T: PartialEq> PartialEq for ReplaceSource<T> {
   fn eq(&self, other: &Self) -> bool {
-    self.inner == other.inner && *self.replacements() == *other.replacements()
+    self.inner == other.inner && self.replacements == other.replacements
   }
 }
 
