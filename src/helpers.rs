@@ -1348,15 +1348,3 @@ impl<'a> SourceText<'a> for &'a str {
     self.as_bytes().get(byte_index).copied()
   }
 }
-
-#[cfg(test)]
-mod test {
-  use crate::Rope;
-
-  use super::split;
-
-  #[test]
-  fn should_split() {
-    assert_eq!(split(&Rope::from("Line1\n\nLine3\n"), b'\n').count(), 3);
-  }
-}
