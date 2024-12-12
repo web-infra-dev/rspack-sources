@@ -200,56 +200,7 @@ const EMPTY_ROPE: Rope = Rope::new();
 /// Split the string with a needle, each string will contain the needle.
 ///
 /// Copied and modified from https://github.com/rust-lang/cargo/blob/30efe860c0e4adc1a6d7057ad223dc6e47d34edf/src/cargo/sources/registry/index.rs#L1048-L1072
-fn split<'a>(
-  haystack: &Rope<'a>,
-  needle: u8,
-) -> impl Iterator<Item = Rope<'a>> {
-  struct Split<'a> {
-    rope: Rope<'a>,
-    bytes: Cow<'a, [u8]>,
-    needle: u8,
-    base: usize,
-  }
-
-  impl<'a> Iterator for Split<'a> {
-    type Item = Rope<'a>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-      if self.rope.is_empty() {
-        return None;
-      }
-      match memchr::memchr(self.needle, &self.bytes[self.base..]) {
-        Some(pos) => {
-          let end_pos = self.base + pos;
-          // SAFETY: base and end positions are guaranteed to be within the bounds of the rope.
-          // and both of them are on char boundaries.
-          #[allow(unsafe_code)]
-          let ret =
-            unsafe { self.rope.byte_slice_unchecked(self.base..end_pos + 1) };
-          self.base = end_pos + 1;
-
-          if self.base >= self.bytes.len() {
-            self.rope = EMPTY_ROPE;
-          }
-          Some(ret)
-        }
-        None => {
-          let ret = std::mem::replace(&mut self.rope, EMPTY_ROPE);
-          Some(ret)
-        }
-      }
-    }
-  }
-
-  Split {
-    rope: haystack.clone(),
-    bytes: haystack.to_bytes(),
-    needle,
-    base: 0,
-  }
-}
-
-pub fn split_str(haystack: &str, needle: u8) -> impl Iterator<Item = &str> {
+pub fn split(haystack: &str, needle: u8) -> impl Iterator<Item = &str> {
   struct Split<'a> {
     haystack: &'a str,
     needle: u8,
@@ -1363,7 +1314,7 @@ impl<'a> SourceText<'a> for Rope<'a> {
 
 impl<'a> SourceText<'a> for &'a str {
   fn split_into_lines(&self) -> impl Iterator<Item = Self> {
-    split_str(self, b'\n')
+    split(self, b'\n')
   }
 
   #[inline]
