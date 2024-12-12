@@ -225,8 +225,7 @@ pub fn split<'a>(
           // SAFETY: base and end positions are guaranteed to be within the bounds of the rope.
           // and both of them are on char boundaries.
           #[allow(unsafe_code)]
-          let ret =
-            unsafe { self.rope.byte_slice_unchecked(self.base..end_pos + 1) };
+          let ret = unsafe { self.rope.byte_slice(self.base..end_pos + 1) };
           self.base = end_pos + 1;
 
           if self.base >= self.bytes.len() {
