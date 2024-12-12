@@ -130,7 +130,7 @@ fn benchmark_concat_generate_base64(b: &mut Bencher) {
       .unwrap()
       .to_json()
       .unwrap();
-    base64_simd::Base64::STANDARD.encode_to_boxed_str(json.as_bytes());
+    let _ = base64_simd::STANDARD.encode_to_string(json.as_bytes());
   })
 }
 
@@ -160,7 +160,7 @@ fn benchmark_concat_generate_base64_with_cache(b: &mut Bencher) {
       .unwrap()
       .to_json()
       .unwrap();
-    base64_simd::Base64::STANDARD.encode_to_boxed_str(json.as_bytes());
+    let _ = base64_simd::STANDARD.encode_to_string(json.as_bytes());
   })
 }
 
