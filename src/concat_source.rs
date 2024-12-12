@@ -10,7 +10,7 @@ use crate::{
   helpers::{get_map, GeneratedInfo, OnChunk, OnName, OnSource, StreamChunks},
   linear_map::LinearMap,
   source::{Mapping, OriginalLocation},
-  BoxSource, MapOptions, Source, SourceExt, SourceMap,
+  BoxSource, MapOptions, Rope, Source, SourceExt, SourceMap,
 };
 
 /// Concatenate multiple [Source]s to a single [Source].
@@ -109,6 +109,20 @@ impl Source for ConcatSource {
     }
   }
 
+  fn rope(&self) -> Rope<'_> {
+    let children = self.children();
+    if children.len() == 1 {
+      children[0].rope()
+    } else {
+      let mut rope = Rope::new();
+      for child in children {
+        let child_rope = child.rope();
+        rope.append(child_rope);
+      }
+      rope
+    }
+  }
+
   fn buffer(&self) -> Cow<[u8]> {
     let children = self.children();
     if children.len() == 1 {
@@ -155,8 +169,8 @@ impl PartialEq for ConcatSource {
 }
 impl Eq for ConcatSource {}
 
-impl<'a> StreamChunks<'a> for ConcatSource {
-  fn stream_chunks(
+impl StreamChunks for ConcatSource {
+  fn stream_chunks<'a>(
     &'a self,
     options: &MapOptions,
     on_chunk: OnChunk<'_, 'a>,

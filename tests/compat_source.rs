@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 use std::borrow::Cow;
 use std::hash::Hash;
 
@@ -5,7 +6,7 @@ use rspack_sources::stream_chunks::{
   stream_chunks_default, GeneratedInfo, OnChunk, OnName, OnSource, StreamChunks,
 };
 use rspack_sources::{
-  ConcatSource, MapOptions, RawSource, Source, SourceExt, SourceMap,
+  ConcatSource, MapOptions, RawSource, Rope, Source, SourceExt, SourceMap,
 };
 
 #[derive(Debug, Eq)]
@@ -14,6 +15,10 @@ struct CompatSource(&'static str, Option<SourceMap>);
 impl Source for CompatSource {
   fn source(&self) -> Cow<str> {
     Cow::Borrowed(self.0)
+  }
+
+  fn rope(&self) -> Rope<'_> {
+    Rope::from(self.0)
   }
 
   fn buffer(&self) -> Cow<[u8]> {
@@ -33,8 +38,8 @@ impl Source for CompatSource {
   }
 }
 
-impl<'a> StreamChunks<'a> for CompatSource {
-  fn stream_chunks(
+impl StreamChunks for CompatSource {
+  fn stream_chunks<'a>(
     &'a self,
     options: &MapOptions,
     on_chunk: OnChunk<'_, 'a>,
