@@ -563,7 +563,7 @@ impl<'a> Iterator for Lines<'_, 'a> {
           let rope = Rope::from(&chunk[*in_chunk_byte_idx..end]);
           *in_chunk_byte_idx = end;
           *byte_idx += *in_chunk_byte_idx;
-          return Some(rope);
+          Some(rope)
         } else {
           // Check if the current chunk has left over bytes.
 
@@ -629,9 +629,9 @@ impl<'a> Iterator for Lines<'_, 'a> {
             });
             // Advance the byte index to the end of the line.
             *byte_idx += len;
-            return Some(Rope {
+            Some(Rope {
               repr: Repr::Complex(Rc::new(raw)),
-            });
+            })
           } else {
             // If we did not find a newline in the next few chunks,
             // return the remaining bytes.
