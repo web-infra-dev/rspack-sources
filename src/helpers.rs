@@ -5,7 +5,6 @@ use std::{
   ops::Range,
 };
 
-use itertools::Either;
 use rustc_hash::FxHashMap as HashMap;
 
 use crate::{
@@ -201,7 +200,7 @@ const EMPTY_ROPE: Rope = Rope::new();
 /// Split the string with a needle, each string will contain the needle.
 ///
 /// Copied and modified from https://github.com/rust-lang/cargo/blob/30efe860c0e4adc1a6d7057ad223dc6e47d34edf/src/cargo/sources/registry/index.rs#L1048-L1072
-pub fn split<'a>(
+fn split<'a>(
   haystack: &Rope<'a>,
   needle: u8,
 ) -> impl Iterator<Item = Rope<'a>> {
@@ -1324,10 +1323,10 @@ pub trait SourceText<'a>: Default + Clone + ToString {
 
 impl<'a> SourceText<'a> for Rope<'a> {
   fn split_into_lines(&self) -> impl Iterator<Item = Self> {
-    if let Some(s) = self.get_simple() {
-      return Either::Left(split_str(s, b'\n').map(Rope::from));
-    }
-    Either::Right(split(self, b'\n'))
+    // Split the text into lines, including the line ending character.
+    // If the text ends with a newline, the last line will be ignored
+    // For example: "abc\nefg\n" => ["abc\n", "efg\n"]
+    self.lines_impl(false)
   }
 
   #[inline]

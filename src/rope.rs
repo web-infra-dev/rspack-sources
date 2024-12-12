@@ -421,6 +421,16 @@ impl<'a> Rope<'a> {
 
   /// Returns an iterator over the lines of the rope.
   pub fn lines(&self) -> Lines<'_, 'a> {
+    self.lines_impl(true)
+  }
+
+  /// Returns an iterator over the lines of the rope.
+  ///
+  /// If `end_line_break_as_newline` is true, the end of the rope with ('\n') is treated as an empty newline
+  pub(crate) fn lines_impl(
+    &self,
+    end_line_break_as_newline: bool,
+  ) -> Lines<'_, 'a> {
     Lines {
       iter: match &self.repr {
         Repr::Simple(s) => LinesEnum::Simple(s),
@@ -431,6 +441,7 @@ impl<'a> Rope<'a> {
       chunk_idx: 0,
       ended: false,
       total_bytes: self.len(),
+      end_line_break_as_newline,
     }
   }
 
@@ -484,9 +495,12 @@ pub struct Lines<'a, 'b> {
   chunk_idx: usize,
   ended: bool,
   total_bytes: usize,
+
+  /// Whether to treat the end of the rope with ('\n') as an empty newline.
+  end_line_break_as_newline: bool,
 }
 
-impl<'a, 'b> Iterator for Lines<'a, 'b> {
+impl<'a> Iterator for Lines<'_, 'a> {
   type Item = Rope<'a>;
 
   fn next(&mut self) -> Option<Self::Item> {
@@ -496,13 +510,17 @@ impl<'a, 'b> Iterator for Lines<'a, 'b> {
         ref mut byte_idx,
         ref mut ended,
         ref total_bytes,
+        end_line_break_as_newline,
         ..
       } => {
         if *ended {
           return None;
         } else if byte_idx == total_bytes {
-          *ended = true;
-          return Some(Rope::from(""));
+          if end_line_break_as_newline {
+            *ended = true;
+            return Some(Rope::from(""));
+          }
+          return None;
         } else if let Some(idx) =
           memchr::memchr(b'\n', &s.as_bytes()[*byte_idx..])
         {
@@ -512,7 +530,7 @@ impl<'a, 'b> Iterator for Lines<'a, 'b> {
           return Some(rope);
         }
         *ended = true;
-        return Some(Rope::from(&s[*byte_idx..]));
+        Some(Rope::from(&s[*byte_idx..]))
       }
       Lines {
         iter: LinesEnum::Complex(chunks),
@@ -521,12 +539,16 @@ impl<'a, 'b> Iterator for Lines<'a, 'b> {
         ref mut chunk_idx,
         ref mut ended,
         ref total_bytes,
+        end_line_break_as_newline,
       } => {
         if *ended {
           return None;
         } else if byte_idx == total_bytes {
-          *ended = true;
-          return Some(Rope::from(""));
+          if end_line_break_as_newline {
+            *ended = true;
+            return Some(Rope::from(""));
+          }
+          return None;
         }
 
         debug_assert!(*chunk_idx < chunks.len());
@@ -629,9 +651,9 @@ impl<'a, 'b> Iterator for Lines<'a, 'b> {
             });
             // Advance the byte index to the end of the rope.
             *byte_idx += len;
-            return Some(Rope {
+            Some(Rope {
               repr: Repr::Complex(Rc::new(raw)),
-            });
+            })
           }
         }
       }
@@ -1093,13 +1115,23 @@ mod tests {
 
   #[test]
   fn lines1() {
+    let rope = Rope::from("abc");
+    let lines = rope.lines().collect::<Vec<_>>();
+    assert_eq!(lines, ["abc"]);
+
+    // empty line at the end if the line before ends with a newline ('\n')
     let rope = Rope::from("abc\ndef\n");
     let lines = rope.lines().collect::<Vec<_>>();
     assert_eq!(lines, ["abc\n", "def\n", ""]);
 
+    // no empty line at the end if the line before does not end with a newline ('\n')
     let rope = Rope::from("abc\ndef");
     let lines = rope.lines().collect::<Vec<_>>();
     assert_eq!(lines, ["abc\n", "def"]);
+
+    let rope = Rope::from("Test\nTest\nTest\n");
+    let lines = rope.lines().collect::<Vec<_>>();
+    assert_eq!(lines, ["Test\n", "Test\n", "Test\n", ""]);
   }
 
   #[test]
