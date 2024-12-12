@@ -419,6 +419,21 @@ impl<'a> Rope<'a> {
     }
   }
 
+  /// Returns an iterator over the lines of the rope.
+  pub fn lines(&self) -> Lines<'_, 'a> {
+    Lines {
+      iter: match &self.repr {
+        Repr::Simple(s) => LinesEnum::Simple(s),
+        Repr::Complex(data) => LinesEnum::Complex(data),
+      },
+      byte_idx: 0,
+      in_chunk_byte_idx: 0,
+      chunk_idx: 0,
+      ended: false,
+      total_bytes: self.len(),
+    }
+  }
+
   /// Converts the rope to bytes.
   ///
   /// Returns borrowed bytes for simple ropes and owned bytes for complex ropes.
@@ -451,6 +466,173 @@ impl Hash for Rope<'_> {
       Repr::Complex(data) => {
         for (s, _) in data.iter() {
           s.hash(state);
+        }
+      }
+    }
+  }
+}
+
+enum LinesEnum<'a, 'b> {
+  Simple(&'b str),
+  Complex(&'a Vec<(&'b str, usize)>),
+}
+
+pub struct Lines<'a, 'b> {
+  iter: LinesEnum<'a, 'b>,
+  byte_idx: usize,
+  in_chunk_byte_idx: usize,
+  chunk_idx: usize,
+  ended: bool,
+  total_bytes: usize,
+}
+
+impl<'a, 'b> Iterator for Lines<'a, 'b> {
+  type Item = Rope<'a>;
+
+  fn next(&mut self) -> Option<Self::Item> {
+    match *self {
+      Lines {
+        iter: LinesEnum::Simple(s),
+        ref mut byte_idx,
+        ref mut ended,
+        ref total_bytes,
+        ..
+      } => {
+        if *ended {
+          return None;
+        } else if byte_idx == total_bytes {
+          *ended = true;
+          return Some(Rope::from(""));
+        } else if let Some(idx) =
+          memchr::memchr(b'\n', &s.as_bytes()[*byte_idx..])
+        {
+          let end = *byte_idx + idx + 1;
+          let rope = Rope::from(&s[*byte_idx..end]);
+          *byte_idx = end;
+          return Some(rope);
+        }
+        *ended = true;
+        return Some(Rope::from(&s[*byte_idx..]));
+      }
+      Lines {
+        iter: LinesEnum::Complex(chunks),
+        ref mut byte_idx,
+        ref mut in_chunk_byte_idx,
+        ref mut chunk_idx,
+        ref mut ended,
+        ref total_bytes,
+      } => {
+        if *ended {
+          return None;
+        } else if byte_idx == total_bytes {
+          *ended = true;
+          return Some(Rope::from(""));
+        }
+
+        debug_assert!(*chunk_idx < chunks.len());
+
+        let &(chunk, _) = &chunks[*chunk_idx];
+        // Always try to find a newline in the current chunk,
+        // if the current chunk contains a newline, return this line.
+        if let Some(idx) =
+          memchr::memchr(b'\n', &chunk.as_bytes()[*in_chunk_byte_idx..])
+        {
+          let end = *in_chunk_byte_idx + idx + 1;
+          let rope = Rope::from(&chunk[*in_chunk_byte_idx..end]);
+          *in_chunk_byte_idx = end;
+          *byte_idx += *in_chunk_byte_idx;
+          return Some(rope);
+        } else {
+          // Check if the current chunk has left over bytes.
+
+          // If it is the last chunk, return the remaining bytes.
+          // This is the end of the rope.
+          if *chunk_idx == chunks.len() - 1 {
+            // Rope is not ended with a newline.
+            // Explicitly set the ended flag to true to bail out.
+            *ended = true;
+            *byte_idx += chunk.len() - *in_chunk_byte_idx;
+            return Some(Rope::from(&chunk[*in_chunk_byte_idx..]));
+          }
+
+          // If the current chunk has running out of bytes, move to the next chunk.
+          if *in_chunk_byte_idx == chunk.len() {
+            *chunk_idx += 1;
+            *in_chunk_byte_idx = 0;
+            return self.next();
+          }
+
+          // If it is not the last chunk, the line spans multiple chunks.
+          // As such, we need to find the next newline in the next few chunks.
+          let start_chunk_idx = *chunk_idx;
+          let start_in_chunk_byte_idx = *in_chunk_byte_idx;
+
+          let end_info = loop {
+            if *chunk_idx == chunks.len() {
+              break None;
+            }
+            let &(chunk, _) = &chunks[*chunk_idx];
+            if let Some(idx) =
+              memchr::memchr(b'\n', &chunk.as_bytes()[*in_chunk_byte_idx..])
+            {
+              *in_chunk_byte_idx += idx + 1;
+              *byte_idx += *in_chunk_byte_idx;
+              break Some((*chunk_idx, *in_chunk_byte_idx));
+            } else {
+              *in_chunk_byte_idx = 0;
+              *byte_idx += chunk.len();
+              *chunk_idx += 1;
+            }
+          };
+
+          // If we found a newline in the next few chunks, return the line.
+          if let Some((end_chunk_idx, end_in_chunk_byte_idx)) = end_info {
+            let mut raw =
+              Vec::with_capacity(end_chunk_idx - start_chunk_idx + 1);
+            let mut len = 0;
+            (start_chunk_idx..end_chunk_idx + 1).for_each(|i| {
+              let &(chunk, _) = &chunks[i];
+              if start_chunk_idx == i {
+                let start = start_in_chunk_byte_idx;
+                raw.push((&chunk[start..], len));
+                len += chunk.len() - start;
+              } else if end_chunk_idx == i {
+                let end = end_in_chunk_byte_idx;
+                raw.push((&chunk[..end], len));
+                len += end;
+              } else {
+                raw.push((chunk, len));
+                len += chunk.len();
+              }
+            });
+            // Advance the byte index to the end of the line.
+            *byte_idx += len;
+            return Some(Rope {
+              repr: Repr::Complex(Rc::new(raw)),
+            });
+          } else {
+            // If we did not find a newline in the next few chunks,
+            // return the remaining bytes.
+
+            let mut raw = Vec::with_capacity(chunks.len() - start_chunk_idx);
+            let mut len = 0;
+            (start_chunk_idx..chunks.len()).for_each(|i| {
+              let &(chunk, _) = &chunks[i];
+              if start_chunk_idx == i {
+                let start = start_in_chunk_byte_idx;
+                raw.push((&chunk[start..], len));
+                len += chunk.len() - start;
+              } else {
+                raw.push((chunk, len));
+                len += chunk.len();
+              }
+            });
+            // Advance the byte index to the end of the rope.
+            *byte_idx += len;
+            return Some(Rope {
+              repr: Repr::Complex(Rc::new(raw)),
+            });
+          }
         }
       }
     }
@@ -907,5 +1089,36 @@ mod tests {
       a.char_indices().collect::<Vec<_>>(),
       "こんにちは世界".char_indices().collect::<Vec<_>>()
     );
+  }
+
+  #[test]
+  fn lines1() {
+    let rope = Rope::from("abc\ndef\n");
+    let lines = rope.lines().collect::<Vec<_>>();
+    assert_eq!(lines, ["abc\n", "def\n", ""]);
+
+    let rope = Rope::from("abc\ndef");
+    let lines = rope.lines().collect::<Vec<_>>();
+    assert_eq!(lines, ["abc\n", "def"]);
+  }
+
+  #[test]
+  fn lines2() {
+    let rope = Rope::from_iter(["abc\n", "def\n", "ghi\n"]);
+    let lines = rope.lines().collect::<Vec<_>>();
+    // empty line at the end if the line before ends with a newline ('\n')
+    assert_eq!(lines, ["abc\n", "def\n", "ghi\n", ""]);
+
+    let rope = Rope::from_iter(["abc\n", "def\n", "ghi"]);
+    let lines = rope.lines().collect::<Vec<_>>();
+    assert_eq!(lines, ["abc\n", "def\n", "ghi"]);
+
+    let rope = Rope::from_iter(["abc\ndef", "ghi\n", "jkl"]);
+    let lines = rope.lines().collect::<Vec<_>>();
+    assert_eq!(lines, ["abc\n", "defghi\n", "jkl"]);
+
+    let rope = Rope::from_iter(["a\nb", "c\n", "d\n"]);
+    let lines = rope.lines().collect::<Vec<_>>();
+    assert_eq!(lines, ["a\n", "bc\n", "d\n", ""]);
   }
 }
