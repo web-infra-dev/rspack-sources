@@ -434,11 +434,13 @@ impl<'a> Rope<'a> {
     Lines {
       iter: match &self.repr {
         Repr::Simple(s) => LinesEnum::Simple(s),
-        Repr::Complex(data) => LinesEnum::Complex(data),
+        Repr::Complex(data) => LinesEnum::Complex {
+          iter: data,
+          in_chunk_byte_idx: 0,
+          chunk_idx: 0,
+        },
       },
       byte_idx: 0,
-      in_chunk_byte_idx: 0,
-      chunk_idx: 0,
       ended: false,
       total_bytes: self.len(),
       trailing_line_break_as_newline,
@@ -485,14 +487,16 @@ impl Hash for Rope<'_> {
 
 enum LinesEnum<'a, 'b> {
   Simple(&'b str),
-  Complex(&'a Vec<(&'b str, usize)>),
+  Complex {
+    iter: &'a Vec<(&'b str, usize)>,
+    in_chunk_byte_idx: usize,
+    chunk_idx: usize,
+  },
 }
 
 pub struct Lines<'a, 'b> {
   iter: LinesEnum<'a, 'b>,
   byte_idx: usize,
-  in_chunk_byte_idx: usize,
-  chunk_idx: usize,
   ended: bool,
   total_bytes: usize,
 
@@ -533,10 +537,13 @@ impl<'a> Iterator for Lines<'_, 'a> {
         Some(Rope::from(&s[*byte_idx..]))
       }
       Lines {
-        iter: LinesEnum::Complex(chunks),
+        iter:
+          LinesEnum::Complex {
+            iter: chunks,
+            ref mut in_chunk_byte_idx,
+            ref mut chunk_idx,
+          },
         ref mut byte_idx,
-        ref mut in_chunk_byte_idx,
-        ref mut chunk_idx,
         ref mut ended,
         ref total_bytes,
         trailing_line_break_as_newline,
