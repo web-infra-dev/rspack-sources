@@ -426,10 +426,10 @@ impl<'a> Rope<'a> {
 
   /// Returns an iterator over the lines of the rope.
   ///
-  /// If `end_line_break_as_newline` is true, the end of the rope with ('\n') is treated as an empty newline
+  /// If `trailing_line_break_as_newline` is true, the end of the rope with ('\n') is treated as an empty newline
   pub(crate) fn lines_impl(
     &self,
-    end_line_break_as_newline: bool,
+    trailing_line_break_as_newline: bool,
   ) -> Lines<'_, 'a> {
     Lines {
       iter: match &self.repr {
@@ -441,7 +441,7 @@ impl<'a> Rope<'a> {
       chunk_idx: 0,
       ended: false,
       total_bytes: self.len(),
-      end_line_break_as_newline,
+      trailing_line_break_as_newline,
     }
   }
 
@@ -497,7 +497,7 @@ pub struct Lines<'a, 'b> {
   total_bytes: usize,
 
   /// Whether to treat the end of the rope with ('\n') as an empty newline.
-  end_line_break_as_newline: bool,
+  trailing_line_break_as_newline: bool,
 }
 
 impl<'a> Iterator for Lines<'_, 'a> {
@@ -510,13 +510,13 @@ impl<'a> Iterator for Lines<'_, 'a> {
         ref mut byte_idx,
         ref mut ended,
         ref total_bytes,
-        end_line_break_as_newline,
+        trailing_line_break_as_newline,
         ..
       } => {
         if *ended {
           return None;
         } else if byte_idx == total_bytes {
-          if end_line_break_as_newline {
+          if trailing_line_break_as_newline {
             *ended = true;
             return Some(Rope::from(""));
           }
@@ -539,12 +539,12 @@ impl<'a> Iterator for Lines<'_, 'a> {
         ref mut chunk_idx,
         ref mut ended,
         ref total_bytes,
-        end_line_break_as_newline,
+        trailing_line_break_as_newline,
       } => {
         if *ended {
           return None;
         } else if byte_idx == total_bytes {
-          if end_line_break_as_newline {
+          if trailing_line_break_as_newline {
             *ended = true;
             return Some(Rope::from(""));
           }
@@ -552,8 +552,8 @@ impl<'a> Iterator for Lines<'_, 'a> {
         }
 
         debug_assert!(*chunk_idx < chunks.len());
-
         let &(chunk, _) = &chunks[*chunk_idx];
+
         // Always try to find a newline in the current chunk,
         // if the current chunk contains a newline, return this line.
         if let Some(idx) =
@@ -566,7 +566,6 @@ impl<'a> Iterator for Lines<'_, 'a> {
           Some(rope)
         } else {
           // Check if the current chunk has left over bytes.
-
           // If it is the last chunk, return the remaining bytes.
           // This is the end of the rope.
           if *chunk_idx == chunks.len() - 1 {
@@ -1132,6 +1131,14 @@ mod tests {
     let rope = Rope::from("Test\nTest\nTest\n");
     let lines = rope.lines().collect::<Vec<_>>();
     assert_eq!(lines, ["Test\n", "Test\n", "Test\n", ""]);
+
+    let rope = Rope::from("\n");
+    let lines = rope.lines().collect::<Vec<_>>();
+    assert_eq!(lines, ["\n", ""]);
+
+    let rope = Rope::from("\n\n");
+    let lines = rope.lines().collect::<Vec<_>>();
+    assert_eq!(lines, ["\n", "\n", ""]);
   }
 
   #[test]
@@ -1152,5 +1159,25 @@ mod tests {
     let rope = Rope::from_iter(["a\nb", "c\n", "d\n"]);
     let lines = rope.lines().collect::<Vec<_>>();
     assert_eq!(lines, ["a\n", "bc\n", "d\n", ""]);
+
+    let rope = Rope::from_iter(["\n"]);
+    let lines = rope.lines().collect::<Vec<_>>();
+    assert_eq!(lines, ["\n", ""]);
+  }
+
+  #[test]
+  fn lines_with_trailing_line_break_as_newline() {
+    let trailing_line_break_as_newline = false;
+    let rope = Rope::from("abc\n");
+    let lines = rope
+      .lines_impl(trailing_line_break_as_newline)
+      .collect::<Vec<_>>();
+    assert_eq!(lines, ["abc\n"]);
+
+    let rope = Rope::from("\n");
+    let lines = rope
+      .lines_impl(trailing_line_break_as_newline)
+      .collect::<Vec<_>>();
+    assert_eq!(lines, ["\n"]);
   }
 }
