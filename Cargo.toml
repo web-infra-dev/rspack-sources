@@ -41,7 +41,7 @@ itertools = "0.13"
 
 codspeed-criterion-compat = { version = "2.7.2", default-features = false, optional = true }
 static_assertions = "1.1.0"
-simd-json = "=0.14.3"
+simd-json = "0.14.3"
 
 [dev-dependencies]
 twox-hash = "2.1.0"
