@@ -39,7 +39,14 @@ where
     let str_len = self.line.len();
     let start = *indices_indexes.get(start_index).unwrap_or(&str_len);
     let end = *indices_indexes.get(end_index).unwrap_or(&str_len);
-    self.line.byte_slice(start..end)
+
+    #[allow(unsafe_code)]
+    unsafe {
+      // SAFETY: Since `indices` iterates over the `CharIndices` of `self`, we can guarantee
+      // that the indices obtained from it will always be within the bounds of `self` and they
+      // will always lie on UTF-8 sequence boundaries.
+      self.line.byte_slice_unchecked(start..end)
+    }
   }
 }
 
