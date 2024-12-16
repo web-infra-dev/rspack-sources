@@ -94,7 +94,7 @@ impl<T> CachedSource<T> {
 
 impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
   fn source(&self) -> Cow<str> {
-    self.get_rope().to_cow_string()
+    Cow::Owned(self.get_rope().to_string())
   }
 
   fn rope(&self) -> Rope<'_> {

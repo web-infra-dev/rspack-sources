@@ -461,20 +461,6 @@ impl<'a> Rope<'a> {
       }
     }
   }
-
-  /// Converts the rope to Cow<str>.
-  pub fn to_cow_string(&self) -> Cow<str> {
-    match &self.repr {
-      Repr::Light(s) => Cow::Borrowed(s),
-      Repr::Full(data) => {
-        let mut s = String::with_capacity(self.len());
-        for (chunk, _) in data.iter() {
-          s.push_str(chunk);
-        }
-        Cow::Owned(s)
-      }
-    }
-  }
 }
 
 impl Hash for Rope<'_> {
