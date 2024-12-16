@@ -13,8 +13,8 @@ use crate::Error;
 
 #[derive(Clone, Debug)]
 pub(crate) enum Repr<'a> {
-  Simple(&'a str),
-  Complex(Rc<Vec<(&'a str, usize)>>),
+  Light(&'a str),
+  Full(Rc<Vec<(&'a str, usize)>>),
 }
 
 /// A rope data structure.
@@ -27,7 +27,7 @@ impl<'a> Rope<'a> {
   /// Creates a new empty rope.
   pub const fn new() -> Self {
     Self {
-      repr: Repr::Simple(""),
+      repr: Repr::Light(""),
     }
   }
 
@@ -41,11 +41,11 @@ impl<'a> Rope<'a> {
     }
 
     match &mut self.repr {
-      Repr::Simple(s) => {
+      Repr::Light(s) => {
         let vec = Vec::from_iter([(*s, 0), (value, s.len())]);
-        self.repr = Repr::Complex(Rc::new(vec));
+        self.repr = Repr::Full(Rc::new(vec));
       }
-      Repr::Complex(data) => {
+      Repr::Full(data) => {
         let len = data
           .last()
           .map_or(0, |(chunk, start_pos)| *start_pos + chunk.len());
@@ -59,11 +59,11 @@ impl<'a> Rope<'a> {
   /// Handles all combinations of simple and complex representations efficiently.
   pub fn append(&mut self, value: Rope<'a>) {
     match (&mut self.repr, value.repr) {
-      (Repr::Simple(s), Repr::Simple(other)) => {
+      (Repr::Light(s), Repr::Light(other)) => {
         let raw = Vec::from_iter([(*s, 0), (other, s.len())]);
-        self.repr = Repr::Complex(Rc::new(raw));
+        self.repr = Repr::Full(Rc::new(raw));
       }
-      (Repr::Complex(s), Repr::Complex(other)) => {
+      (Repr::Full(s), Repr::Full(other)) => {
         if !other.is_empty() {
           let mut len = s
             .last()
@@ -78,7 +78,7 @@ impl<'a> Rope<'a> {
           }
         }
       }
-      (Repr::Complex(s), Repr::Simple(other)) => {
+      (Repr::Full(s), Repr::Light(other)) => {
         if !other.is_empty() {
           let len = s
             .last()
@@ -86,7 +86,7 @@ impl<'a> Rope<'a> {
           Rc::make_mut(s).push((other, len));
         }
       }
-      (Repr::Simple(s), Repr::Complex(other)) => {
+      (Repr::Light(s), Repr::Full(other)) => {
         let mut raw = Vec::with_capacity(other.len() + 1);
         raw.push((*s, 0));
         let mut len = s.len();
@@ -94,7 +94,7 @@ impl<'a> Rope<'a> {
           raw.push((chunk, len));
           len += chunk.len();
         }
-        self.repr = Repr::Complex(Rc::new(raw));
+        self.repr = Repr::Full(Rc::new(raw));
       }
     }
   }
@@ -115,8 +115,8 @@ impl<'a> Rope<'a> {
       return None;
     }
     match &self.repr {
-      Repr::Simple(s) => Some(s.as_bytes()[byte_index]),
-      Repr::Complex(data) => {
+      Repr::Light(s) => Some(s.as_bytes()[byte_index]),
+      Repr::Full(data) => {
         let chunk_index = data
           .binary_search_by(|(_, start_pos)| start_pos.cmp(&byte_index))
           .unwrap_or_else(|index| index.saturating_sub(1));
@@ -130,13 +130,13 @@ impl<'a> Rope<'a> {
   /// Returns an iterator over the characters and their byte positions.
   pub fn char_indices(&self) -> CharIndices<'_, 'a> {
     match &self.repr {
-      Repr::Simple(s) => CharIndices {
-        repr: CharIndicesRepr::Simple {
+      Repr::Light(s) => CharIndices {
+        iter: CharIndicesEnum::Light {
           iter: s.char_indices(),
         },
       },
-      Repr::Complex(data) => CharIndices {
-        repr: CharIndicesRepr::Complex {
+      Repr::Full(data) => CharIndices {
+        iter: CharIndicesEnum::Full {
           chunks: data,
           char_indices: VecDeque::new(),
           chunk_index: 0,
@@ -149,8 +149,8 @@ impl<'a> Rope<'a> {
   #[inline]
   pub fn starts_with(&self, value: &str) -> bool {
     match &self.repr {
-      Repr::Simple(s) => s.starts_with(value),
-      Repr::Complex(data) => {
+      Repr::Light(s) => s.starts_with(value),
+      Repr::Full(data) => {
         if let Some((first, _)) = data.first() {
           first.starts_with(value)
         } else {
@@ -164,8 +164,8 @@ impl<'a> Rope<'a> {
   #[inline]
   pub fn ends_with(&self, value: &str) -> bool {
     match &self.repr {
-      Repr::Simple(s) => s.ends_with(value),
-      Repr::Complex(data) => {
+      Repr::Light(s) => s.ends_with(value),
+      Repr::Full(data) => {
         if let Some((last, _)) = data.last() {
           last.ends_with(value)
         } else {
@@ -179,8 +179,8 @@ impl<'a> Rope<'a> {
   #[inline]
   pub fn is_empty(&self) -> bool {
     match &self.repr {
-      Repr::Simple(s) => s.is_empty(),
-      Repr::Complex(data) => data.iter().all(|(s, _)| s.is_empty()),
+      Repr::Light(s) => s.is_empty(),
+      Repr::Full(data) => data.iter().all(|(s, _)| s.is_empty()),
     }
   }
 
@@ -188,8 +188,8 @@ impl<'a> Rope<'a> {
   #[inline]
   pub fn len(&self) -> usize {
     match &self.repr {
-      Repr::Simple(s) => s.len(),
-      Repr::Complex(data) => data
+      Repr::Light(s) => s.len(),
+      Repr::Full(data) => data
         .last()
         .map_or(0, |(chunk, start_pos)| start_pos + chunk.len()),
     }
@@ -255,11 +255,11 @@ impl<'a> Rope<'a> {
     let end_range = end_range.unwrap_or_else(|| self.len());
 
     match &self.repr {
-      Repr::Simple(s) => s
+      Repr::Light(s) => s
         .get(start_range..end_range)
         .map(Rope::from)
         .ok_or(Error::Rope("invalid char boundary")),
-      Repr::Complex(data) => {
+      Repr::Full(data) => {
         // [start_chunk
         let start_chunk_index = data
           .binary_search_by(|(_, start_pos)| start_pos.cmp(&start_range))
@@ -325,7 +325,7 @@ impl<'a> Rope<'a> {
         })?;
 
         Ok(Rope {
-          repr: Repr::Complex(Rc::new(raw)),
+          repr: Repr::Full(Rc::new(raw)),
         })
       }
     }
@@ -351,11 +351,11 @@ impl<'a> Rope<'a> {
     let end_range = end_range.unwrap_or_else(|| self.len());
 
     match &self.repr {
-      Repr::Simple(s) => {
+      Repr::Light(s) => {
         // SAFETY: invariant guarantees valid range
         Rope::from(unsafe { s.get_unchecked(start_range..end_range) })
       }
-      Repr::Complex(data) => {
+      Repr::Full(data) => {
         // [start_chunk
         let start_chunk_index = data
           .binary_search_by(|(_, start_pos)| start_pos.cmp(&start_range))
@@ -413,7 +413,7 @@ impl<'a> Rope<'a> {
         });
 
         Rope {
-          repr: Repr::Complex(Rc::new(raw)),
+          repr: Repr::Full(Rc::new(raw)),
         }
       }
     }
@@ -433,8 +433,8 @@ impl<'a> Rope<'a> {
   ) -> Lines<'_, 'a> {
     Lines {
       iter: match &self.repr {
-        Repr::Simple(s) => LinesEnum::Simple(s),
-        Repr::Complex(data) => LinesEnum::Complex {
+        Repr::Light(s) => LinesEnum::Light(s),
+        Repr::Full(data) => LinesEnum::Complex {
           iter: data,
           in_chunk_byte_idx: 0,
           chunk_idx: 0,
@@ -452,8 +452,8 @@ impl<'a> Rope<'a> {
   /// Returns borrowed bytes for simple ropes and owned bytes for complex ropes.
   pub fn to_bytes(&self) -> Cow<'a, [u8]> {
     match &self.repr {
-      Repr::Simple(s) => Cow::Borrowed(s.as_bytes()),
-      Repr::Complex(data) => {
+      Repr::Light(s) => Cow::Borrowed(s.as_bytes()),
+      Repr::Full(data) => {
         let mut bytes = vec![];
         for (chunk, _) in data.iter() {
           bytes.extend_from_slice(chunk.as_bytes());
@@ -462,21 +462,13 @@ impl<'a> Rope<'a> {
       }
     }
   }
-
-  /// Returns the underlying &str if this is a simple rope.
-  pub fn get_simple(&self) -> Option<&'a str> {
-    match &self.repr {
-      Repr::Simple(s) => Some(s),
-      _ => None,
-    }
-  }
 }
 
 impl Hash for Rope<'_> {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
     match &self.repr {
-      Repr::Simple(s) => s.hash(state),
-      Repr::Complex(data) => {
+      Repr::Light(s) => s.hash(state),
+      Repr::Full(data) => {
         for (s, _) in data.iter() {
           s.hash(state);
         }
@@ -486,7 +478,7 @@ impl Hash for Rope<'_> {
 }
 
 enum LinesEnum<'a, 'b> {
-  Simple(&'b str),
+  Light(&'b str),
   Complex {
     iter: &'a Vec<(&'b str, usize)>,
     in_chunk_byte_idx: usize,
@@ -510,7 +502,7 @@ impl<'a> Iterator for Lines<'_, 'a> {
   fn next(&mut self) -> Option<Self::Item> {
     match *self {
       Lines {
-        iter: LinesEnum::Simple(s),
+        iter: LinesEnum::Light(s),
         ref mut byte_idx,
         ref mut ended,
         ref total_bytes,
@@ -622,7 +614,7 @@ impl<'a> Iterator for Lines<'_, 'a> {
           // Advance the byte index to the end of the line.
           *byte_idx += len;
           Some(Rope {
-            repr: Repr::Complex(Rc::new(raw)),
+            repr: Repr::Full(Rc::new(raw)),
           })
         } else {
           // If we did not find a newline in the next few chunks,
@@ -654,7 +646,7 @@ impl<'a> Iterator for Lines<'_, 'a> {
           // Advance the byte index to the end of the rope.
           *byte_idx += len;
           Some(Rope {
-            repr: Repr::Complex(Rc::new(raw)),
+            repr: Repr::Full(Rc::new(raw)),
           })
         }
       }
@@ -662,11 +654,11 @@ impl<'a> Iterator for Lines<'_, 'a> {
   }
 }
 
-enum CharIndicesRepr<'a, 'b> {
-  Simple {
+enum CharIndicesEnum<'a, 'b> {
+  Light {
     iter: std::str::CharIndices<'b>,
   },
-  Complex {
+  Full {
     chunks: &'a [(&'b str, usize)],
     char_indices: VecDeque<(usize, char)>,
     chunk_index: usize,
@@ -674,16 +666,16 @@ enum CharIndicesRepr<'a, 'b> {
 }
 
 pub struct CharIndices<'a, 'b> {
-  repr: CharIndicesRepr<'a, 'b>,
+  iter: CharIndicesEnum<'a, 'b>,
 }
 
 impl Iterator for CharIndices<'_, '_> {
   type Item = (usize, char);
 
   fn next(&mut self) -> Option<Self::Item> {
-    match &mut self.repr {
-      CharIndicesRepr::Simple { iter } => iter.next(),
-      CharIndicesRepr::Complex {
+    match &mut self.iter {
+      CharIndicesEnum::Light { iter } => iter.next(),
+      CharIndicesEnum::Full {
         chunks,
         char_indices,
         chunk_index,
@@ -724,8 +716,8 @@ impl Default for Rope<'_> {
 impl ToString for Rope<'_> {
   fn to_string(&self) -> String {
     match &self.repr {
-      Repr::Simple(s) => s.to_string(),
-      Repr::Complex(data) => {
+      Repr::Light(s) => s.to_string(),
+      Repr::Full(data) => {
         let mut s = String::with_capacity(self.len());
         for (chunk, _) in data.iter() {
           s.push_str(chunk);
@@ -743,12 +735,12 @@ impl PartialEq<Rope<'_>> for Rope<'_> {
     }
 
     let chunks = match &self.repr {
-      Repr::Simple(s) => &[(*s, 0)][..],
-      Repr::Complex(data) => &data[..],
+      Repr::Light(s) => &[(*s, 0)][..],
+      Repr::Full(data) => &data[..],
     };
     let other_chunks = match &other.repr {
-      Repr::Simple(s) => &[(*s, 0)][..],
-      Repr::Complex(data) => &data[..],
+      Repr::Light(s) => &[(*s, 0)][..],
+      Repr::Full(data) => &data[..],
     };
 
     let mut cur = 0;
@@ -784,12 +776,12 @@ impl PartialEq<str> for Rope<'_> {
     let other = other.as_bytes();
 
     match &self.repr {
-      Repr::Simple(s) => {
+      Repr::Light(s) => {
         if s.as_bytes() != other {
           return false;
         }
       }
-      Repr::Complex(data) => {
+      Repr::Full(data) => {
         let mut idx = 0;
         for (chunk, _) in data.iter() {
           let chunk = chunk.as_bytes();
@@ -814,12 +806,12 @@ impl PartialEq<&str> for Rope<'_> {
     let other = other.as_bytes();
 
     match &self.repr {
-      Repr::Simple(s) => {
+      Repr::Light(s) => {
         if s.as_bytes() != other {
           return false;
         }
       }
-      Repr::Complex(data) => {
+      Repr::Full(data) => {
         let mut idx = 0;
         for (chunk, _) in data.iter() {
           let chunk = chunk.as_bytes();
@@ -838,7 +830,7 @@ impl PartialEq<&str> for Rope<'_> {
 impl<'a> From<&'a str> for Rope<'a> {
   fn from(value: &'a str) -> Self {
     Rope {
-      repr: Repr::Simple(value),
+      repr: Repr::Light(value),
     }
   }
 }
@@ -846,7 +838,7 @@ impl<'a> From<&'a str> for Rope<'a> {
 impl<'a> From<&'a String> for Rope<'a> {
   fn from(value: &'a String) -> Self {
     Rope {
-      repr: Repr::Simple(value),
+      repr: Repr::Light(value),
     }
   }
 }
@@ -854,7 +846,7 @@ impl<'a> From<&'a String> for Rope<'a> {
 impl<'a> From<&'a Cow<'a, str>> for Rope<'a> {
   fn from(value: &'a Cow<'a, str>) -> Self {
     Rope {
-      repr: Repr::Simple(value),
+      repr: Repr::Light(value),
     }
   }
 }
@@ -872,7 +864,7 @@ impl<'a> FromIterator<&'a str> for Rope<'a> {
       .collect::<Vec<_>>();
 
     Self {
-      repr: Repr::Complex(Rc::new(raw)),
+      repr: Repr::Full(Rc::new(raw)),
     }
   }
 }
@@ -904,8 +896,8 @@ mod tests {
   impl<'a> PartialEq for Repr<'a> {
     fn eq(&self, other: &Self) -> bool {
       match (self, other) {
-        (Repr::Simple(a), Repr::Simple(b)) => a == b,
-        (Repr::Complex(a), Repr::Complex(b)) => a == b,
+        (Repr::Light(a), Repr::Light(b)) => a == b,
+        (Repr::Full(a), Repr::Full(b)) => a == b,
         _ => false,
       }
     }
@@ -916,14 +908,14 @@ mod tests {
   #[test]
   fn add() {
     let mut simple = Rope::from("abc");
-    assert_eq!(simple.repr, Repr::Simple("abc"));
+    assert_eq!(simple.repr, Repr::Light("abc"));
     assert_eq!(simple.len(), 3);
 
     simple.add("def");
     assert_eq!(simple, "abcdef");
     assert_eq!(
       simple.repr,
-      Repr::Complex(Rc::new(Vec::from_iter([("abc", 0), ("def", 3)])))
+      Repr::Full(Rc::new(Vec::from_iter([("abc", 0), ("def", 3)])))
     );
     assert_eq!(simple.len(), 6);
 
@@ -931,7 +923,7 @@ mod tests {
     assert_eq!(simple, "abcdefghi");
     assert_eq!(
       simple.repr,
-      Repr::Complex(Rc::new(Vec::from_iter([
+      Repr::Full(Rc::new(Vec::from_iter([
         ("abc", 0),
         ("def", 3),
         ("ghi", 6),
@@ -954,7 +946,7 @@ mod tests {
     assert_eq!(append1, "abcdef");
     assert_eq!(
       append1.repr,
-      Repr::Complex(Rc::new(Vec::from_iter([("abc", 0), ("def", 3),])))
+      Repr::Full(Rc::new(Vec::from_iter([("abc", 0), ("def", 3),])))
     );
 
     // simple - complex
@@ -963,7 +955,7 @@ mod tests {
     assert_eq!(append2, "abc123");
     assert_eq!(
       append2.repr,
-      Repr::Complex(Rc::new(Vec::from_iter([
+      Repr::Full(Rc::new(Vec::from_iter([
         ("abc", 0),
         ("1", 3),
         ("2", 4),
@@ -977,7 +969,7 @@ mod tests {
     assert_eq!(append3, "123abc");
     assert_eq!(
       append3.repr,
-      Repr::Complex(Rc::new(Vec::from_iter([
+      Repr::Full(Rc::new(Vec::from_iter([
         ("1", 0),
         ("2", 1),
         ("3", 2),
@@ -991,7 +983,7 @@ mod tests {
     assert_eq!(append4, "123456");
     assert_eq!(
       append4.repr,
-      Repr::Complex(Rc::new(Vec::from_iter([
+      Repr::Full(Rc::new(Vec::from_iter([
         ("1", 0),
         ("2", 1),
         ("3", 2),
@@ -1079,7 +1071,7 @@ mod tests {
     assert_eq!(rope, "abcdef");
     assert_eq!(
       rope.repr,
-      Repr::Complex(Rc::new(Vec::from_iter([("abc", 0), ("def", 3)])))
+      Repr::Full(Rc::new(Vec::from_iter([("abc", 0), ("def", 3)])))
     );
   }
 
@@ -1189,11 +1181,5 @@ mod tests {
       .lines_impl(trailing_line_break_as_newline)
       .collect::<Vec<_>>();
     assert_eq!(lines, ["\n"]);
-  }
-
-  #[test]
-  fn t() {
-    let a = Rope::from_iter(["a"]);
-    dbg!(a.lines().collect::<Vec<_>>());
   }
 }
