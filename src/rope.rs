@@ -2,7 +2,6 @@
 
 use std::{
   borrow::Cow,
-  cell::RefCell,
   collections::VecDeque,
   hash::Hash,
   ops::{Bound, RangeBounds},
@@ -734,6 +733,18 @@ impl PartialEq<Rope<'_>> for Rope<'_> {
       return false;
     }
 
+    if let (
+      Rope {
+        repr: Repr::Light(s),
+      },
+      Rope {
+        repr: Repr::Light(other),
+      },
+    ) = (self, other)
+    {
+      return s == other;
+    }
+
     let chunks = match &self.repr {
       Repr::Light(s) => &[(*s, 0)][..],
       Repr::Full(data) => &data[..],
@@ -743,22 +754,63 @@ impl PartialEq<Rope<'_>> for Rope<'_> {
       Repr::Full(data) => &data[..],
     };
 
-    let mut cur = 0;
-    let other_chunk_index = RefCell::new(0);
-    let mut other_chunk_byte_index = 0;
-    let other_chunk = || other_chunks[*other_chunk_index.borrow()].0.as_bytes();
-    for (chunk, start_pos) in chunks.iter() {
-      let chunk = chunk.as_bytes();
-      while (cur - start_pos) < chunk.len() {
-        if other_chunk_byte_index >= other_chunk().len() {
-          other_chunk_byte_index = 0;
-          *other_chunk_index.borrow_mut() += 1;
+    let total_bytes = self.len();
+    let mut byte_idx = 0;
+
+    let mut chunks_idx = 0;
+    let mut in_chunk_byte_idx = 0;
+
+    let mut other_chunks_idx = 0;
+    let mut in_other_chunk_byte_idx = 0;
+
+    loop {
+      if byte_idx == total_bytes {
+        break;
+      }
+
+      let &(chunk, _) = &chunks[chunks_idx];
+      let chunk_len = chunk.len();
+      let &(other_chunk, _) = &other_chunks[other_chunks_idx];
+      let other_chunk_len = other_chunk.len();
+
+      let chunk_remaining = chunk_len - in_chunk_byte_idx;
+      let other_chunk_remaining = other_chunk_len - in_other_chunk_byte_idx;
+
+      match chunk_remaining.cmp(&other_chunk_remaining) {
+        std::cmp::Ordering::Less => {
+          if other_chunk
+            [in_other_chunk_byte_idx..in_other_chunk_byte_idx + chunk_remaining]
+            != chunk[in_chunk_byte_idx..]
+          {
+            return false;
+          }
+          in_other_chunk_byte_idx += chunk_remaining;
+          chunks_idx += 1;
+          in_chunk_byte_idx = 0;
+          byte_idx += chunk_remaining;
         }
-        if chunk[cur - start_pos] == other_chunk()[other_chunk_byte_index] {
-          cur += 1;
-          other_chunk_byte_index += 1;
-        } else {
-          return false;
+        std::cmp::Ordering::Equal => {
+          if chunk[in_chunk_byte_idx..]
+            != other_chunk[in_other_chunk_byte_idx..]
+          {
+            return false;
+          }
+          chunks_idx += 1;
+          other_chunks_idx += 1;
+          in_chunk_byte_idx = 0;
+          in_other_chunk_byte_idx = 0;
+          byte_idx += chunk_remaining;
+        }
+        std::cmp::Ordering::Greater => {
+          if chunk[in_chunk_byte_idx..in_chunk_byte_idx + other_chunk_remaining]
+            != other_chunk[in_other_chunk_byte_idx..]
+          {
+            return false;
+          }
+          in_chunk_byte_idx += other_chunk_remaining;
+          other_chunks_idx += 1;
+          in_other_chunk_byte_idx = 0;
+          byte_idx += other_chunk_remaining;
         }
       }
     }
@@ -1059,6 +1111,16 @@ mod tests {
     let mut b = Rope::new();
     b.add("abcde");
     b.add("fghi");
+
+    assert_eq!(a, b);
+
+    let mut a = Rope::new();
+    a.add("abc");
+
+    let mut b = Rope::new();
+    b.add("a");
+    b.add("b");
+    b.add("c");
 
     assert_eq!(a, b);
   }

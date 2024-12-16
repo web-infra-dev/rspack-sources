@@ -1260,6 +1260,10 @@ pub trait SourceText<'a>: Default + Clone + ToString {
   /// Returns a slice of the text specified by the byte range.
   fn byte_slice(&self, range: Range<usize>) -> Self;
 
+  /// Returns a slice of the text specified by the byte range without bounds checking.
+  #[allow(unsafe_code)]
+  unsafe fn byte_slice_unchecked(&self, range: Range<usize>) -> Self;
+
   /// Returns true if the text is empty.
   fn is_empty(&self) -> bool;
 
@@ -1291,6 +1295,11 @@ impl<'a> SourceText<'a> for Rope<'a> {
 
   fn byte_slice(&self, range: Range<usize>) -> Self {
     self.byte_slice(range)
+  }
+
+  #[allow(unsafe_code)]
+  unsafe fn byte_slice_unchecked(&self, range: Range<usize>) -> Self {
+    self.byte_slice_unchecked(range)
   }
 
   #[inline]
@@ -1328,6 +1337,11 @@ impl<'a> SourceText<'a> for &'a str {
 
   fn byte_slice(&self, range: Range<usize>) -> Self {
     self.get(range).unwrap_or_default()
+  }
+
+  #[allow(unsafe_code)]
+  unsafe fn byte_slice_unchecked(&self, range: Range<usize>) -> Self {
+    self.get_unchecked(range)
   }
 
   #[inline]
