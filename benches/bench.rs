@@ -224,8 +224,10 @@ fn benchmark_source_for_replace_large_minified_source_with_cache(b: &mut Bencher
   replace_source.replace(430, 437, "__webpack_require__", None);
   replace_source.replace(438, 445, "/*! dayjs */\"./node_modules/.pnpm/dayjs@1.11.10/node_modules/dayjs/dayjs.min.js\"", None);
   replace_source.replace(494, 498, "this", None);
+  let replace_source = replace_source.boxed();
 
-  let cached = CachedSource::new(replace_source.boxed());
+  let concat_source = ConcatSource::new(vec![replace_source.clone(), replace_source]);
+  let cached = CachedSource::new(concat_source);
 
   b.iter(|| {
     cached.source();
