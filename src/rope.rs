@@ -733,16 +733,16 @@ impl PartialEq<Rope<'_>> for Rope<'_> {
       return false;
     }
 
-    match (self, other) {
-      (
-        Rope {
-          repr: Repr::Light(s),
-        },
-        Rope {
-          repr: Repr::Light(other),
-        },
-      ) => return s == other,
-      _ => (),
+    if let (
+      Rope {
+        repr: Repr::Light(s),
+      },
+      Rope {
+        repr: Repr::Light(other),
+      },
+    ) = (self, other)
+    {
+      return s == other;
     }
 
     let chunks = match &self.repr {
@@ -776,35 +776,42 @@ impl PartialEq<Rope<'_>> for Rope<'_> {
       let chunk_remaining = chunk_len - in_chunk_byte_idx;
       let other_chunk_remaining = other_chunk_len - in_other_chunk_byte_idx;
 
-      if chunk_remaining == other_chunk_remaining {
-        if chunk[in_chunk_byte_idx..] != other_chunk[in_other_chunk_byte_idx..]
-        {
-          return false;
+      match chunk_remaining.cmp(&other_chunk_remaining) {
+        std::cmp::Ordering::Less => {
+          if other_chunk
+            [in_other_chunk_byte_idx..in_other_chunk_byte_idx + chunk_remaining]
+            != chunk[in_chunk_byte_idx..]
+          {
+            return false;
+          }
+          in_other_chunk_byte_idx += chunk_remaining;
+          chunks_idx += 1;
+          in_chunk_byte_idx = 0;
+          byte_idx += chunk_remaining;
         }
-        chunks_idx += 1;
-        other_chunks_idx += 1;
-        byte_idx += chunk_remaining;
-      } else if chunk_remaining > other_chunk_remaining {
-        if chunk[in_chunk_byte_idx..in_chunk_byte_idx + other_chunk_remaining]
-          != other_chunk[in_other_chunk_byte_idx..]
-        {
-          return false;
+        std::cmp::Ordering::Equal => {
+          if chunk[in_chunk_byte_idx..]
+            != other_chunk[in_other_chunk_byte_idx..]
+          {
+            return false;
+          }
+          chunks_idx += 1;
+          other_chunks_idx += 1;
+          in_chunk_byte_idx = 0;
+          in_other_chunk_byte_idx = 0;
+          byte_idx += chunk_remaining;
         }
-        in_chunk_byte_idx += other_chunk_remaining;
-        other_chunks_idx += 1;
-        in_other_chunk_byte_idx = 0;
-        byte_idx += other_chunk_remaining;
-      } else {
-        if other_chunk
-          [in_other_chunk_byte_idx..in_other_chunk_byte_idx + chunk_remaining]
-          != chunk[in_chunk_byte_idx..]
-        {
-          return false;
+        std::cmp::Ordering::Greater => {
+          if chunk[in_chunk_byte_idx..in_chunk_byte_idx + other_chunk_remaining]
+            != other_chunk[in_other_chunk_byte_idx..]
+          {
+            return false;
+          }
+          in_chunk_byte_idx += other_chunk_remaining;
+          other_chunks_idx += 1;
+          in_other_chunk_byte_idx = 0;
+          byte_idx += other_chunk_remaining;
         }
-        in_other_chunk_byte_idx += chunk_remaining;
-        chunks_idx += 1;
-        in_chunk_byte_idx = 0;
-        byte_idx += chunk_remaining;
       }
     }
 
