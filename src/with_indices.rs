@@ -1,4 +1,4 @@
-use std::marker::PhantomData;
+use std::{cell::RefCell, marker::PhantomData};
 
 use crate::helpers::SourceText;
 
@@ -9,7 +9,7 @@ where
 {
   /// line is a string reference
   pub line: S,
-  last_char_index_to_byte_index: (usize, usize),
+  last_char_index_to_byte_index: RefCell<(usize, usize)>,
   data: PhantomData<&'a S>,
 }
 
@@ -20,7 +20,7 @@ where
   pub fn new(line: S) -> Self {
     Self {
       line,
-      last_char_index_to_byte_index: (0, 0),
+      last_char_index_to_byte_index: RefCell::new((0, 0)),
       data: PhantomData,
     }
   }
@@ -38,7 +38,7 @@ where
     let mut end_byte_index = None;
 
     let (last_char_index, mut last_byte_index) =
-      self.last_char_index_to_byte_index;
+      *self.last_char_index_to_byte_index.borrow();
     let mut char_index = last_char_index;
     if last_char_index < start_char_index {
       char_index = 0;
@@ -51,9 +51,13 @@ where
     {
       if char_index == start_char_index {
         start_byte_index = Some(byte_index);
+        if end_char_index == usize::MAX {
+          break;
+        }
       }
       if char_index == end_char_index {
         end_byte_index = Some(byte_index);
+        *self.last_char_index_to_byte_index.borrow_mut() = (end_char_index, byte_index);
         break;
       }
       char_index += 1;
