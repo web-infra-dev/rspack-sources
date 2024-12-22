@@ -1,4 +1,4 @@
-use std::{cell::OnceCell, marker::PhantomData};
+use std::marker::PhantomData;
 
 use crate::helpers::SourceText;
 
@@ -9,8 +9,7 @@ where
 {
   /// line is a string reference
   pub line: S,
-  /// the byte position of each `char` in `line` string slice .
-  pub indices_indexes: OnceCell<Vec<usize>>,
+  last_char_index_to_byte_index: (usize, usize),
   data: PhantomData<&'a S>,
 }
 
@@ -20,32 +19,65 @@ where
 {
   pub fn new(line: S) -> Self {
     Self {
-      indices_indexes: OnceCell::new(),
       line,
+      last_char_index_to_byte_index: (0, 0),
       data: PhantomData,
     }
   }
 
-  /// substring::SubString with cache
-  pub(crate) fn substring(&self, start_index: usize, end_index: usize) -> S {
-    if end_index <= start_index {
+  pub(crate) fn substring(
+    &self,
+    start_char_index: usize,
+    end_char_index: usize,
+  ) -> S {
+    if end_char_index <= start_char_index {
       return S::default();
     }
 
-    let indices_indexes = self.indices_indexes.get_or_init(|| {
-      self.line.char_indices().map(|(i, _)| i).collect::<Vec<_>>()
-    });
+    let mut start_byte_index = None;
+    let mut end_byte_index = None;
 
-    let str_len = self.line.len();
-    let start = *indices_indexes.get(start_index).unwrap_or(&str_len);
-    let end = *indices_indexes.get(end_index).unwrap_or(&str_len);
+    let (last_char_index, mut last_byte_index) =
+      self.last_char_index_to_byte_index;
+    let mut char_index = last_char_index;
+    if last_char_index < start_char_index {
+      char_index = 0;
+      last_byte_index = 0;
+    }
+    for (byte_index, _) in self
+      .line
+      .byte_slice(last_byte_index..self.line.len())
+      .char_indices()
+    {
+      if char_index == start_char_index {
+        start_byte_index = Some(byte_index);
+      }
+      if char_index == end_char_index {
+        end_byte_index = Some(byte_index);
+        break;
+      }
+      char_index += 1;
+    }
+
+    let start_byte_index = if let Some(start_byte_index) = start_byte_index {
+      start_byte_index
+    } else {
+      return S::default();
+    };
+
+    let end_byte_index = end_byte_index.unwrap_or(self.line.len());
+    if end_byte_index <= start_byte_index {
+      return S::default();
+    }
 
     #[allow(unsafe_code)]
     unsafe {
       // SAFETY: Since `indices` iterates over the `CharIndices` of `self`, we can guarantee
       // that the indices obtained from it will always be within the bounds of `self` and they
       // will always lie on UTF-8 sequence boundaries.
-      self.line.byte_slice_unchecked(start..end)
+      self
+        .line
+        .byte_slice_unchecked(start_byte_index..end_byte_index)
     }
   }
 }
