@@ -9,7 +9,7 @@ where
 {
   /// line is a string reference
   pub line: S,
-  last_char_index_to_byte_index: RefCell<(usize, usize)>,
+  last_char_index_to_byte_index: RefCell<(u32, u32)>,
   data: PhantomData<&'a S>,
 }
 
@@ -39,10 +39,11 @@ where
     let mut start_byte_index = None;
     let mut end_byte_index = None;
 
-    let (last_char_index, mut last_byte_index) =
+    let (last_char_index, last_byte_index) =
       *self.last_char_index_to_byte_index.borrow();
-    let mut char_index = last_char_index;
-    if start_char_index < last_char_index {
+    let mut last_byte_index = last_byte_index as usize;
+    let mut char_index = last_char_index as usize;
+    if start_char_index < last_char_index as usize {
       char_index = 0;
       last_byte_index = 0;
     }
@@ -60,7 +61,7 @@ where
       if char_index == end_char_index {
         end_byte_index = Some(byte_index + last_byte_index);
         *self.last_char_index_to_byte_index.borrow_mut() =
-          (end_char_index, byte_index + last_byte_index);
+          (end_char_index as u32, (byte_index + last_byte_index) as u32);
         break;
       }
       char_index += 1;
