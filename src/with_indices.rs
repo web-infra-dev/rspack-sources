@@ -34,30 +34,33 @@ where
       return S::default();
     }
 
+    let line_len = self.line.len();
+
     let mut start_byte_index = None;
     let mut end_byte_index = None;
 
     let (last_char_index, mut last_byte_index) =
       *self.last_char_index_to_byte_index.borrow();
     let mut char_index = last_char_index;
-    if last_char_index < start_char_index {
+    if start_char_index < last_char_index {
       char_index = 0;
       last_byte_index = 0;
     }
     for (byte_index, _) in self
       .line
-      .byte_slice(last_byte_index..self.line.len())
+      .byte_slice(last_byte_index..line_len)
       .char_indices()
     {
       if char_index == start_char_index {
-        start_byte_index = Some(byte_index);
+        start_byte_index = Some(byte_index + last_byte_index);
         if end_char_index == usize::MAX {
           break;
         }
       }
       if char_index == end_char_index {
-        end_byte_index = Some(byte_index);
-        *self.last_char_index_to_byte_index.borrow_mut() = (end_char_index, byte_index);
+        end_byte_index = Some(byte_index + last_byte_index);
+        *self.last_char_index_to_byte_index.borrow_mut() =
+          (end_char_index, byte_index);
         break;
       }
       char_index += 1;
@@ -68,11 +71,7 @@ where
     } else {
       return S::default();
     };
-
-    let end_byte_index = end_byte_index.unwrap_or(self.line.len());
-    if end_byte_index <= start_byte_index {
-      return S::default();
-    }
+    let end_byte_index = end_byte_index.unwrap_or(line_len);
 
     #[allow(unsafe_code)]
     unsafe {
@@ -124,6 +123,23 @@ mod tests {
     assert_eq!(
       WithIndices::new(Rope::from("fõøbα®")).substring(2, 5),
       "øbα"
+    );
+  }
+
+  #[test]
+  fn test_last_char_index_to_byte_index() {
+    let rope_with_indices = WithIndices::new(Rope::from("foobar"));
+    assert_eq!(
+      rope_with_indices.substring(0, 3),
+      "foo"
+    );
+    assert_eq!(
+      rope_with_indices.substring(3, 6),
+      "bar"
+    );
+    assert_eq!(
+      rope_with_indices.substring(0, usize::MAX),
+      "foobar"
     );
   }
 }
