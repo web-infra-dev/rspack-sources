@@ -60,7 +60,7 @@ where
       if char_index == end_char_index {
         end_byte_index = Some(byte_index + last_byte_index);
         *self.last_char_index_to_byte_index.borrow_mut() =
-          (end_char_index, byte_index);
+          (end_char_index, byte_index + last_byte_index);
         break;
       }
       char_index += 1;
@@ -129,17 +129,8 @@ mod tests {
   #[test]
   fn test_last_char_index_to_byte_index() {
     let rope_with_indices = WithIndices::new(Rope::from("foobar"));
-    assert_eq!(
-      rope_with_indices.substring(0, 3),
-      "foo"
-    );
-    assert_eq!(
-      rope_with_indices.substring(3, 6),
-      "bar"
-    );
-    assert_eq!(
-      rope_with_indices.substring(0, usize::MAX),
-      "foobar"
-    );
+    assert_eq!(rope_with_indices.substring(0, 3), "foo");
+    assert_eq!(rope_with_indices.substring(3, 6), "bar");
+    assert_eq!(rope_with_indices.substring(0, usize::MAX), "foobar");
   }
 }
