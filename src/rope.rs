@@ -6,6 +6,7 @@ use std::{
   hash::Hash,
   ops::{Bound, RangeBounds},
   rc::Rc,
+  str::Chars,
 };
 
 use crate::Error;
@@ -141,6 +142,22 @@ impl<'a> Rope<'a> {
           chunk_index: 0,
         },
       },
+    }
+  }
+
+  /// Returns an iterator over the [`char`]s of a string slice.
+  pub fn chars(&self) -> RopeChars<'_> {
+    match &self.repr {
+      Repr::Light(s) => RopeChars {
+        iters: vec![s.chars()],
+        left: 0,
+        right: 0
+      },
+      Repr::Full(data) => {
+        let iters = data.iter().map(|(s, _)| s.chars()).collect::<Vec<_>>();
+        let len = iters.len();
+        RopeChars { iters, left: 0, right: (len - 1) as u32 }
+      }
     }
   }
 
@@ -939,6 +956,46 @@ fn end_bound_to_range_end(end: Bound<&usize>) -> Option<usize> {
   }
 }
 
+pub struct RopeChars<'a> {
+  iters: Vec<Chars<'a>>,
+  left: u32,
+  right: u32
+}
+
+impl<'a> Iterator for RopeChars<'a> {
+  type Item = char;
+
+  #[inline]
+  fn next(&mut self) -> Option<char> {
+    let left = self.left as usize;
+    if left >= self.iters.len() {
+      return None;
+    }
+    if let Some(char) = self.iters[left].next() {
+      return Some(char);
+    } else {
+      self.left += 1;
+      self.next()
+    }
+  }
+}
+
+impl<'a> DoubleEndedIterator for RopeChars<'a> {
+  #[inline]
+  fn next_back(&mut self) -> Option<Self::Item> {
+    let right = self.right as usize;
+    if right == 0 {
+      return self.iters[right].next_back();
+    }
+    if let Some(char) = self.iters[right].next_back() {
+      return Some(char);
+    } else {
+      self.right -= 1;
+      self.next_back()
+    }
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use std::rc::Rc;
@@ -1243,5 +1300,39 @@ mod tests {
       .lines_impl(trailing_line_break_as_newline)
       .collect::<Vec<_>>();
     assert_eq!(lines, ["\n"]);
+  }
+
+  #[test]
+  fn chars() {
+    let rope = Rope::from("abc");
+    let mut chars = rope.chars();
+    assert_eq!(chars.next(), Some('a'));
+    assert_eq!(chars.next(), Some('b'));
+    assert_eq!(chars.next(), Some('c'));
+    assert_eq!(chars.next(), None);
+
+    let rope = Rope::from_iter(["a", "b", "c"]);
+    let mut chars = rope.chars();
+    assert_eq!(chars.next(), Some('a'));
+    assert_eq!(chars.next(), Some('b'));
+    assert_eq!(chars.next(), Some('c'));
+    assert_eq!(chars.next(), None);
+  }
+
+  #[test]
+  fn reverse_chars() {
+    let rope = Rope::from("abc");
+    let mut chars = rope.chars().rev();
+    assert_eq!(chars.next(), Some('c'));
+    assert_eq!(chars.next(), Some('b'));
+    assert_eq!(chars.next(), Some('a'));
+    assert_eq!(chars.next(), None);
+
+    let rope = Rope::from_iter(["a", "b", "c"]);
+    let mut chars = rope.chars().rev();
+    assert_eq!(chars.next(), Some('c'));
+    assert_eq!(chars.next(), Some('b'));
+    assert_eq!(chars.next(), Some('a'));
+    assert_eq!(chars.next(), None);
   }
 }
