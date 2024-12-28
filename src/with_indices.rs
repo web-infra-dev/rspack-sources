@@ -1,4 +1,4 @@
-use std::{cell::RefCell, marker::PhantomData};
+use std::{cell::Cell, marker::PhantomData};
 
 use crate::helpers::SourceText;
 
@@ -9,7 +9,7 @@ where
 {
   /// line is a string reference
   pub line: S,
-  last_char_index_to_byte_index: RefCell<(u32, u32)>,
+  last_char_index_to_byte_index: Cell<(u32, u32)>,
   data: PhantomData<&'a S>,
 }
 
@@ -20,7 +20,7 @@ where
   pub fn new(line: S) -> Self {
     Self {
       line,
-      last_char_index_to_byte_index: RefCell::new((0, 0)),
+      last_char_index_to_byte_index: Cell::new((0, 0)),
       data: PhantomData,
     }
   }
@@ -35,7 +35,6 @@ where
     }
 
     let line_len = self.line.len();
-
     let mut start_byte_index =
       if start_char_index == 0 { Some(0) } else { None };
     let mut end_byte_index = if end_char_index == usize::MAX {
@@ -45,32 +44,44 @@ where
     };
 
     let (last_char_index, last_byte_index) =
-      *self.last_char_index_to_byte_index.borrow();
+      self.last_char_index_to_byte_index.get();
     let mut byte_index = last_byte_index as usize;
     let mut char_index = last_char_index as usize;
 
     if start_char_index >= last_char_index as usize
       || end_char_index >= last_char_index as usize
     {
-      for char in self.line.byte_slice(byte_index..line_len).chars() {
+      #[allow(unsafe_code)]
+      let slice = unsafe {
+        // SAFETY: Since `indices` iterates over the `CharIndices` of `self`, we can guarantee
+        // that the indices obtained from it will always be within the bounds of `self` and they
+        // will always lie on UTF-8 sequence boundaries.
+        self.line.byte_slice_unchecked(byte_index..line_len)
+      };
+      for char in slice.chars() {
         if start_byte_index.is_some() && end_byte_index.is_some() {
           break;
         }
         if char_index == start_char_index {
           start_byte_index = Some(byte_index);
-          *self.last_char_index_to_byte_index.borrow_mut() =
-            (char_index as u32, byte_index as u32);
-        }
-        if char_index == end_char_index {
+        } else if char_index == end_char_index {
           end_byte_index = Some(byte_index);
-          *self.last_char_index_to_byte_index.borrow_mut() =
-            (char_index as u32, byte_index as u32);
+          self
+            .last_char_index_to_byte_index
+            .set((char_index as u32, byte_index as u32));
         }
         byte_index += char.len_utf8();
         char_index += 1;
       }
     } else {
-      for char in self.line.byte_slice(0..byte_index).chars().rev() {
+      #[allow(unsafe_code)]
+      let slice = unsafe {
+        // SAFETY: Since `indices` iterates over the `CharIndices` of `self`, we can guarantee
+        // that the indices obtained from it will always be within the bounds of `self` and they
+        // will always lie on UTF-8 sequence boundaries.
+        self.line.byte_slice_unchecked(0..byte_index)
+      };
+      for char in slice.chars().rev() {
         if start_byte_index.is_some() && end_byte_index.is_some() {
           break;
         }
@@ -78,10 +89,7 @@ where
         char_index -= 1;
         if char_index == end_char_index {
           end_byte_index = Some(byte_index);
-          *self.last_char_index_to_byte_index.borrow_mut() =
-            (char_index as u32, byte_index as u32);
-        }
-        if char_index == start_char_index {
+        } else if char_index == start_char_index {
           start_byte_index = Some(byte_index);
         }
       }
