@@ -146,6 +146,7 @@ impl<'a> Rope<'a> {
   }
 
   /// Returns an iterator over the [`char`]s of a string slice.
+  #[inline(always)]
   pub fn chars(&self) -> RopeChars<'_> {
     match &self.repr {
       Repr::Light(s) => RopeChars {

@@ -145,9 +145,10 @@ mod tests {
 
   #[test]
   fn test_last_char_index_to_byte_index() {
-    let rope_with_indices = WithIndices::new(Rope::from("foobar"));
-    assert_eq!(rope_with_indices.substring(0, 3), "foo");
-    assert_eq!(rope_with_indices.substring(3, 5), "ba");
-    assert_eq!(rope_with_indices.substring(0, 3), "foo");
+    let rope_with_indices =
+      WithIndices::new(Rope::from("hello world 你好世界"));
+    assert_eq!(rope_with_indices.substring(10, 13), "d 你");
+    assert_eq!(rope_with_indices.substring(13, 15), "好世");
+    assert_eq!(rope_with_indices.substring(10, 13), "d 你");
   }
 }
