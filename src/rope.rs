@@ -151,12 +151,16 @@ impl<'a> Rope<'a> {
       Repr::Light(s) => RopeChars {
         iters: vec![s.chars()],
         left: 0,
-        right: 0
+        right: 0,
       },
       Repr::Full(data) => {
         let iters = data.iter().map(|(s, _)| s.chars()).collect::<Vec<_>>();
         let len = iters.len();
-        RopeChars { iters, left: 0, right: (len - 1) as u32 }
+        RopeChars {
+          iters,
+          left: 0,
+          right: (len - 1) as u32,
+        }
       }
     }
   }
@@ -959,10 +963,10 @@ fn end_bound_to_range_end(end: Bound<&usize>) -> Option<usize> {
 pub struct RopeChars<'a> {
   iters: Vec<Chars<'a>>,
   left: u32,
-  right: u32
+  right: u32,
 }
 
-impl<'a> Iterator for RopeChars<'a> {
+impl Iterator for RopeChars<'_> {
   type Item = char;
 
   #[inline]
@@ -972,7 +976,7 @@ impl<'a> Iterator for RopeChars<'a> {
       return None;
     }
     if let Some(char) = self.iters[left].next() {
-      return Some(char);
+      Some(char)
     } else {
       self.left += 1;
       self.next()
@@ -980,7 +984,7 @@ impl<'a> Iterator for RopeChars<'a> {
   }
 }
 
-impl<'a> DoubleEndedIterator for RopeChars<'a> {
+impl DoubleEndedIterator for RopeChars<'_> {
   #[inline]
   fn next_back(&mut self) -> Option<Self::Item> {
     let right = self.right as usize;
@@ -988,7 +992,7 @@ impl<'a> DoubleEndedIterator for RopeChars<'a> {
       return self.iters[right].next_back();
     }
     if let Some(char) = self.iters[right].next_back() {
-      return Some(char);
+      Some(char)
     } else {
       self.right -= 1;
       self.next_back()
