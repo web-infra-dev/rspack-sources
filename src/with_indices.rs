@@ -62,20 +62,19 @@ where
         // will always lie on UTF-8 sequence boundaries.
         self.line.byte_slice_unchecked(byte_index..line_len)
       };
-      for char in slice.chars() {
+      for (byte_offset, _) in slice.char_indices() {
         if char_index == start_char_index {
-          start_byte_index = Some(byte_index);
+          start_byte_index = Some(byte_index + byte_offset);
           if end_byte_index.is_some() {
             break;
           }
         } else if char_index == end_char_index {
-          end_byte_index = Some(byte_index);
+          end_byte_index = Some(byte_index + byte_offset);
           self
             .last_char_index_to_byte_index
-            .set((char_index as u32, byte_index as u32));
+            .set((char_index as u32, (byte_index + byte_offset) as u32));
           break;
         }
-        byte_index += char.len_utf8();
         char_index += 1;
       }
     } else {
