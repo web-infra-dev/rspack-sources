@@ -43,6 +43,10 @@ where
       None
     };
 
+    if start_byte_index.is_some() && end_byte_index.is_some() {
+      return self.line.clone();
+    }
+
     let (last_char_index, last_byte_index) =
       self.last_char_index_to_byte_index.get();
     let mut byte_index = last_byte_index as usize;
@@ -59,16 +63,17 @@ where
         self.line.byte_slice_unchecked(byte_index..line_len)
       };
       for char in slice.chars() {
-        if start_byte_index.is_some() && end_byte_index.is_some() {
-          break;
-        }
         if char_index == start_char_index {
           start_byte_index = Some(byte_index);
+          if end_byte_index.is_some() {
+            break;
+          }
         } else if char_index == end_char_index {
           end_byte_index = Some(byte_index);
           self
             .last_char_index_to_byte_index
             .set((char_index as u32, byte_index as u32));
+          break;
         }
         byte_index += char.len_utf8();
         char_index += 1;
@@ -82,15 +87,16 @@ where
         self.line.byte_slice_unchecked(0..byte_index)
       };
       for char in slice.chars().rev() {
-        if start_byte_index.is_some() && end_byte_index.is_some() {
-          break;
-        }
         byte_index -= char.len_utf8();
         char_index -= 1;
         if char_index == end_char_index {
           end_byte_index = Some(byte_index);
+          if start_byte_index.is_some() {
+            break;
+          }
         } else if char_index == start_char_index {
           start_byte_index = Some(byte_index);
+          break;
         }
       }
     }
