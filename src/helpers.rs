@@ -1252,10 +1252,7 @@ pub trait SourceText<'a>: Default + Clone + ToString {
   fn ends_with(&self, value: &str) -> bool;
 
   /// Returns an iterator over the char indices in the text.
-  fn char_indices(&self) -> impl Iterator<Item = (usize, char)>;
-
-  /// Returns an iterator over the [`char`]s of a string slice.
-  fn chars(&self) -> impl DoubleEndedIterator<Item = char>;
+  fn char_indices(&self) -> impl DoubleEndedIterator<Item = (usize, char)>;
 
   /// Gets the byte at the specified index, if it exists.
   fn get_byte(&self, byte_index: usize) -> Option<u8>;
@@ -1292,12 +1289,8 @@ impl<'a> SourceText<'a> for Rope<'a> {
     (*self).ends_with(value)
   }
 
-  fn char_indices(&self) -> impl Iterator<Item = (usize, char)> {
+  fn char_indices(&self) -> impl DoubleEndedIterator<Item = (usize, char)> {
     self.char_indices()
-  }
-
-  fn chars(&self) -> impl DoubleEndedIterator<Item = char> {
-    (*self).chars()
   }
 
   fn byte_slice(&self, range: Range<usize>) -> Self {
@@ -1338,12 +1331,8 @@ impl<'a> SourceText<'a> for &'a str {
     (*self).ends_with(value)
   }
 
-  fn char_indices(&self) -> impl Iterator<Item = (usize, char)> {
+  fn char_indices(&self) -> impl DoubleEndedIterator<Item = (usize, char)> {
     (*self).char_indices()
-  }
-
-  fn chars(&self) -> impl DoubleEndedIterator<Item = char> {
-    (*self).chars()
   }
 
   fn byte_slice(&self, range: Range<usize>) -> Self {

@@ -2,11 +2,9 @@
 
 use std::{
   borrow::Cow,
-  collections::VecDeque,
   hash::Hash,
   ops::{Bound, RangeBounds},
   rc::Rc,
-  str::Chars,
 };
 
 use crate::Error;
@@ -135,32 +133,22 @@ impl<'a> Rope<'a> {
           iter: s.char_indices(),
         },
       },
-      Repr::Full(data) => CharIndices {
-        iter: CharIndicesEnum::Full {
-          chunks: data,
-          char_indices: VecDeque::new(),
-          chunk_index: 0,
-        },
-      },
-    }
-  }
+      Repr::Full(vec) => {
+        let right_byte_offset = vec.iter().map(|(s, _)| s.len() as u32).sum();
 
-  /// Returns an iterator over the [`char`]s of a string slice.
-  #[inline(always)]
-  pub fn chars(&self) -> RopeChars<'_> {
-    match &self.repr {
-      Repr::Light(s) => RopeChars {
-        iters: vec![s.chars()],
-        left: 0,
-        right: 0,
-      },
-      Repr::Full(data) => {
-        let iters = data.iter().map(|(s, _)| s.chars()).collect::<Vec<_>>();
-        let len = iters.len();
-        RopeChars {
-          iters,
-          left: 0,
-          right: (len - 1) as u32,
+        CharIndices {
+          iter: CharIndicesEnum::Full {
+            iters: vec
+              .iter()
+              .map(|(s, _)| s.char_indices())
+              .collect::<Vec<_>>(),
+            left_chunk_index: 0,
+            left_byte_offset: 0,
+            last_left_indice: None,
+            right_chunk_index: (vec.len() - 1) as u32,
+            right_byte_offset,
+            right_byte_offset_for: vec.len() as u32,
+          },
         }
       }
     }
@@ -680,9 +668,13 @@ enum CharIndicesEnum<'a, 'b> {
     iter: std::str::CharIndices<'b>,
   },
   Full {
-    chunks: &'a [(&'b str, usize)],
-    char_indices: VecDeque<(usize, char)>,
-    chunk_index: usize,
+    iters: Vec<std::str::CharIndices<'a>>,
+    left_chunk_index: u32,
+    left_byte_offset: u32,
+    last_left_indice: Option<(usize, char)>,
+    right_chunk_index: u32,
+    right_byte_offset: u32,
+    right_byte_offset_for: u32,
   },
 }
 
@@ -697,29 +689,59 @@ impl Iterator for CharIndices<'_, '_> {
     match &mut self.iter {
       CharIndicesEnum::Light { iter } => iter.next(),
       CharIndicesEnum::Full {
-        chunks,
-        char_indices,
-        chunk_index,
+        iters,
+        left_chunk_index,
+        left_byte_offset,
+        last_left_indice,
+        ..
       } => {
-        if let Some(item) = char_indices.pop_front() {
-          return Some(item);
-        }
-
-        if *chunk_index >= chunks.len() {
+        if (*left_chunk_index as usize) >= iters.len() {
           return None;
         }
-
-        // skip empty chunks
-        while *chunk_index < chunks.len() && chunks[*chunk_index].0.is_empty() {
-          *chunk_index += 1;
+        if let Some((byte_index, char)) =
+          iters[*left_chunk_index as usize].next()
+        {
+          *last_left_indice = Some((byte_index, char));
+          Some((byte_index + (*left_byte_offset as usize), char))
+        } else {
+          *left_chunk_index += 1;
+          if let Some((byte_index, char)) = last_left_indice.take() {
+            *left_byte_offset =
+              *left_byte_offset + byte_index as u32 + char.len_utf8() as u32;
+          }
+          self.next()
         }
+      }
+    }
+  }
+}
 
-        let (chunk, start_pos) = chunks[*chunk_index];
-
-        char_indices
-          .extend(chunk.char_indices().map(|(i, c)| (start_pos + i, c)));
-        *chunk_index += 1;
-        char_indices.pop_front()
+impl DoubleEndedIterator for CharIndices<'_, '_> {
+  fn next_back(&mut self) -> Option<Self::Item> {
+    match &mut self.iter {
+      CharIndicesEnum::Light { iter } => iter.next_back(),
+      CharIndicesEnum::Full {
+        iters,
+        right_chunk_index,
+        right_byte_offset,
+        right_byte_offset_for,
+        ..
+      } => {
+        if let Some((byte_index, char)) =
+          iters[*right_chunk_index as usize].next_back()
+        {
+          if *right_byte_offset_for != *right_chunk_index {
+            *right_byte_offset =
+              *right_byte_offset - byte_index as u32 - char.len_utf8() as u32;
+            *right_byte_offset_for = *right_chunk_index;
+          }
+          Some((byte_index + (*right_byte_offset as usize), char))
+        } else if *right_chunk_index > 0 {
+          *right_chunk_index -= 1;
+          self.next_back()
+        } else {
+          None
+        }
       }
     }
   }
@@ -961,46 +983,6 @@ fn end_bound_to_range_end(end: Bound<&usize>) -> Option<usize> {
   }
 }
 
-pub struct RopeChars<'a> {
-  iters: Vec<Chars<'a>>,
-  left: u32,
-  right: u32,
-}
-
-impl Iterator for RopeChars<'_> {
-  type Item = char;
-
-  #[inline]
-  fn next(&mut self) -> Option<char> {
-    let left = self.left as usize;
-    if left >= self.iters.len() {
-      return None;
-    }
-    if let Some(char) = self.iters[left].next() {
-      Some(char)
-    } else {
-      self.left += 1;
-      self.next()
-    }
-  }
-}
-
-impl DoubleEndedIterator for RopeChars<'_> {
-  #[inline]
-  fn next_back(&mut self) -> Option<Self::Item> {
-    let right = self.right as usize;
-    if right == 0 {
-      return self.iters[right].next_back();
-    }
-    if let Some(char) = self.iters[right].next_back() {
-      Some(char)
-    } else {
-      self.right -= 1;
-      self.next_back()
-    }
-  }
-}
-
 #[cfg(test)]
 mod tests {
   use std::rc::Rc;
@@ -1231,6 +1213,29 @@ mod tests {
   }
 
   #[test]
+  fn reverse_char_indices() {
+    let mut a = Rope::new();
+    a.add("abc");
+    a.add("def");
+    assert_eq!(
+      a.char_indices().rev().collect::<Vec<_>>(),
+      "abcdef".char_indices().rev().collect::<Vec<_>>()
+    );
+
+    let mut a = Rope::new();
+    a.add("こんにちは");
+    assert_eq!(
+      a.char_indices().rev().collect::<Vec<_>>(),
+      "こんにちは".char_indices().rev().collect::<Vec<_>>()
+    );
+    a.add("世界");
+    assert_eq!(
+      a.char_indices().rev().collect::<Vec<_>>(),
+      "こんにちは世界".char_indices().rev().collect::<Vec<_>>()
+    );
+  }
+
+  #[test]
   fn lines1() {
     let rope = Rope::from("abc");
     let lines = rope.lines().collect::<Vec<_>>();
@@ -1305,39 +1310,5 @@ mod tests {
       .lines_impl(trailing_line_break_as_newline)
       .collect::<Vec<_>>();
     assert_eq!(lines, ["\n"]);
-  }
-
-  #[test]
-  fn chars() {
-    let rope = Rope::from("abc");
-    let mut chars = rope.chars();
-    assert_eq!(chars.next(), Some('a'));
-    assert_eq!(chars.next(), Some('b'));
-    assert_eq!(chars.next(), Some('c'));
-    assert_eq!(chars.next(), None);
-
-    let rope = Rope::from_iter(["a", "b", "c"]);
-    let mut chars = rope.chars();
-    assert_eq!(chars.next(), Some('a'));
-    assert_eq!(chars.next(), Some('b'));
-    assert_eq!(chars.next(), Some('c'));
-    assert_eq!(chars.next(), None);
-  }
-
-  #[test]
-  fn reverse_chars() {
-    let rope = Rope::from("abc");
-    let mut chars = rope.chars().rev();
-    assert_eq!(chars.next(), Some('c'));
-    assert_eq!(chars.next(), Some('b'));
-    assert_eq!(chars.next(), Some('a'));
-    assert_eq!(chars.next(), None);
-
-    let rope = Rope::from_iter(["a", "b", "c"]);
-    let mut chars = rope.chars().rev();
-    assert_eq!(chars.next(), Some('c'));
-    assert_eq!(chars.next(), Some('b'));
-    assert_eq!(chars.next(), Some('a'));
-    assert_eq!(chars.next(), None);
   }
 }

@@ -49,7 +49,7 @@ where
 
     let (last_char_index, last_byte_index) =
       self.last_char_index_to_byte_index.get();
-    let mut byte_index = last_byte_index as usize;
+    let byte_index = last_byte_index as usize;
     let mut char_index = last_char_index as usize;
 
     if start_char_index >= last_char_index as usize
@@ -85,18 +85,17 @@ where
         // will always lie on UTF-8 sequence boundaries.
         self.line.byte_slice_unchecked(0..byte_index)
       };
-      for char in slice.chars().rev() {
-        byte_index -= char.len_utf8();
-        char_index -= 1;
+      for (byte_index, char) in slice.char_indices().rev() {
         if char_index == end_char_index {
-          end_byte_index = Some(byte_index);
+          end_byte_index = Some(byte_index + char.len_utf8());
           if start_byte_index.is_some() {
             break;
           }
         } else if char_index == start_char_index {
-          start_byte_index = Some(byte_index);
+          start_byte_index = Some(byte_index + char.len_utf8());
           break;
         }
+        char_index -= 1;
       }
     }
 
