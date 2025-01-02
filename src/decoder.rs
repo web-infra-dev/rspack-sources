@@ -65,42 +65,39 @@ impl Iterator for MappingsDecoder<'_> {
         continue;
       }
       if (value & COM) != 0 {
-        let mapping = match self.current_data_pos {
-          1 => Some(Mapping {
-            generated_line: self.generated_line,
-            generated_column: self.current_data[0],
-            original: None,
-          }),
-          4 => Some(Mapping {
-            generated_line: self.generated_line,
-            generated_column: self.current_data[0],
-            original: Some(OriginalLocation {
-              source_index: self.current_data[1],
-              original_line: self.current_data[2],
-              original_column: self.current_data[3],
-              name_index: None,
-            }),
-          }),
-          5 => Some(Mapping {
-            generated_line: self.generated_line,
-            generated_column: self.current_data[0],
-            original: Some(OriginalLocation {
-              source_index: self.current_data[1],
-              original_line: self.current_data[2],
-              original_column: self.current_data[3],
-              name_index: Some(self.current_data[4]),
-            }),
-          }),
-          _ => None,
+        let mut mapping = Mapping {
+          generated_line: self.generated_line,
+          generated_column: self.current_data[0],
+          original: None,
         };
+        let current_data_pos = self.current_data_pos;
         self.current_data_pos = 0;
         if value == SEM {
           self.generated_line += 1;
           self.current_data[0] = 0;
         }
-        if mapping.is_some() {
-          return mapping;
-        }
+        match current_data_pos {
+          1 => return Some(mapping),
+          4 => {
+            mapping.original = Some(OriginalLocation {
+              source_index: self.current_data[1],
+              original_line: self.current_data[2],
+              original_column: self.current_data[3],
+              name_index: None,
+            });
+            return Some(mapping);
+          }
+          5 => {
+            mapping.original = Some(OriginalLocation {
+              source_index: self.current_data[1],
+              original_line: self.current_data[2],
+              original_column: self.current_data[3],
+              name_index: Some(self.current_data[4]),
+            });
+            return Some(mapping);
+          }
+          _ => (),
+        };
       } else if (value & CONTINUATION_BIT) == 0 {
         // last sextet
         self.current_value |= (value as i64) << self.current_value_pos;
