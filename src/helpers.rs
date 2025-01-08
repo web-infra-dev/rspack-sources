@@ -151,7 +151,7 @@ where
     if let Some(c) = self.source.get_byte(self.index) {
       let start = self.index;
       let mut c = char::from(c);
-      while c != '\n' && c != ';' && c != '{' && c != '}' {
+      while c != '\n' && c != ';' && c != '{' && c != '}' && c != ' ' {
         self.index += 1;
         if let Some(ch) = self.source.get_byte(self.index) {
           c = char::from(ch);
