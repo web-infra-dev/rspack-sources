@@ -206,6 +206,8 @@ pub struct SourceMap {
   mappings: Arc<str>,
   #[serde(rename = "sourceRoot", skip_serializing_if = "Option::is_none")]
   source_root: Option<Arc<str>>,
+  #[serde(rename = "debugId", skip_serializing_if = "Option::is_none")]
+  debug_id: Option<Arc<str>>,
 }
 
 impl Hash for SourceMap {
@@ -241,6 +243,7 @@ impl SourceMap {
       sources_content: sources_content.into(),
       names: names.into(),
       source_root: None,
+      debug_id: None,
     }
   }
 
@@ -321,6 +324,16 @@ impl SourceMap {
   pub fn set_source_root<T: Into<Arc<str>>>(&mut self, source_root: Option<T>) {
     self.source_root = source_root.map(Into::into);
   }
+
+  /// Set the debug_id field in [SourceMap].
+  pub fn set_debug_id<T: Into<Arc<str>>>(&mut self, debug_id: Option<T>) {
+    self.debug_id = debug_id.map(Into::into);
+  }
+
+  /// Get the debug_id field in [SourceMap].
+  pub fn get_debug_id(&self) -> Option<&str> {
+    self.debug_id.as_deref()
+  }
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -333,6 +346,8 @@ struct RawSourceMap {
   pub sources_content: Option<Vec<Option<String>>>,
   pub names: Option<Vec<Option<String>>>,
   pub mappings: String,
+  #[serde(rename = "debugId")]
+  pub debug_id: Option<String>,
 }
 
 impl RawSourceMap {
@@ -411,6 +426,7 @@ impl TryFrom<RawSourceMap> for SourceMap {
       .collect::<Vec<_>>()
       .into();
     let source_root = raw.source_root.map(Into::into);
+    let debug_id = raw.debug_id.map(Into::into);
 
     Ok(Self {
       version: 3,
@@ -420,6 +436,7 @@ impl TryFrom<RawSourceMap> for SourceMap {
       sources_content,
       names,
       source_root,
+      debug_id,
     })
   }
 }
