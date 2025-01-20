@@ -50,11 +50,11 @@ where
     let (last_char_index, last_byte_index) =
       self.last_char_index_to_byte_index.get();
     let byte_index = last_byte_index as usize;
-    let mut char_index = last_char_index as usize;
 
     if start_char_index >= last_char_index as usize
       || end_char_index >= last_char_index as usize
     {
+      let mut char_index = last_char_index as usize;
       #[allow(unsafe_code)]
       let slice = unsafe {
         // SAFETY: Since `indices` iterates over the `CharIndices` of `self`, we can guarantee
@@ -77,7 +77,12 @@ where
         }
         char_index += 1;
       }
-    } else {
+    }
+
+    if start_char_index < last_char_index as usize
+      || end_char_index < last_char_index as usize
+    {
+      let mut char_index = last_char_index as usize;
       #[allow(unsafe_code)]
       let slice = unsafe {
         // SAFETY: Since `indices` iterates over the `CharIndices` of `self`, we can guarantee
@@ -162,5 +167,11 @@ mod tests {
     assert_eq!(rope_with_indices.substring(10, 13), "d 你");
     assert_eq!(rope_with_indices.substring(13, 15), "好世");
     assert_eq!(rope_with_indices.substring(10, 13), "d 你");
+
+    let rope_with_indices =
+      WithIndices::new(Rope::from("export const answer = 42;\n"));
+    assert_eq!(rope_with_indices.substring(7, 13), "const ");
+    assert_eq!(rope_with_indices.substring(13, 19), "answer");
+    assert_eq!(rope_with_indices.substring(7, 22), "const answer = ");
   }
 }

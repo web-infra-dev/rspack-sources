@@ -1,6 +1,7 @@
 use std::{
   borrow::{BorrowMut, Cow},
   cell::{OnceCell, RefCell},
+  fmt::Debug,
   marker::PhantomData,
   ops::Range,
 };
@@ -1243,7 +1244,7 @@ pub fn stream_and_get_source_and_map<'a, S: StreamChunks>(
 }
 
 /// Represents a text source that can be manipulated for source mapping purposes.
-pub trait SourceText<'a>: Default + Clone + ToString {
+pub trait SourceText<'a>: Default + Clone + ToString + Debug {
   /// Splits the text into lines, returning an iterator over each line.
   /// Each line includes its line ending character if present.
   fn split_into_lines(&self) -> impl Iterator<Item = Self>;
