@@ -1,6 +1,7 @@
 use std::{
   borrow::{BorrowMut, Cow},
   cell::{OnceCell, RefCell},
+  fmt::Debug,
   marker::PhantomData,
   ops::Range,
 };
@@ -1243,7 +1244,7 @@ pub fn stream_and_get_source_and_map<'a, S: StreamChunks>(
 }
 
 /// Represents a text source that can be manipulated for source mapping purposes.
-pub trait SourceText<'a>: Default + Clone + ToString {
+pub trait SourceText<'a>: Default + Clone + ToString + Debug {
   /// Splits the text into lines, returning an iterator over each line.
   /// Each line includes its line ending character if present.
   fn split_into_lines(&self) -> impl Iterator<Item = Self>;
@@ -1252,7 +1253,7 @@ pub trait SourceText<'a>: Default + Clone + ToString {
   fn ends_with(&self, value: &str) -> bool;
 
   /// Returns an iterator over the char indices in the text.
-  fn char_indices(&self) -> impl Iterator<Item = (usize, char)>;
+  fn char_indices(&self) -> impl DoubleEndedIterator<Item = (usize, char)>;
 
   /// Gets the byte at the specified index, if it exists.
   fn get_byte(&self, byte_index: usize) -> Option<u8>;
@@ -1289,7 +1290,7 @@ impl<'a> SourceText<'a> for Rope<'a> {
     (*self).ends_with(value)
   }
 
-  fn char_indices(&self) -> impl Iterator<Item = (usize, char)> {
+  fn char_indices(&self) -> impl DoubleEndedIterator<Item = (usize, char)> {
     self.char_indices()
   }
 
@@ -1331,7 +1332,7 @@ impl<'a> SourceText<'a> for &'a str {
     (*self).ends_with(value)
   }
 
-  fn char_indices(&self) -> impl Iterator<Item = (usize, char)> {
+  fn char_indices(&self) -> impl DoubleEndedIterator<Item = (usize, char)> {
     (*self).char_indices()
   }
 
