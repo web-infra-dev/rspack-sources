@@ -112,6 +112,7 @@ impl<T: Source> ReplaceSource<T> {
   }
 
   /// Create a replacement with content at `[start, end)`.
+  #[inline]
   pub fn replace(
     &mut self,
     start: u32,
@@ -663,10 +664,14 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
 
     // Insert remaining replacements content split into chunks by lines
     let mut line = result.generated_line as i64 + generated_line_offset;
-    let matches: Vec<Rope> = split_into_lines(&remainder).collect();
-    for (m, content_line) in matches.iter().enumerate() {
+    let lines: Vec<Rope> = split_into_lines(&remainder).collect();
+    let lines_len = lines.len();
+    for (m, content_line) in lines.into_iter().enumerate() {
+      let newline = content_line.ends_with("\n");
+      let content_line_len = content_line.len();
+
       on_chunk(
-        Some(content_line.clone()),
+        Some(content_line),
         Mapping {
           generated_line: line as u32,
           generated_column: ((result.generated_column as i64)
@@ -679,11 +684,11 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
         },
       );
 
-      if m == matches.len() - 1 && !content_line.ends_with("\n") {
+      if m == lines_len - 1 && !newline {
         if generated_column_offset_line == line {
-          generated_column_offset += content_line.len() as i64;
+          generated_column_offset += content_line_len as i64;
         } else {
-          generated_column_offset = content_line.len() as i64;
+          generated_column_offset = content_line_len as i64;
           generated_column_offset_line = line;
         }
       } else {
