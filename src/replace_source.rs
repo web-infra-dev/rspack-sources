@@ -1,7 +1,6 @@
 use std::{
   borrow::Cow,
   cell::RefCell,
-  collections::BTreeSet,
   hash::{Hash, Hasher},
   sync::Arc,
 };
@@ -38,7 +37,7 @@ use crate::{
 /// ```
 pub struct ReplaceSource<T> {
   inner: Arc<T>,
-  replacements: BTreeSet<(Replacement, u32)>,
+  replacements: Vec<Replacement>,
 }
 
 /// Enforce replacement order when two replacement start and end are both equal
@@ -60,14 +59,16 @@ struct Replacement {
   content: String,
   name: Option<String>,
   enforce: ReplacementEnforce,
+  index: u32,
 }
 
 impl Ord for Replacement {
   fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-    (self.start, self.end, self.enforce).cmp(&(
+    (self.start, self.end, self.enforce, self.index).cmp(&(
       other.start,
       other.end,
       other.enforce,
+      other.index,
     ))
   }
 }
@@ -78,30 +79,12 @@ impl PartialOrd for Replacement {
   }
 }
 
-impl Replacement {
-  pub fn new(
-    start: u32,
-    end: u32,
-    content: String,
-    name: Option<String>,
-    enforce: ReplacementEnforce,
-  ) -> Self {
-    Self {
-      start,
-      end,
-      content,
-      name,
-      enforce,
-    }
-  }
-}
-
 impl<T> ReplaceSource<T> {
   /// Create a [ReplaceSource].
   pub fn new(source: T) -> Self {
     Self {
       inner: Arc::new(source),
-      replacements: BTreeSet::new(),
+      replacements: Vec::new(),
     }
   }
 
@@ -136,16 +119,13 @@ impl<T: Source> ReplaceSource<T> {
     content: &str,
     name: Option<&str>,
   ) {
-    self.replacements.insert((
-      Replacement::new(
-        start,
-        end,
-        content.into(),
-        name.map(|s| s.into()),
-        ReplacementEnforce::Normal,
-      ),
-      self.replacements.len() as u32,
-    ));
+    self.replace_with_enforce(
+      start,
+      end,
+      content,
+      name,
+      ReplacementEnforce::Normal,
+    );
   }
 
   /// Create a replacement with content at `[start, end)`, with ReplacementEnforce.
@@ -157,16 +137,32 @@ impl<T: Source> ReplaceSource<T> {
     name: Option<&str>,
     enforce: ReplacementEnforce,
   ) {
-    self.replacements.insert((
-      Replacement::new(
-        start,
-        end,
-        content.into(),
-        name.map(|s| s.into()),
-        enforce,
-      ),
-      self.replacements.len() as u32,
-    ));
+    let replacement = Replacement {
+      start,
+      end,
+      content: content.into(),
+      name: name.map(|s| s.into()),
+      enforce,
+      index: self.replacements.len() as u32,
+    };
+
+    if let Some(last) = self.replacements.last() {
+      let cmp = replacement.cmp(last);
+      if cmp == std::cmp::Ordering::Greater || cmp == std::cmp::Ordering::Equal
+      {
+        self.replacements.push(replacement);
+      } else {
+        let insert_at = match self
+          .replacements
+          .binary_search_by(|other| other.cmp(&replacement))
+        {
+          Ok(insert_at) | Err(insert_at) => insert_at,
+        };
+        self.replacements.insert(insert_at, replacement);
+      }
+    } else {
+      self.replacements.push(replacement);
+    }
   }
 }
 
@@ -182,12 +178,12 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for ReplaceSource<T> {
     let max_len = self
       .replacements
       .iter()
-      .map(|(replacement, _)| replacement.content.len())
+      .map(|replacement| replacement.content.len())
       .sum::<usize>()
       + inner_source_code.len();
     let mut source_code = String::with_capacity(max_len);
     let mut inner_pos = 0;
-    for (replacement, _) in self.replacements.iter() {
+    for replacement in self.replacements.iter() {
       if inner_pos < replacement.start {
         let end_pos = (replacement.start as usize).min(inner_source_code.len());
         source_code.push_str(&inner_source_code[inner_pos as usize..end_pos]);
@@ -217,7 +213,7 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for ReplaceSource<T> {
     }
     let mut source_code = Rope::new();
     let mut inner_pos = 0;
-    for (replacement, _) in self.replacements.iter() {
+    for replacement in self.replacements.iter() {
       if inner_pos < replacement.start {
         let end_pos = (replacement.start as usize).min(inner_source_code.len());
         let slice = inner_source_code.byte_slice(inner_pos as usize..end_pos);
@@ -314,7 +310,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
     on_name: crate::helpers::OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {
     let on_name = RefCell::new(on_name);
-    let mut replacements = self.replacements.iter().map(|(r, _)| r);
+    let mut replacements = self.replacements.iter();
     let mut pos: u32 = 0;
     let mut replacement_end: Option<u32> = None;
     let mut next_replacement = replacements.next();
@@ -722,8 +718,8 @@ impl<T: Source> Clone for ReplaceSource<T> {
 impl<T: Hash> Hash for ReplaceSource<T> {
   fn hash<H: Hasher>(&self, state: &mut H) {
     "ReplaceSource".hash(state);
-    for (repl, _) in self.replacements.iter() {
-      repl.hash(state);
+    for replacement in self.replacements.iter() {
+      replacement.hash(state);
     }
     self.inner.hash(state);
   }
@@ -1137,7 +1133,7 @@ return <div>{data.foo}</div>
     assert_eq!(source.map(&MapOptions::default()), None);
     let mut hasher = twox_hash::XxHash64::default();
     source.hash(&mut hasher);
-    assert_eq!(format!("{:x}", hasher.finish()), "5781cda25d360a42");
+    assert_eq!(format!("{:x}", hasher.finish()), "aec81d0020320dd3");
   }
 
   #[test]
