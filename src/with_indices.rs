@@ -1,4 +1,4 @@
-use std::{cell::Cell, marker::PhantomData};
+use std::{cell::OnceCell, marker::PhantomData};
 
 use crate::helpers::SourceText;
 
@@ -9,7 +9,8 @@ where
 {
   /// line is a string reference
   pub line: S,
-  last_char_index_to_byte_index: Cell<(u32, u32)>,
+  /// the byte position of each `char` in `line` string slice .
+  pub indices_indexes: OnceCell<Vec<usize>>,
   data: PhantomData<&'a S>,
 }
 
@@ -19,97 +20,32 @@ where
 {
   pub fn new(line: S) -> Self {
     Self {
+      indices_indexes: OnceCell::new(),
       line,
-      last_char_index_to_byte_index: Cell::new((0, 0)),
       data: PhantomData,
     }
   }
 
-  pub(crate) fn substring(
-    &self,
-    start_char_index: usize,
-    end_char_index: usize,
-  ) -> S {
-    if end_char_index <= start_char_index {
+  /// substring::SubString with cache
+  pub(crate) fn substring(&self, start_index: usize, end_index: usize) -> S {
+    if end_index <= start_index {
       return S::default();
     }
 
-    let line_len = self.line.len();
-    let mut start_byte_index =
-      if start_char_index == 0 { Some(0) } else { None };
-    let mut end_byte_index = if end_char_index == usize::MAX {
-      Some(line_len)
-    } else {
-      None
-    };
+    let indices_indexes = self.indices_indexes.get_or_init(|| {
+      self.line.char_indices().map(|(i, _)| i).collect::<Vec<_>>()
+    });
 
-    if start_byte_index.is_some() && end_byte_index.is_some() {
-      return self.line.clone();
-    }
-
-    let (last_char_index, last_byte_index) =
-      self.last_char_index_to_byte_index.get();
-    let byte_index = last_byte_index as usize;
-    let mut char_index = last_char_index as usize;
-
-    if start_char_index >= last_char_index as usize
-      || end_char_index >= last_char_index as usize
-    {
-      #[allow(unsafe_code)]
-      let slice = unsafe {
-        // SAFETY: Since `indices` iterates over the `CharIndices` of `self`, we can guarantee
-        // that the indices obtained from it will always be within the bounds of `self` and they
-        // will always lie on UTF-8 sequence boundaries.
-        self.line.byte_slice_unchecked(byte_index..line_len)
-      };
-      for (byte_offset, _) in slice.char_indices() {
-        if char_index == start_char_index {
-          start_byte_index = Some(byte_index + byte_offset);
-          if end_byte_index.is_some() {
-            break;
-          }
-        } else if char_index == end_char_index {
-          end_byte_index = Some(byte_index + byte_offset);
-          self
-            .last_char_index_to_byte_index
-            .set((char_index as u32, (byte_index + byte_offset) as u32));
-          break;
-        }
-        char_index += 1;
-      }
-    } else {
-      #[allow(unsafe_code)]
-      let slice = unsafe {
-        // SAFETY: Since `indices` iterates over the `CharIndices` of `self`, we can guarantee
-        // that the indices obtained from it will always be within the bounds of `self` and they
-        // will always lie on UTF-8 sequence boundaries.
-        self.line.byte_slice_unchecked(0..byte_index)
-      };
-      for (byte_index, char) in slice.char_indices().rev() {
-        if char_index == end_char_index {
-          end_byte_index = Some(byte_index + char.len_utf8());
-          if start_byte_index.is_some() {
-            break;
-          }
-        } else if char_index == start_char_index {
-          start_byte_index = Some(byte_index + char.len_utf8());
-          break;
-        }
-        char_index -= 1;
-      }
-    }
-
-    let start_byte_index = start_byte_index.unwrap_or(line_len);
-    let end_byte_index = end_byte_index.unwrap_or(line_len);
+    let str_len = self.line.len();
+    let start = *indices_indexes.get(start_index).unwrap_or(&str_len);
+    let end = *indices_indexes.get(end_index).unwrap_or(&str_len);
 
     #[allow(unsafe_code)]
     unsafe {
       // SAFETY: Since `indices` iterates over the `CharIndices` of `self`, we can guarantee
       // that the indices obtained from it will always be within the bounds of `self` and they
       // will always lie on UTF-8 sequence boundaries.
-      self
-        .line
-        .byte_slice_unchecked(start_byte_index..end_byte_index)
+      self.line.byte_slice_unchecked(start..end)
     }
   }
 }
@@ -153,14 +89,5 @@ mod tests {
       WithIndices::new(Rope::from("fõøbα®")).substring(2, 5),
       "øbα"
     );
-  }
-
-  #[test]
-  fn test_last_char_index_to_byte_index() {
-    let rope_with_indices =
-      WithIndices::new(Rope::from("hello world 你好世界"));
-    assert_eq!(rope_with_indices.substring(10, 13), "d 你");
-    assert_eq!(rope_with_indices.substring(13, 15), "好世");
-    assert_eq!(rope_with_indices.substring(10, 13), "d 你");
   }
 }
