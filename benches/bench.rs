@@ -1,5 +1,7 @@
 #![allow(missing_docs)]
 
+mod bench_large_replace_source;
+
 use std::collections::HashMap;
 
 #[cfg(not(codspeed))]
@@ -12,6 +14,8 @@ use rspack_sources::{
   BoxSource, CachedSource, ConcatSource, MapOptions, ReplaceSource, Source,
   SourceExt, SourceMap, SourceMapSource, SourceMapSourceOptions,
 };
+
+use bench_large_replace_source::benchmark_large_replace_source;
 
 const HELLOWORLD_JS: &str = include_str!(concat!(
   env!("CARGO_MANIFEST_DIR"),
@@ -278,6 +282,9 @@ fn bench_rspack_sources(criterion: &mut Criterion) {
     "concat_generate_string_as_key",
     benchmark_concat_generate_string_as_key,
   );
+
+  group.bench_function("complex_1", benchmark_large_replace_source);
+
   group.finish();
 }
 
