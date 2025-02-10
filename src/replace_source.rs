@@ -17,6 +17,7 @@ use crate::{
   },
   linear_map::LinearMap,
   rope::Rope,
+  with_indices::WithIndices,
   MapOptions, Mapping, OriginalLocation, Source, SourceMap,
 };
 
@@ -321,27 +322,19 @@ impl<T: std::fmt::Debug> std::fmt::Debug for ReplaceSource<T> {
 
 enum SourceContent<'a> {
   Raw(Rope<'a>),
-  Lines(Vec<Rope<'a>>),
+  Lines(Vec<WithIndices<'a, Rope<'a>>>),
 }
 
-fn check_content_at_position(
-  lines: &[Rope],
+fn check_content_at_position<'a>(
+  lines: &[WithIndices<'a, Rope<'a>>],
   line: u32,
   column: u32,
   expected: Rope, // FIXME: memory
 ) -> bool {
   if let Some(line) = lines.get(line as usize - 1) {
-    match line
-      .char_indices()
-      .nth(column as usize)
-      .map(|(byte_index, _)| byte_index)
-    {
-      Some(byte_index) => {
-        line.get_byte_slice(byte_index..byte_index + expected.len())
-          == Some(expected)
-      }
-      None => false,
-    }
+    line
+      .substring(column as usize, usize::MAX)
+      .starts_with(&expected)
   } else {
     false
   }
@@ -404,7 +397,9 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
         {
           match source_content {
             SourceContent::Raw(source) => {
-              let lines = split_into_lines(source).collect::<Vec<_>>();
+              let lines = split_into_lines(source)
+                .map(WithIndices::new)
+                .collect::<Vec<_>>();
               let matched =
                 check_content_at_position(&lines, line, column, expected_chunk);
               *source_content = SourceContent::Lines(lines);

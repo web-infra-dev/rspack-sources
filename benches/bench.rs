@@ -283,7 +283,8 @@ fn bench_rspack_sources(criterion: &mut Criterion) {
     benchmark_concat_generate_string_as_key,
   );
 
-  group.bench_function("complex_1", benchmark_complex_replace_source);
+  group
+    .bench_function("complex_replace_source", benchmark_complex_replace_source);
 
   group.finish();
 }

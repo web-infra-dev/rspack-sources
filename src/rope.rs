@@ -145,15 +145,82 @@ impl<'a> Rope<'a> {
   }
 
   /// Returns whether the rope starts with the given string.
-  #[inline]
-  pub fn starts_with(&self, value: &str) -> bool {
+  pub fn starts_with(&self, value: &Rope) -> bool {
     match &self.repr {
-      Repr::Light(s) => s.starts_with(value),
+      Repr::Light(s) => match &value.repr {
+        Repr::Light(other) => s.starts_with(other),
+        Repr::Full(data) => {
+          let mut remaining = *s;
+          for (chunk, _) in data.iter() {
+            if remaining.starts_with(chunk) {
+              remaining = &remaining[chunk.len()..];
+            } else {
+              return false;
+            }
+          }
+          remaining.is_empty()
+        }
+      },
       Repr::Full(data) => {
-        if let Some((first, _)) = data.first() {
-          first.starts_with(value)
-        } else {
-          false
+        match &value.repr {
+          Repr::Light(other) => {
+            // Check if the concatenated chunks of `data` start with `other`
+            let mut remaining_other = *other;
+            for (chunk, _) in data.iter() {
+              if remaining_other.is_empty() {
+                return true;
+              }
+              if chunk.starts_with(remaining_other) {
+                return true;
+              }
+              if remaining_other.starts_with(chunk) {
+                remaining_other = &remaining_other[chunk.len()..];
+              } else {
+                return false;
+              }
+            }
+            remaining_other.is_empty()
+          }
+          Repr::Full(other_data) => {
+            // Iterate through both `data` and `other_data` to check if `data` starts with `other_data`
+            let mut self_iter = data.iter();
+            let mut other_iter = other_data.iter();
+
+            let mut remaining_self = "";
+            let mut remaining_other = "";
+
+            loop {
+              // If `remaining_other` is empty, try to fill it with the next chunk from `other_data`
+              if remaining_other.is_empty() {
+                if let Some((other_chunk, _)) = other_iter.next() {
+                  remaining_other = other_chunk;
+                } else {
+                  // If there are no more chunks in `other_data`, we have matched everything
+                  return true;
+                }
+              }
+
+              // If `remaining_self` is empty, try to fill it with the next chunk from `data`
+              if remaining_self.is_empty() {
+                if let Some((self_chunk, _)) = self_iter.next() {
+                  remaining_self = self_chunk;
+                } else {
+                  // If there are no more chunks in `data`, but `other_data` still has chunks, it cannot match
+                  return false;
+                }
+              }
+
+              // Compare the remaining parts
+              let min_len = remaining_self.len().min(remaining_other.len());
+              if remaining_self[..min_len] != remaining_other[..min_len] {
+                return false;
+              }
+
+              // Remove the compared parts
+              remaining_self = &remaining_self[min_len..];
+              remaining_other = &remaining_other[min_len..];
+            }
+          }
         }
       }
     }
