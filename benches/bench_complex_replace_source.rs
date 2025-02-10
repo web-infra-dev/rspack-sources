@@ -1002,24 +1002,24 @@ pub fn benchmark_complex_replace_source(b: &mut Bencher) {
     "react__WEBPACK_IMPORTED_MODULE_0__.createElement",
     None,
   );
-  // source.replace(
-  //   57234,
-  //   57249,
-  //   "react__WEBPACK_IMPORTED_MODULE_0__.createElement",
-  //   None,
-  // );
-  // source.replace(
-  //   57373,
-  //   57388,
-  //   "react__WEBPACK_IMPORTED_MODULE_0__.createElement",
-  //   None,
-  // );
-  // source.replace(
-  //   57484,
-  //   57499,
-  //   "react__WEBPACK_IMPORTED_MODULE_0__.createElement",
-  //   None,
-  // );
+  source.replace(
+    57234,
+    57249,
+    "react__WEBPACK_IMPORTED_MODULE_0__.createElement",
+    None,
+  );
+  source.replace(
+    57373,
+    57388,
+    "react__WEBPACK_IMPORTED_MODULE_0__.createElement",
+    None,
+  );
+  source.replace(
+    57484,
+    57499,
+    "react__WEBPACK_IMPORTED_MODULE_0__.createElement",
+    None,
+  );
   // source.replace(
   //   57623,
   //   57638,
