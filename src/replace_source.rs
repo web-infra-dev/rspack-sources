@@ -284,11 +284,7 @@ impl<T: std::fmt::Debug> std::fmt::Debug for ReplaceSource<T> {
   ) -> Result<(), std::fmt::Error> {
     f.debug_struct("ReplaceSource")
       .field("inner", self.inner.as_ref())
-      .field(
-        "replacements",
-        &self.replacements.iter().take(3).collect::<Vec<_>>(),
-      )
-      .field("is_sorted", &self.is_sorted.load(Ordering::SeqCst))
+      .field("replacements", &self.replacements)
       .finish()
   }
 }

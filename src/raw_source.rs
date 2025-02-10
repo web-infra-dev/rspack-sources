@@ -185,13 +185,10 @@ impl std::fmt::Debug for RawSource {
     let mut d = f.debug_struct("RawSource");
     match &self.value {
       RawValue::Buffer(buffer) => {
-        d.field(
-          "buffer",
-          &buffer.iter().take(50).copied().collect::<Vec<u8>>(),
-        );
+        d.field("buffer", &buffer);
       }
       RawValue::String(string) => {
-        d.field("source", &string.chars().take(50).collect::<String>());
+        d.field("source", &string);
       }
     }
     d.finish()
@@ -312,7 +309,7 @@ impl std::fmt::Debug for RawStringSource {
     f: &mut std::fmt::Formatter<'_>,
   ) -> Result<(), std::fmt::Error> {
     let mut d = f.debug_tuple("RawStringSource");
-    d.field(&self.0.chars().take(50).collect::<String>());
+    d.field(&self.0);
     d.finish()
   }
 }
@@ -419,7 +416,7 @@ impl std::fmt::Debug for RawBufferSource {
     f: &mut std::fmt::Formatter<'_>,
   ) -> Result<(), std::fmt::Error> {
     let mut d = f.debug_tuple("RawBufferSource");
-    d.field(&self.value.iter().take(50).copied().collect::<Vec<u8>>());
+    d.field(&self.value);
     d.finish()
   }
 }

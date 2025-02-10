@@ -97,7 +97,7 @@ impl std::fmt::Debug for OriginalSource {
   ) -> Result<(), std::fmt::Error> {
     f.debug_struct("OriginalSource")
       .field("name", &self.name)
-      .field("value", &self.value.chars().take(50).collect::<String>())
+      .field("value", &self.value)
       .finish()
   }
 }
