@@ -282,10 +282,40 @@ impl<T: std::fmt::Debug> std::fmt::Debug for ReplaceSource<T> {
     &self,
     f: &mut std::fmt::Formatter<'_>,
   ) -> Result<(), std::fmt::Error> {
-    f.debug_struct("ReplaceSource")
-      .field("inner", self.inner.as_ref())
-      .field("replacements", &self.replacements)
-      .finish()
+    let indent = f.width().unwrap_or(0);
+    let indent_str = format!("{:indent$}", "", indent = indent);
+
+    writeln!(f, "{indent_str}{{")?;
+    writeln!(f, "{indent_str}  let mut source = ReplaceSource::new(")?;
+    writeln!(f, "{:indent$?}", &self.inner, indent = indent + 4)?;
+    writeln!(f, "{indent_str}  );")?;
+    for repl in self.sorted_replacement() {
+      match repl.enforce {
+        ReplacementEnforce::Pre => {
+          writeln!(
+            f,
+            "{indent_str}  source.replace_with_enforce({:#?}, {:#?}, {:#?}, {:#?}, ReplacementEnforce::Pre);",
+            repl.start, repl.end, repl.content, repl.name
+          )?;
+        }
+        ReplacementEnforce::Normal => {
+          writeln!(
+            f,
+            "{indent_str}  source.replace({:#?}, {:#?}, {:#?}, {:#?});",
+            repl.start, repl.end, repl.content, repl.name
+          )?;
+        }
+        ReplacementEnforce::Post => {
+          writeln!(
+            f,
+            "{indent_str}  source.replace_with_enforce({:#?}, {:#?}, {:#?}, {:#?}, ReplacementEnforce::Post);",
+            repl.start, repl.end, repl.content, repl.name
+          )?;
+        }
+      }
+    }
+    writeln!(f, "{indent_str}  source.boxed()")?;
+    write!(f, "{indent_str}}}")
   }
 }
 
@@ -1215,5 +1245,27 @@ return <div>{data.foo}</div>
     source2.replace_with_enforce(18, 19, ");", None, ReplacementEnforce::Post);
     source2.replace(18, 19, "))", None);
     assert_eq!(source2.source(), "export default foo)));aaa");
+  }
+
+  #[test]
+  fn debug() {
+    let mut source =
+      ReplaceSource::new(OriginalSource::new("hello", "file.txt").boxed());
+    source.replace(0, 0, "println!(\"", None);
+    source.replace(5, 5, "\")", None);
+    assert_eq!(
+      format!("{:?}", source),
+      r#"{
+  let mut source = ReplaceSource::new(
+    OriginalSource::new(
+      "hello",
+      "file.txt",
+    ).boxed()
+  );
+  source.replace(0, 0, "println!(\"", None);
+  source.replace(5, 5, "\")", None);
+  source.boxed()
+}"#
+    );
   }
 }
