@@ -145,7 +145,11 @@ impl std::fmt::Debug for SourceMapSource {
   ) -> Result<(), std::fmt::Error> {
     f.debug_struct("SourceMapSource")
       .field("name", &self.name)
-      .field("value", &self.value.chars().take(50).collect::<String>())
+      .field("value", &self.value)
+      .field("source_map", &self.source_map)
+      .field("original_source", &self.original_source)
+      .field("inner_source_map", &self.inner_source_map)
+      .field("remove_original_source", &self.remove_original_source)
       .finish()
   }
 }

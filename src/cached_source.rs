@@ -185,11 +185,17 @@ impl<T: std::fmt::Debug> std::fmt::Debug for CachedSource<T> {
     &self,
     f: &mut std::fmt::Formatter<'_>,
   ) -> Result<(), std::fmt::Error> {
-    f.debug_struct("CachedSource")
-      .field("inner", self.inner.as_ref())
-      .field("cached_hash", self.cached_hash.as_ref())
-      .field("cached_maps", &(!self.cached_maps.is_empty()))
-      .finish()
+    let indent = f.width().unwrap_or(0);
+    let indent_str = format!("{:indent$}", "", indent = indent);
+
+    writeln!(f, "{indent_str}CachedSource::new(")?;
+    writeln!(
+      f,
+      "{indent_str}{:indent$?}",
+      self.inner,
+      indent = indent + 2
+    )?;
+    write!(f, "{indent_str}).boxed()")
   }
 }
 

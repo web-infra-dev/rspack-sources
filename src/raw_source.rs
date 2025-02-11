@@ -182,19 +182,22 @@ impl std::fmt::Debug for RawSource {
     &self,
     f: &mut std::fmt::Formatter<'_>,
   ) -> Result<(), std::fmt::Error> {
-    let mut d = f.debug_struct("RawSource");
-    match &self.value {
-      RawValue::Buffer(buffer) => {
-        d.field(
-          "buffer",
-          &buffer.iter().take(50).copied().collect::<Vec<u8>>(),
-        );
-      }
-      RawValue::String(string) => {
-        d.field("source", &string.chars().take(50).collect::<String>());
-      }
+    let indent = f.width().unwrap_or(0);
+    let indent_str = format!("{:indent$}", "", indent = indent);
+
+    if self.is_buffer() {
+      write!(
+        f,
+        "{indent_str}RawSource::from({:?}).boxed()",
+        self.buffer()
+      )
+    } else {
+      write!(
+        f,
+        "{indent_str}RawSource::from_static({:?}).boxed()",
+        self.source()
+      )
     }
-    d.finish()
   }
 }
 
@@ -311,9 +314,13 @@ impl std::fmt::Debug for RawStringSource {
     &self,
     f: &mut std::fmt::Formatter<'_>,
   ) -> Result<(), std::fmt::Error> {
-    let mut d = f.debug_tuple("RawStringSource");
-    d.field(&self.0.chars().take(50).collect::<String>());
-    d.finish()
+    let indent = f.width().unwrap_or(0);
+    let indent_str = format!("{:indent$}", "", indent = indent);
+    write!(
+      f,
+      "{indent_str}RawStringSource::from_static({:?}).boxed()",
+      self.0.as_ref()
+    )
   }
 }
 
@@ -418,9 +425,13 @@ impl std::fmt::Debug for RawBufferSource {
     &self,
     f: &mut std::fmt::Formatter<'_>,
   ) -> Result<(), std::fmt::Error> {
-    let mut d = f.debug_tuple("RawBufferSource");
-    d.field(&self.value.iter().take(50).copied().collect::<Vec<u8>>());
-    d.finish()
+    let indent = f.width().unwrap_or(0);
+    let indent_str = format!("{:indent$}", "", indent = indent);
+    write!(
+      f,
+      "{indent_str}RawBufferSource::from({:?}).boxed()",
+      self.value
+    )
   }
 }
 

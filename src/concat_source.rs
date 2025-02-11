@@ -55,9 +55,22 @@ use crate::{
 ///   .unwrap()
 /// );
 /// ```
-#[derive(Debug, Default, Clone)]
+#[derive(Default, Clone)]
 pub struct ConcatSource {
   children: Vec<BoxSource>,
+}
+
+impl std::fmt::Debug for ConcatSource {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    let indent = f.width().unwrap_or(0);
+    let indent_str = format!("{:indent$}", "", indent = indent);
+
+    writeln!(f, "{indent_str}ConcatSource::new(vec![")?;
+    for child in self.children.iter() {
+      writeln!(f, "{:indent$?},", child, indent = indent + 2)?;
+    }
+    write!(f, "{indent_str}]).boxed()")
+  }
 }
 
 impl ConcatSource {

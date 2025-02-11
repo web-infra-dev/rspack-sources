@@ -95,10 +95,13 @@ impl std::fmt::Debug for OriginalSource {
     &self,
     f: &mut std::fmt::Formatter<'_>,
   ) -> Result<(), std::fmt::Error> {
-    f.debug_struct("OriginalSource")
-      .field("name", &self.name)
-      .field("value", &self.value.chars().take(50).collect::<String>())
-      .finish()
+    let indent = f.width().unwrap_or(0);
+    let indent_str = format!("{:indent$}", "", indent = indent);
+
+    writeln!(f, "{indent_str}OriginalSource::new(")?;
+    writeln!(f, "{indent_str}  {:?},", self.value)?;
+    writeln!(f, "{indent_str}  {:?},", self.name)?;
+    write!(f, "{indent_str}).boxed()")
   }
 }
 
