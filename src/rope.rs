@@ -1311,4 +1311,30 @@ mod tests {
       .collect::<Vec<_>>();
     assert_eq!(lines, ["\n"]);
   }
+
+  #[test]
+  fn starts_with() {
+    let rope = Rope::from("abc");
+    assert!(rope.starts_with(&Rope::from("a")));
+    assert!(rope.starts_with(&Rope::from("ab")));
+    assert!(rope.starts_with(&Rope::from("abc")));
+    assert!(!rope.starts_with(&Rope::from("abcd")));
+    assert!(!rope.starts_with(&Rope::from("b")));
+    assert!(!rope.starts_with(&Rope::from("bc")));
+    assert!(!rope.starts_with(&Rope::from("c")));
+
+    let rope = Rope::from_iter(vec!["a", "b", "c"]);
+    assert!(rope.starts_with(&Rope::from("a")));
+    assert!(rope.starts_with(&Rope::from("ab")));
+    assert!(rope.starts_with(&Rope::from("abc")));
+    assert!(!rope.starts_with(&Rope::from("abcd")));
+    assert!(!rope.starts_with(&Rope::from("b")));
+    assert!(!rope.starts_with(&Rope::from("bc")));
+    assert!(!rope.starts_with(&Rope::from("c")));
+
+    assert!(rope.starts_with(&Rope::from_iter(vec!["a", "b"])));
+    assert!(rope.starts_with(&Rope::from_iter(vec!["a", "b", "c"])));
+    assert!(!rope.starts_with(&Rope::from_iter(vec!["a", "b", "c", "d"])));
+    assert!(!rope.starts_with(&Rope::from_iter(vec!["b", "c"])));
+  }
 }
