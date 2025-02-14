@@ -86,7 +86,7 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
   }
 
   fn size(&self) -> usize {
-    self.source().len()
+    self.inner.size()
   }
 
   fn map(&self, options: &MapOptions) -> Option<SourceMap> {
@@ -202,8 +202,8 @@ impl<T: std::fmt::Debug> std::fmt::Debug for CachedSource<T> {
 #[cfg(test)]
 mod tests {
   use crate::{
-    ConcatSource, OriginalSource, RawSource, ReplaceSource, SourceExt,
-    SourceMapSource, WithoutOriginalOptions,
+    ConcatSource, OriginalSource, RawBufferSource, RawSource, ReplaceSource,
+    SourceExt, SourceMapSource, WithoutOriginalOptions,
   };
 
   use super::*;
@@ -375,5 +375,16 @@ mod tests {
     };
 
     assert!(hash1 != hash2);
+  }
+
+  #[test]
+  fn size_over_a_raw_buffer_source() {
+    // buffer from PNG
+    let raw =
+      RawBufferSource::from(vec![137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13]);
+    let raw_size = raw.size();
+    let cached = CachedSource::new(raw.boxed());
+    let cached_size = cached.size();
+    assert_eq!(raw_size, cached_size);
   }
 }
