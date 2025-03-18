@@ -218,7 +218,11 @@ impl std::fmt::Debug for SourceMap {
     let indent = f.width().unwrap_or(0);
     let indent_str = format!("{:indent$}", "", indent = indent);
 
-    write!(f, "{indent_str}SourceMap::from_json({:?}).unwrap()", self.clone().to_json().unwrap())?;
+    write!(
+      f,
+      "{indent_str}SourceMap::from_json({:?}).unwrap()",
+      self.clone().to_json().unwrap()
+    )?;
 
     Ok(())
   }
