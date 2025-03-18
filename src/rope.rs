@@ -509,7 +509,7 @@ impl<'a> Rope<'a> {
     Lines {
       iter: match &self.repr {
         Repr::Light(s) => LinesEnum::Light(s),
-        Repr::Full(data) => LinesEnum::Complex {
+        Repr::Full(data) => LinesEnum::Full {
           iter: data,
           in_chunk_byte_idx: 0,
           chunk_idx: 0,
@@ -554,7 +554,7 @@ impl Hash for Rope<'_> {
 
 enum LinesEnum<'a, 'b> {
   Light(&'b str),
-  Complex {
+  Full {
     iter: &'a Vec<(&'b str, usize)>,
     in_chunk_byte_idx: usize,
     chunk_idx: usize,
@@ -605,7 +605,7 @@ impl<'a> Iterator for Lines<'_, 'a> {
       }
       Lines {
         iter:
-          LinesEnum::Complex {
+          LinesEnum::Full {
             iter: chunks,
             ref mut in_chunk_byte_idx,
             ref mut chunk_idx,
@@ -774,6 +774,41 @@ impl Iterator for CharIndices<'_, '_> {
           .extend(chunk.char_indices().map(|(i, c)| (start_pos + i, c)));
         *chunk_index += 1;
         char_indices.pop_front()
+      }
+    }
+  }
+
+  #[inline]
+  fn size_hint(&self) -> (usize, Option<usize>) {
+    match &self.iter {
+      CharIndicesEnum::Light { iter } => {
+        let c = iter.clone().count();
+        (c, Some(c))
+      }
+      CharIndicesEnum::Full {
+        chunks,
+        char_indices,
+        chunk_index,
+      } => {
+        if *chunk_index >= chunks.len() {
+          if char_indices.is_empty() {
+            return (0, Some(0));
+          }
+          return (char_indices.len(), Some(char_indices.len()));
+        }
+
+        let Some(total) = chunks.last().map(|(s, l)| *l + s.len()) else {
+          return (0, Some(0));
+        };
+
+        let (_, prev) = chunks[*chunk_index];
+        // SAFETY: The previous length is guaranteed be less than or equal to the latter one.
+        let remaining = total - prev;
+
+        (
+          (remaining + 3) / 4 + char_indices.len(),
+          Some(remaining + char_indices.len()),
+        )
       }
     }
   }
@@ -1226,6 +1261,13 @@ mod tests {
 
   #[test]
   fn char_indices() {
+    // The algorithm is the same as the one used in `std::str::CharIndices::size_hint`.
+    macro_rules! lo {
+      ($expr:expr) => {
+        ($expr + 3) / 4
+      };
+    }
+
     let mut a = Rope::new();
     a.add("abc");
     a.add("def");
@@ -1233,6 +1275,8 @@ mod tests {
       a.char_indices().collect::<Vec<_>>(),
       "abcdef".char_indices().collect::<Vec<_>>()
     );
+    let len = "abcdef".char_indices().size_hint().1.unwrap();
+    assert_eq!(a.char_indices().size_hint(), (lo!(len), Some(len)));
 
     let mut a = Rope::new();
     a.add("こんにちは");
@@ -1240,11 +1284,15 @@ mod tests {
       a.char_indices().collect::<Vec<_>>(),
       "こんにちは".char_indices().collect::<Vec<_>>()
     );
+    let len = "こんにちは".char_indices().size_hint().1.unwrap();
+    assert_eq!(a.char_indices().size_hint(), (lo!(len), Some(len)));
     a.add("世界");
     assert_eq!(
       a.char_indices().collect::<Vec<_>>(),
       "こんにちは世界".char_indices().collect::<Vec<_>>()
     );
+    let len = "こんにちは世界".char_indices().size_hint().1.unwrap();
+    assert_eq!(a.char_indices().size_hint(), (lo!(len), Some(len)));
   }
 
   #[test]
