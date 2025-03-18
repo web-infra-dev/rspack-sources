@@ -218,7 +218,7 @@ impl StreamChunks for OriginalSource {
         last_line = Some(l);
       }
       if let Some(last_line) =
-        last_line.filter(|last_line| !last_line.ends_with("\n"))
+        last_line.filter(|last_line| !last_line.ends_with('\n'))
       {
         GeneratedInfo {
           generated_line: line - 1,

@@ -143,14 +143,41 @@ impl std::fmt::Debug for SourceMapSource {
     &self,
     f: &mut std::fmt::Formatter<'_>,
   ) -> Result<(), std::fmt::Error> {
-    f.debug_struct("SourceMapSource")
-      .field("name", &self.name)
-      .field("value", &self.value)
-      .field("source_map", &self.source_map)
-      .field("original_source", &self.original_source)
-      .field("inner_source_map", &self.inner_source_map)
-      .field("remove_original_source", &self.remove_original_source)
-      .finish()
+    let indent = f.width().unwrap_or(0);
+    let indent_str = format!("{:indent$}", "", indent = indent);
+
+    writeln!(
+      f,
+      "{indent_str}SourceMapSource::new(SourceMapSourceOptions {{"
+    )?;
+    writeln!(f, "{indent_str}  value: {:?},", self.value)?;
+    writeln!(f, "{indent_str}  name: {:?},", self.name)?;
+    writeln!(f, "{indent_str}  source_map: {:?},", self.source_map)?;
+    match &self.original_source {
+      Some(original_source) => {
+        writeln!(
+          f,
+          "{indent_str}  original_source: Some({:?}.to_string()),",
+          original_source
+        )?;
+      }
+      None => {
+        writeln!(f, "{indent_str}  original_source: None,")?;
+      }
+    }
+    writeln!(
+      f,
+      "{indent_str}  inner_source_map: {:?},",
+      self.inner_source_map
+    )?;
+    writeln!(
+      f,
+      "{indent_str}  remove_original_source: {:?},",
+      self.remove_original_source
+    )?;
+    write!(f, "{indent_str}}}).boxed()")?;
+
+    Ok(())
   }
 }
 
@@ -728,6 +755,47 @@ mod tests {
         }"#
       )
       .unwrap()
+    );
+  }
+
+  #[test]
+  fn debug() {
+    let source = SourceMapSource::new(SourceMapSourceOptions {
+      value: "hello world",
+      name: "hello.txt",
+      source_map: SourceMap::from_json(
+        r#"{
+          "version": 3,
+          "sources": ["hello.txt"],
+          "mappings": "AAAA,MAAG"
+        }"#,
+      )
+      .unwrap(),
+      original_source: Some("你好 世界".to_string()),
+      inner_source_map: Some(
+        SourceMap::from_json(
+          r#"{
+          "version": 3,
+          "sources": ["hello world.txt"],
+          "mappings": "AAAA,EAAE",
+          "sourcesContent": ["你好✋世界"]
+        }"#,
+        )
+        .unwrap(),
+      ),
+      remove_original_source: false,
+    });
+
+    assert_eq!(
+      format!("{:?}", source),
+      r#"SourceMapSource::new(SourceMapSourceOptions {
+  value: "hello world",
+  name: "hello.txt",
+  source_map: SourceMap::from_json("{\"version\":3,\"sources\":[\"hello.txt\"],\"names\":[],\"mappings\":\"AAAA,MAAG\"}").unwrap(),
+  original_source: Some("你好 世界".to_string()),
+  inner_source_map: Some(SourceMap::from_json("{\"version\":3,\"sources\":[\"hello world.txt\"],\"sourcesContent\":[\"你好✋世界\"],\"names\":[],\"mappings\":\"AAAA,EAAE\"}").unwrap()),
+  remove_original_source: false,
+}).boxed()"#
     );
   }
 }

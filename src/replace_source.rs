@@ -431,7 +431,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
           // Skip over the whole chunk
           if replacement_end >= end_pos {
             let line = mapping.generated_line as i64 + generated_line_offset;
-            if chunk.ends_with("\n") {
+            if chunk.ends_with('\n') {
               generated_line_offset -= 1;
               if generated_column_offset_line == line {
                 // undo exiting corrections form the current line
@@ -567,7 +567,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
             // Only the first chunk has name assigned
             replacement_name_index = None;
 
-            if m == lines.len() - 1 && !content_line.ends_with("\n") {
+            if m == lines.len() - 1 && !content_line.ends_with('\n') {
               if generated_column_offset_line == line {
                 generated_column_offset += content_line.len() as i64;
               } else {
@@ -607,7 +607,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
               .is_some_and(|replacement_end| replacement_end >= end_pos)
             {
               let line = mapping.generated_line as i64 + generated_line_offset;
-              if chunk.ends_with("\n") {
+              if chunk.ends_with('\n') {
                 generated_line_offset -= 1;
                 if generated_column_offset_line == line {
                   // undo exiting corrections form the current line
@@ -731,7 +731,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
         },
       );
 
-      if m == matches.len() - 1 && !content_line.ends_with("\n") {
+      if m == matches.len() - 1 && !content_line.ends_with('\n') {
         if generated_column_offset_line == line {
           generated_column_offset += content_line.len() as i64;
         } else {
