@@ -58,41 +58,45 @@ impl<'a> MappingsDecoder<'a> {
 impl Iterator for MappingsDecoder<'_> {
   type Item = Mapping;
 
+  #[allow(unsafe_code)]
   fn next(&mut self) -> Option<Self::Item> {
     for c in &mut self.mappings_iter {
-      let value = B64[*c as usize];
+      let value = unsafe { *B64.get_unchecked(*c as usize) };
       if value == ERR {
         continue;
       }
       if (value & COM) != 0 {
+        #[allow(unsafe_code)]
         let mut mapping = Mapping {
           generated_line: self.generated_line,
-          generated_column: self.current_data[0],
+          generated_column: unsafe { *self.current_data.get_unchecked(0) },
           original: None,
         };
         let current_data_pos = self.current_data_pos;
         self.current_data_pos = 0;
         if value == SEM {
           self.generated_line += 1;
-          self.current_data[0] = 0;
+          unsafe {
+            *self.current_data.get_unchecked_mut(0) = 0
+          };
         }
         match current_data_pos {
           1 => return Some(mapping),
           4 => {
             mapping.original = Some(OriginalLocation {
-              source_index: self.current_data[1],
-              original_line: self.current_data[2],
-              original_column: self.current_data[3],
+              source_index: unsafe { *self.current_data.get_unchecked(1) },
+              original_line: unsafe { *self.current_data.get_unchecked(2) },
+              original_column: unsafe { *self.current_data.get_unchecked(3) },
               name_index: None,
             });
             return Some(mapping);
           }
           5 => {
             mapping.original = Some(OriginalLocation {
-              source_index: self.current_data[1],
-              original_line: self.current_data[2],
-              original_column: self.current_data[3],
-              name_index: Some(self.current_data[4]),
+              source_index: unsafe { *self.current_data.get_unchecked(1) },
+              original_line: unsafe { *self.current_data.get_unchecked(2) },
+              original_column: unsafe { *self.current_data.get_unchecked(3) },
+              name_index: Some(unsafe { *self.current_data.get_unchecked(4) }),
             });
             return Some(mapping);
           }
@@ -107,9 +111,12 @@ impl Iterator for MappingsDecoder<'_> {
           self.current_value >> 1
         };
         if self.current_data_pos < 5 {
-          self.current_data[self.current_data_pos] =
-            (self.current_data[self.current_data_pos] as i64 + final_value)
-              as u32;
+          #[allow(unsafe_code)]
+          unsafe {
+            *self.current_data.get_unchecked_mut(self.current_data_pos) =
+              (*self.current_data.get_unchecked(self.current_data_pos) as i64 + final_value)
+                as u32
+          }
         }
         self.current_data_pos += 1;
         self.current_value_pos = 0;
@@ -128,18 +135,18 @@ impl Iterator for MappingsDecoder<'_> {
       1 => {
         return Some(Mapping {
           generated_line: self.generated_line,
-          generated_column: self.current_data[0],
+          generated_column: unsafe { *self.current_data.get_unchecked(0) },
           original: None,
         })
       }
       4 => {
         return Some(Mapping {
           generated_line: self.generated_line,
-          generated_column: self.current_data[0],
+          generated_column: unsafe { *self.current_data.get_unchecked(0) },
           original: Some(OriginalLocation {
-            source_index: self.current_data[1],
-            original_line: self.current_data[2],
-            original_column: self.current_data[3],
+            source_index: unsafe { *self.current_data.get_unchecked(1) },
+            original_line: unsafe { *self.current_data.get_unchecked(2) },
+            original_column: unsafe { *self.current_data.get_unchecked(3) },
             name_index: None,
           }),
         })
@@ -147,12 +154,12 @@ impl Iterator for MappingsDecoder<'_> {
       5 => {
         return Some(Mapping {
           generated_line: self.generated_line,
-          generated_column: self.current_data[0],
+          generated_column: unsafe { *self.current_data.get_unchecked(0) },
           original: Some(OriginalLocation {
-            source_index: self.current_data[1],
-            original_line: self.current_data[2],
-            original_column: self.current_data[3],
-            name_index: Some(self.current_data[4]),
+            source_index: unsafe { *self.current_data.get_unchecked(1) },
+            original_line: unsafe { *self.current_data.get_unchecked(2) },
+            original_column: unsafe { *self.current_data.get_unchecked(3) },
+            name_index: Some(unsafe { *self.current_data.get_unchecked(4) }),
           }),
         })
       }
