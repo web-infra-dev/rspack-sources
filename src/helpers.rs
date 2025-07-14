@@ -25,9 +25,9 @@ pub fn get_map<'a, S: StreamChunks>(
   options: &'a MapOptions,
 ) -> Option<SourceMap> {
   let mut mappings_encoder = create_encoder(options.columns);
-  let mut sources: Vec<String> = Vec::new();
-  let mut sources_content: Vec<String> = Vec::new();
-  let mut names: Vec<String> = Vec::new();
+  let mut sources: Vec<Option<String>> = Vec::new();
+  let mut sources_content: Vec<Option<String>> = Vec::new();
+  let mut names: Vec<Option<String>> = Vec::new();
 
   stream.stream_chunks(
     &MapOptions {
@@ -42,23 +42,23 @@ pub fn get_map<'a, S: StreamChunks>(
     &mut |source_index, source, source_content| {
       let source_index = source_index as usize;
       if sources.len() <= source_index {
-        sources.resize(source_index + 1, "".to_string());
+        sources.resize(source_index + 1, None);
       }
-      sources[source_index] = source.to_string();
+      sources[source_index] = Some(source.to_string());
       if let Some(source_content) = source_content {
         if sources_content.len() <= source_index {
-          sources_content.resize(source_index + 1, "".to_string());
+          sources_content.resize(source_index + 1, None);
         }
-        sources_content[source_index] = source_content.to_string();
+        sources_content[source_index] = Some(source_content.to_string());
       }
     },
     // on_name
     &mut |name_index, name| {
       let name_index = name_index as usize;
       if names.len() <= name_index {
-        names.resize(name_index + 1, "".to_string());
+        names.resize(name_index + 1, None);
       }
-      names[name_index] = name.to_string();
+      names[name_index] = Some(name.to_string());
     },
   );
   let mappings = mappings_encoder.drain();
@@ -368,14 +368,18 @@ where
     return result;
   }
   for (i, source) in source_map.sources().iter().enumerate() {
-    on_source(
-      i as u32,
-      get_source(source_map, source),
-      source_map.get_source_content(i).map(Rope::from),
-    )
+    if let Some(source) = source {
+      on_source(
+        i as u32,
+        get_source(source_map, source),
+        source_map.get_source_content(i).map(Rope::from),
+      )
+    }
   }
   for (i, name) in source_map.names().iter().enumerate() {
-    on_name(i as u32, Cow::Borrowed(name));
+    if let Some(name) = name {
+      on_name(i as u32, Cow::Borrowed(name));
+    }
   }
   let mut mapping_active_line = 0;
   let mut on_mapping = |mapping: Mapping| {
@@ -432,14 +436,18 @@ where
     };
   }
   for (i, source) in source_map.sources().iter().enumerate() {
-    on_source(
-      i as u32,
-      get_source(source_map, source),
-      source_map.get_source_content(i).map(Rope::from),
-    )
+    if let Some(source) = source {
+      on_source(
+        i as u32,
+        get_source(source_map, source),
+        source_map.get_source_content(i).map(Rope::from),
+      )
+    }
   }
   for (i, name) in source_map.names().iter().enumerate() {
-    on_name(i as u32, Cow::Borrowed(name));
+    if let Some(name) = name {
+      on_name(i as u32, Cow::Borrowed(name));
+    }
   }
   let last_line =
     &line_with_indices_list[line_with_indices_list.len() - 1].line;
@@ -582,11 +590,13 @@ where
     };
   }
   for (i, source) in source_map.sources().iter().enumerate() {
-    on_source(
-      i as u32,
-      get_source(source_map, source),
-      source_map.get_source_content(i).map(Rope::from),
-    )
+    if let Some(source) = source {
+      on_source(
+        i as u32,
+        get_source(source_map, source),
+        source_map.get_source_content(i).map(Rope::from),
+      )
+    }
   }
   let final_line = if result.generated_column == 0 {
     result.generated_line - 1
@@ -630,11 +640,13 @@ where
     };
   }
   for (i, source) in source_map.sources().iter().enumerate() {
-    on_source(
-      i as u32,
-      get_source(source_map, source),
-      source_map.get_source_content(i).map(Rope::from),
-    )
+    if let Some(source) = source {
+      on_source(
+        i as u32,
+        get_source(source_map, source),
+        source_map.get_source_content(i).map(Rope::from),
+      )
+    }
   }
   let mut current_generated_line = 1;
   let mut on_mapping = |mut mapping: Mapping| {
@@ -1199,9 +1211,9 @@ pub fn stream_and_get_source_and_map<'a, S: StreamChunks>(
   on_name: OnName<'_, 'a>,
 ) -> (GeneratedInfo, Option<SourceMap>) {
   let mut mappings_encoder = create_encoder(options.columns);
-  let mut sources: Vec<String> = Vec::new();
-  let mut sources_content: Vec<String> = Vec::new();
-  let mut names: Vec<String> = Vec::new();
+  let mut sources: Vec<Option<String>> = Vec::new();
+  let mut sources_content: Vec<Option<String>> = Vec::new();
+  let mut names: Vec<Option<String>> = Vec::new();
 
   let generated_info = input_source.stream_chunks(
     options,
@@ -1212,23 +1224,23 @@ pub fn stream_and_get_source_and_map<'a, S: StreamChunks>(
     &mut |source_index, source, source_content| {
       let source_index2 = source_index as usize;
       while sources.len() <= source_index2 {
-        sources.push("".into());
+        sources.push(None);
       }
-      sources[source_index2] = source.to_string();
+      sources[source_index2] = Some(source.to_string());
       if let Some(ref source_content) = source_content {
         while sources_content.len() <= source_index2 {
-          sources_content.push("".into());
+          sources_content.push(None);
         }
-        sources_content[source_index2] = source_content.to_string();
+        sources_content[source_index2] = Some(source_content.to_string());
       }
       on_source(source_index, source, source_content);
     },
     &mut |name_index, name| {
       let name_index2 = name_index as usize;
       while names.len() <= name_index2 {
-        names.push("".into());
+        names.push(None);
       }
-      names[name_index2] = name.to_string();
+      names[name_index2] = Some(name.to_string());
       on_name(name_index, name);
     },
   );

@@ -186,11 +186,11 @@ impl MapOptions {
   }
 }
 
-fn is_all_empty(val: &Arc<[String]>) -> bool {
+fn is_all_empty(val: &Arc<[Option<String>]>) -> bool {
   if val.is_empty() {
     return true;
   }
-  val.iter().all(|s| s.is_empty())
+  val.iter().all(|s| s.is_none())
 }
 
 /// The source map created by [Source::map].
@@ -199,10 +199,10 @@ pub struct SourceMap {
   version: u8,
   #[serde(skip_serializing_if = "Option::is_none")]
   file: Option<Arc<str>>,
-  sources: Arc<[String]>,
+  sources: Arc<[Option<String>]>,
   #[serde(rename = "sourcesContent", skip_serializing_if = "is_all_empty")]
-  sources_content: Arc<[String]>,
-  names: Arc<[String]>,
+  sources_content: Arc<[Option<String>]>,
+  names: Arc<[Option<String>]>,
   mappings: Arc<str>,
   #[serde(rename = "sourceRoot", skip_serializing_if = "Option::is_none")]
   source_root: Option<Arc<str>>,
@@ -248,9 +248,9 @@ impl SourceMap {
   ) -> Self
   where
     Mappings: Into<Arc<str>>,
-    Sources: Into<Arc<[String]>>,
-    SourcesContent: Into<Arc<[String]>>,
-    Names: Into<Arc<[String]>>,
+    Sources: Into<Arc<[Option<String>]>>,
+    SourcesContent: Into<Arc<[Option<String>]>>,
+    Names: Into<Arc<[Option<String>]>>,
   {
     Self {
       version: 3,
@@ -285,27 +285,31 @@ impl SourceMap {
   }
 
   /// Get the sources field in [SourceMap].
-  pub fn sources(&self) -> &[String] {
+  pub fn sources(&self) -> &[Option<String>] {
     &self.sources
   }
 
   /// Set the sources field in [SourceMap].
-  pub fn set_sources<T: Into<Arc<[String]>>>(&mut self, sources: T) {
+  pub fn set_sources<T: Into<Arc<[Option<String>]>>>(&mut self, sources: T) {
     self.sources = sources.into();
   }
 
   /// Get the source by index from sources field in [SourceMap].
   pub fn get_source(&self, index: usize) -> Option<&str> {
-    self.sources.get(index).map(|s| s.as_ref())
+    self
+      .sources
+      .get(index)
+      .map(|source| source.as_ref().map(|s| s.as_str()))
+      .flatten()
   }
 
   /// Get the sourcesContent field in [SourceMap].
-  pub fn sources_content(&self) -> &[String] {
+  pub fn sources_content(&self) -> &[Option<String>] {
     &self.sources_content
   }
 
   /// Set the sourcesContent field in [SourceMap].
-  pub fn set_sources_content<T: Into<Arc<[String]>>>(
+  pub fn set_sources_content<T: Into<Arc<[Option<String>]>>>(
     &mut self,
     sources_content: T,
   ) {
@@ -314,22 +318,30 @@ impl SourceMap {
 
   /// Get the source content by index from sourcesContent field in [SourceMap].
   pub fn get_source_content(&self, index: usize) -> Option<&str> {
-    self.sources_content.get(index).map(|s| s.as_ref())
+    self
+      .sources_content
+      .get(index)
+      .map(|source_content| source_content.as_ref().map(|s| s.as_str()))
+      .flatten()
   }
 
   /// Get the names field in [SourceMap].
-  pub fn names(&self) -> &[String] {
+  pub fn names(&self) -> &[Option<String>] {
     &self.names
   }
 
   /// Set the names field in [SourceMap].
-  pub fn set_names<T: Into<Arc<[String]>>>(&mut self, names: T) {
+  pub fn set_names<T: Into<Arc<[Option<String>]>>>(&mut self, names: T) {
     self.names = names.into();
   }
 
   /// Get the name by index from names field in [SourceMap].
   pub fn get_name(&self, index: usize) -> Option<&str> {
-    self.names.get(index).map(|s| s.as_ref())
+    self
+      .names
+      .get(index)
+      .map(|name| name.as_ref().map(|s| s.as_str()))
+      .flatten()
   }
 
   /// Get the source_root field in [SourceMap].
@@ -355,14 +367,22 @@ impl SourceMap {
 
 #[derive(Debug, Default, Deserialize)]
 struct RawSourceMap {
+  // An optional name of the generated code that this source map is associated with.
   pub file: Option<String>,
-  pub sources: Option<Vec<Option<String>>>,
+  // An optional source root, useful for relocating source files on a server or removing repeated values in the “sources” entry.
+  // This value is prepended to the individual entries in the “source” field.
   #[serde(rename = "sourceRoot")]
   pub source_root: Option<String>,
+  // A list of original sources used by the “mappings” entry.
+  pub sources: Option<Vec<Option<String>>>,
+  // An optional list of source content, useful when the “source” can’t be hosted.
+  // “null” may be used if some original sources should be retrieved by name.
   #[serde(rename = "sourcesContent")]
   pub sources_content: Option<Vec<Option<String>>>,
+  // A list of symbol names used by the “mappings” entry.
   pub names: Option<Vec<Option<String>>>,
-  pub mappings: String,
+  // A string with the encoded mapping data.
+  pub mappings: Option<String>,
   #[serde(rename = "debugId")]
   pub debug_id: Option<String>,
 }
@@ -420,26 +440,23 @@ impl TryFrom<RawSourceMap> for SourceMap {
 
   fn try_from(raw: RawSourceMap) -> Result<Self> {
     let file = raw.file.map(Into::into);
-    let mappings = raw.mappings.into();
+    let mappings = raw.mappings.unwrap_or_default().into();
     let sources = raw
       .sources
       .unwrap_or_default()
       .into_iter()
-      .map(Option::unwrap_or_default)
       .collect::<Vec<_>>()
       .into();
     let sources_content = raw
       .sources_content
       .unwrap_or_default()
       .into_iter()
-      .map(Option::unwrap_or_default)
       .collect::<Vec<_>>()
       .into();
     let names = raw
       .names
       .unwrap_or_default()
       .into_iter()
-      .map(Option::unwrap_or_default)
       .collect::<Vec<_>>()
       .into();
     let source_root = raw.source_root.map(Into::into);
@@ -531,9 +548,9 @@ mod tests {
   fn should_not_have_sources_content_field_when_it_is_empty() {
     let map = SourceMap::new(
       ";;",
-      vec!["a.js".into()],
-      vec!["".into(), "".into(), "".into()],
-      vec!["".into(), "".into()],
+      vec![Some("a.js".into())],
+      vec![None, None, None],
+      vec![None, None],
     )
     .to_json()
     .unwrap();
