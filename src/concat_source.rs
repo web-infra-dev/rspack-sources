@@ -80,11 +80,11 @@ impl ConcatSource {
     T: Source + 'static,
     S: IntoIterator<Item = T>,
   {
-    let mut concat_soruce = ConcatSource::default();
+    let mut concat_source = ConcatSource::default();
     for source in sources {
-      concat_soruce.add(source);
+      concat_source.add(source);
     }
-    concat_soruce
+    concat_source
   }
 
   fn children(&self) -> &Vec<BoxSource> {
