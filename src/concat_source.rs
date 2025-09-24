@@ -80,20 +80,11 @@ impl ConcatSource {
     T: Source + 'static,
     S: IntoIterator<Item = T>,
   {
-    // Flatten the children
-    let children = sources
-      .into_iter()
-      .flat_map(
-        |source| match source.as_any().downcast_ref::<ConcatSource>() {
-          // This clone is cheap because `BoxSource` is `Arc`ed for each child.
-          Some(concat_source) => concat_source.children.clone(),
-          None => {
-            vec![SourceExt::boxed(source)]
-          }
-        },
-      )
-      .collect();
-    Self { children }
+    let mut concat_soruce = ConcatSource::default();
+    for source in sources {
+      concat_soruce.add(source);
+    }
+    concat_soruce
   }
 
   fn children(&self) -> &Vec<BoxSource> {
@@ -102,10 +93,24 @@ impl ConcatSource {
 
   /// Add a [Source] to concat.
   pub fn add<S: Source + 'static>(&mut self, source: S) {
+    // First check if it's already a BoxSource containing a ConcatSource
+    if let Some(box_source) = source.as_any().downcast_ref::<BoxSource>() {
+      if let Some(concat_source) =
+        box_source.as_ref().as_any().downcast_ref::<ConcatSource>()
+      {
+        // Extend with existing children (cheap clone due to Arc)
+        self.children.extend(concat_source.children.iter().cloned());
+        return;
+      }
+    }
+
+    // Check if the source itself is a ConcatSource
     if let Some(concat_source) = source.as_any().downcast_ref::<ConcatSource>()
     {
-      self.children.extend(concat_source.children.clone());
+      // Extend with existing children (cheap clone due to Arc)
+      self.children.extend(concat_source.children.iter().cloned());
     } else {
+      // Regular source - box it and add to children
       self.children.push(SourceExt::boxed(source));
     }
   }
@@ -600,5 +605,24 @@ mod tests {
     ]);
     assert_eq!(source.source(), "abc");
     assert!(source.map(&MapOptions::default()).is_none());
+  }
+
+  #[test]
+  fn should_flatten_nested_concat_sources() {
+    let inner_concat =
+      ConcatSource::new([RawSource::from("Hello "), RawSource::from("World")]);
+
+    let outer_concat = ConcatSource::new([
+      inner_concat.boxed(),
+      RawSource::from("!").boxed(),
+      ConcatSource::new([RawSource::from(" How"), RawSource::from(" are")])
+        .boxed(),
+      RawSource::from(" you?").boxed(),
+    ]);
+
+    assert_eq!(outer_concat.source(), "Hello World! How are you?");
+    // The key test: verify that nested ConcatSources are flattened
+    // Should have 6 direct children instead of nested structure
+    assert_eq!(outer_concat.children.len(), 6);
   }
 }
