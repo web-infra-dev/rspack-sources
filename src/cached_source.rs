@@ -82,7 +82,9 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
   }
 
   fn buffer(&self) -> Cow<[u8]> {
-    self.inner.buffer()
+    let mut buffer = vec![];
+    self.to_writer(&mut buffer).unwrap();
+    Cow::Owned(buffer)
   }
 
   fn size(&self) -> usize {
