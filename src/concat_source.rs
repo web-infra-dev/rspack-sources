@@ -141,12 +141,9 @@ impl Source for ConcatSource {
     if children.len() == 1 {
       children[0].buffer()
     } else {
-      let all = children
-        .iter()
-        .map(|child| child.buffer())
-        .collect::<Vec<_>>()
-        .concat();
-      Cow::Owned(all)
+      let mut buffer = vec![];
+      self.to_writer(&mut buffer).unwrap();
+      Cow::Owned(buffer)
     }
   }
 
