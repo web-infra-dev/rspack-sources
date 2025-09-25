@@ -24,11 +24,11 @@ use crate::{
 /// ```
 /// use rspack_sources::{
 ///   BoxSource, CachedSource, ConcatSource, MapOptions, OriginalSource,
-///   RawSource, Source, SourceExt, SourceMap,
+///   RawStringSource, Source, SourceExt, SourceMap,
 /// };
 ///
 /// let mut concat = ConcatSource::new([
-///   RawSource::from("Hello World\n".to_string()).boxed(),
+///   RawStringSource::from_static("Hello World\n").boxed(),
 ///   OriginalSource::new(
 ///     "console.log('test');\nconsole.log('test2');\n",
 ///     "console.js",
@@ -204,8 +204,8 @@ impl<T: std::fmt::Debug> std::fmt::Debug for CachedSource<T> {
 #[cfg(test)]
 mod tests {
   use crate::{
-    ConcatSource, OriginalSource, RawBufferSource, RawSource, ReplaceSource,
-    SourceExt, SourceMapSource, WithoutOriginalOptions,
+    ConcatSource, OriginalSource, RawBufferSource, RawStringSource,
+    ReplaceSource, SourceExt, SourceMapSource, WithoutOriginalOptions,
   };
 
   use super::*;
@@ -213,7 +213,7 @@ mod tests {
   #[test]
   fn line_number_should_not_add_one() {
     let source = ConcatSource::new([
-      CachedSource::new(RawSource::from("\n")).boxed(),
+      CachedSource::new(RawStringSource::from_static("\n")).boxed(),
       SourceMapSource::new(WithoutOriginalOptions {
         value: "\nconsole.log(1);\n".to_string(),
         name: "index.js".to_string(),
@@ -300,7 +300,7 @@ mod tests {
       final_source: true,
     };
 
-    let source = RawSource::from("Test\nTest\nTest\n");
+    let source = RawStringSource::from_static("Test\nTest\nTest\n");
     let mut on_chunk_count = 0;
     let mut on_source_count = 0;
     let mut on_name_count = 0;
@@ -350,7 +350,7 @@ mod tests {
   #[test]
   fn should_have_correct_buffer_if_cache_buffer_from_cache_source() {
     let buf = vec![128u8];
-    let source = CachedSource::new(RawSource::from(buf.clone()));
+    let source = CachedSource::new(RawBufferSource::from(buf.clone()));
 
     source.source();
     assert_eq!(source.buffer(), buf.as_slice());

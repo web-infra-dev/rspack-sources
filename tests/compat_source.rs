@@ -6,7 +6,7 @@ use rspack_sources::stream_chunks::{
   stream_chunks_default, GeneratedInfo, OnChunk, OnName, OnSource, StreamChunks,
 };
 use rspack_sources::{
-  ConcatSource, MapOptions, RawSource, Rope, Source, SourceExt, SourceMap,
+  ConcatSource, MapOptions, RawStringSource, Rope, Source, SourceExt, SourceMap,
 };
 
 #[derive(Debug, Eq)]
@@ -101,7 +101,7 @@ fn should_generate_correct_source_map() {
   .unwrap();
 
   let result = ConcatSource::new([
-    RawSource::from("Line0\n").boxed(),
+    RawStringSource::from_static("Line0\n").boxed(),
     CompatSource("Line1\nLine2\nLine3\n", Some(source_map)).boxed(),
   ]);
 

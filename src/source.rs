@@ -521,7 +521,7 @@ mod tests {
   use std::collections::HashMap;
 
   use crate::{
-    CachedSource, ConcatSource, OriginalSource, RawBufferSource, RawSource,
+    CachedSource, ConcatSource, OriginalSource, RawBufferSource,
     RawStringSource, ReplaceSource, SourceMapSource, WithoutOriginalOptions,
   };
 
@@ -543,7 +543,7 @@ mod tests {
   #[test]
   fn hash_available() {
     let mut state = twox_hash::XxHash64::default();
-    RawSource::from("a").hash(&mut state);
+    RawStringSource::from_static("a").hash(&mut state);
     OriginalSource::new("b", "").hash(&mut state);
     SourceMapSource::new(WithoutOriginalOptions {
       value: "c",
@@ -551,20 +551,24 @@ mod tests {
       source_map: SourceMap::from_json("{\"mappings\": \";\"}").unwrap(),
     })
     .hash(&mut state);
-    ConcatSource::new([RawSource::from("d")]).hash(&mut state);
-    CachedSource::new(RawSource::from("e")).hash(&mut state);
-    ReplaceSource::new(RawSource::from("f")).hash(&mut state);
-    RawSource::from("g").boxed().hash(&mut state);
+    ConcatSource::new([RawStringSource::from_static("d")]).hash(&mut state);
+    CachedSource::new(RawStringSource::from_static("e")).hash(&mut state);
+    ReplaceSource::new(RawStringSource::from_static("f")).hash(&mut state);
+    RawStringSource::from_static("g").boxed().hash(&mut state);
     RawStringSource::from_static("a").hash(&mut state);
     RawBufferSource::from("a".as_bytes()).hash(&mut state);
-    (&RawSource::from("h") as &dyn Source).hash(&mut state);
-    ReplaceSource::new(RawSource::from("i").boxed()).hash(&mut state);
-    assert_eq!(format!("{:x}", state.finish()), "1b50b537fa997c34");
+    (&RawStringSource::from_static("h") as &dyn Source).hash(&mut state);
+    ReplaceSource::new(RawStringSource::from_static("i").boxed())
+      .hash(&mut state);
+    assert_eq!(format!("{:x}", state.finish()), "b886bdd4dbf38238");
   }
 
   #[test]
   fn eq_available() {
-    assert_eq!(RawSource::from("a"), RawSource::from("a"));
+    assert_eq!(
+      RawStringSource::from_static("a"),
+      RawStringSource::from_static("a")
+    );
     assert_eq!(
       RawStringSource::from_static("a"),
       RawStringSource::from_static("a")
@@ -587,36 +591,39 @@ mod tests {
       })
     );
     assert_eq!(
-      ConcatSource::new([RawSource::from("d")]),
-      ConcatSource::new([RawSource::from("d")])
+      ConcatSource::new([RawStringSource::from_static("d")]),
+      ConcatSource::new([RawStringSource::from_static("d")])
     );
     assert_eq!(
-      CachedSource::new(RawSource::from("e")),
-      CachedSource::new(RawSource::from("e"))
+      CachedSource::new(RawStringSource::from_static("e")),
+      CachedSource::new(RawStringSource::from_static("e"))
     );
     assert_eq!(
-      ReplaceSource::new(RawSource::from("f")),
-      ReplaceSource::new(RawSource::from("f"))
-    );
-    assert_eq!(&RawSource::from("g").boxed(), &RawSource::from("g").boxed());
-    assert_eq!(
-      (&RawSource::from("h") as &dyn Source),
-      (&RawSource::from("h") as &dyn Source)
+      ReplaceSource::new(RawStringSource::from_static("f")),
+      ReplaceSource::new(RawStringSource::from_static("f"))
     );
     assert_eq!(
-      ReplaceSource::new(RawSource::from("i").boxed()),
-      ReplaceSource::new(RawSource::from("i").boxed())
+      &RawStringSource::from_static("g").boxed(),
+      &RawStringSource::from_static("g").boxed()
     );
     assert_eq!(
-      CachedSource::new(RawSource::from("j").boxed()),
-      CachedSource::new(RawSource::from("j").boxed())
+      (&RawStringSource::from_static("h") as &dyn Source),
+      (&RawStringSource::from_static("h") as &dyn Source)
+    );
+    assert_eq!(
+      ReplaceSource::new(RawStringSource::from_static("i").boxed()),
+      ReplaceSource::new(RawStringSource::from_static("i").boxed())
+    );
+    assert_eq!(
+      CachedSource::new(RawStringSource::from_static("j").boxed()),
+      CachedSource::new(RawStringSource::from_static("j").boxed())
     );
   }
 
   #[test]
   #[allow(suspicious_double_ref_op)]
   fn clone_available() {
-    let a = RawSource::from("a");
+    let a = RawStringSource::from_static("a");
     assert_eq!(a, a.clone());
     let b = OriginalSource::new("b", "");
     assert_eq!(b, b.clone());
@@ -626,19 +633,19 @@ mod tests {
       source_map: SourceMap::from_json("{\"mappings\": \";\"}").unwrap(),
     });
     assert_eq!(c, c.clone());
-    let d = ConcatSource::new([RawSource::from("d")]);
+    let d = ConcatSource::new([RawStringSource::from_static("d")]);
     assert_eq!(d, d.clone());
-    let e = CachedSource::new(RawSource::from("e"));
+    let e = CachedSource::new(RawStringSource::from_static("e"));
     assert_eq!(e, e.clone());
-    let f = ReplaceSource::new(RawSource::from("f"));
+    let f = ReplaceSource::new(RawStringSource::from_static("f"));
     assert_eq!(f, f.clone());
-    let g = RawSource::from("g").boxed();
+    let g = RawStringSource::from_static("g").boxed();
     assert_eq!(&g, &g.clone());
-    let h = &RawSource::from("h") as &dyn Source;
+    let h = &RawStringSource::from_static("h") as &dyn Source;
     assert_eq!(h, h);
-    let i = ReplaceSource::new(RawSource::from("i").boxed());
+    let i = ReplaceSource::new(RawStringSource::from_static("i").boxed());
     assert_eq!(i, i.clone());
-    let j = CachedSource::new(RawSource::from("j").boxed());
+    let j = CachedSource::new(RawStringSource::from_static("j").boxed());
     assert_eq!(j, j.clone());
     let k = RawStringSource::from_static("k");
     assert_eq!(k, k.clone());
@@ -649,7 +656,7 @@ mod tests {
   #[test]
   fn box_dyn_source_use_hashmap_available() {
     let mut map = HashMap::new();
-    let a = RawSource::from("a").boxed();
+    let a = RawStringSource::from_static("a").boxed();
     map.insert(a.clone(), a.clone());
     assert_eq!(map.get(&a).unwrap(), &a);
   }
@@ -658,15 +665,17 @@ mod tests {
   #[allow(suspicious_double_ref_op)]
   fn ref_dyn_source_use_hashmap_available() {
     let mut map = HashMap::new();
-    let a = &RawSource::from("a") as &dyn Source;
+    let a = &RawStringSource::from_static("a") as &dyn Source;
     map.insert(a, a);
     assert_eq!(map.get(&a).unwrap(), &a);
   }
 
   #[test]
   fn to_writer() {
-    let sources =
-      ConcatSource::new([RawSource::from("a"), RawSource::from("b")]);
+    let sources = ConcatSource::new([
+      RawStringSource::from_static("a"),
+      RawStringSource::from_static("b"),
+    ]);
     let mut writer = std::io::BufWriter::new(Vec::new());
     let result = sources.to_writer(&mut writer);
     assert!(result.is_ok());

@@ -218,7 +218,7 @@ impl StreamChunks for SourceMapSource {
 #[cfg(test)]
 mod tests {
   use crate::{
-    CachedSource, ConcatSource, OriginalSource, RawSource, ReplaceSource,
+    CachedSource, ConcatSource, OriginalSource, RawStringSource, ReplaceSource,
     SourceExt,
   };
 
@@ -230,7 +230,7 @@ mod tests {
     let inner_source = ConcatSource::new([
       OriginalSource::new(inner_source_code, "hello-world.txt").boxed(),
       OriginalSource::new("Translate: ", "header.txt").boxed(),
-      RawSource::from("Other text").boxed(),
+      RawStringSource::from_static("Other text").boxed(),
     ]);
     let source_r_code =
       "Translated: Hallo Welt\nist ein test Text\nAnderer Text";
@@ -612,9 +612,9 @@ mod tests {
       source_map: original.map(&MapOptions::new(false)).unwrap(),
     });
     let source = ConcatSource::new([
-      RawSource::from("\n").boxed(),
-      RawSource::from("\n").boxed(),
-      RawSource::from("\n").boxed(),
+      RawStringSource::from_static("\n").boxed(),
+      RawStringSource::from_static("\n").boxed(),
+      RawStringSource::from_static("\n").boxed(),
       source.boxed(),
     ]);
     let map = source.map(&MapOptions::new(false)).unwrap();
@@ -627,7 +627,7 @@ mod tests {
     let inner_source = ConcatSource::new([
       OriginalSource::new(inner_source_code, "hello-world.txt").boxed(),
       OriginalSource::new("Translate: ", "header.txt").boxed(),
-      RawSource::from("Other text").boxed(),
+      RawStringSource::from_static("Other text").boxed(),
     ]);
     let source_r_code =
       "Translated: Hallo Welt\nist ein test Text\nAnderer Text";
