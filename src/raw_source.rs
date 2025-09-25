@@ -375,9 +375,9 @@ pub struct RawBufferSource {
 impl RawBufferSource {
   fn get_or_init_value_as_string(&self) -> &str {
     self.with(|fields| {
-      fields.value_as_string.get_or_init(|| {
-        String::from_utf8_lossy(&fields.value)
-      })
+      fields
+        .value_as_string
+        .get_or_init(|| String::from_utf8_lossy(fields.value))
     })
   }
 }
@@ -387,7 +387,8 @@ impl Clone for RawBufferSource {
     RawBufferSourceBuilder {
       value: self.borrow_value().clone(),
       value_as_string_builder: |_: &Vec<u8>| Default::default(),
-    }.build()
+    }
+    .build()
   }
 }
 
@@ -404,7 +405,8 @@ impl From<Vec<u8>> for RawBufferSource {
     RawBufferSourceBuilder {
       value,
       value_as_string_builder: |_: &Vec<u8>| Default::default(),
-    }.build()
+    }
+    .build()
   }
 }
 
@@ -413,7 +415,8 @@ impl From<&[u8]> for RawBufferSource {
     RawBufferSourceBuilder {
       value: value.to_vec(),
       value_as_string_builder: |_: &Vec<u8>| Default::default(),
-    }.build()
+    }
+    .build()
   }
 }
 
@@ -423,13 +426,11 @@ impl Source for RawBufferSource {
   }
 
   fn rope(&self) -> Rope<'_> {
-    Rope::from(
-      self.get_or_init_value_as_string()
-    )
+    Rope::from(self.get_or_init_value_as_string())
   }
 
   fn buffer(&self) -> Cow<[u8]> {
-    Cow::Borrowed(&self.borrow_value())
+    Cow::Borrowed(self.borrow_value())
   }
 
   fn size(&self) -> usize {
