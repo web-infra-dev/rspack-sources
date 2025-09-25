@@ -34,5 +34,5 @@ jobs:
         git config --global user.name "github-actions[bot]"
         git config --global user.email "github-actions[bot]@users.noreply.github.com"
         git status
-        git tag $PUBLISHED_VERSION -m $PUBLISHED_VERSION
+        git tag "$PUBLISHED_VERSION" -m "$PUBLISHED_VERSION"
         git push origin --follow-tags
