@@ -4,6 +4,8 @@ use std::{
   sync::OnceLock,
 };
 
+use ouroboros::self_referencing;
+
 use crate::{
   helpers::{
     get_generated_source_info, stream_chunks_of_raw_source, OnChunk, OnName,
@@ -362,53 +364,76 @@ impl StreamChunks for RawStringSource {
 /// assert_eq!(s.map(&MapOptions::default()), None);
 /// assert_eq!(s.size(), 16);
 /// ```
-#[derive(Clone, PartialEq, Eq)]
+#[self_referencing]
 pub struct RawBufferSource {
   value: Vec<u8>,
-  value_as_string: OnceLock<String>,
+  #[borrows(value)]
+  #[not_covariant]
+  value_as_string: OnceLock<Cow<'this, str>>,
 }
+
+impl RawBufferSource {
+  fn get_or_init_value_as_string(&self) -> &str {
+    self.with(|fields| {
+      fields.value_as_string.get_or_init(|| {
+        String::from_utf8_lossy(&fields.value)
+      })
+    })
+  }
+}
+
+impl Clone for RawBufferSource {
+  fn clone(&self) -> Self {
+    RawBufferSourceBuilder {
+      value: self.borrow_value().clone(),
+      value_as_string_builder: |_: &Vec<u8>| Default::default(),
+    }.build()
+  }
+}
+
+impl PartialEq for RawBufferSource {
+  fn eq(&self, other: &Self) -> bool {
+    self.borrow_value() == other.borrow_value()
+  }
+}
+
+impl Eq for RawBufferSource {}
 
 impl From<Vec<u8>> for RawBufferSource {
   fn from(value: Vec<u8>) -> Self {
-    Self {
+    RawBufferSourceBuilder {
       value,
-      value_as_string: Default::default(),
-    }
+      value_as_string_builder: |_: &Vec<u8>| Default::default(),
+    }.build()
   }
 }
 
 impl From<&[u8]> for RawBufferSource {
   fn from(value: &[u8]) -> Self {
-    Self {
+    RawBufferSourceBuilder {
       value: value.to_vec(),
-      value_as_string: Default::default(),
-    }
+      value_as_string_builder: |_: &Vec<u8>| Default::default(),
+    }.build()
   }
 }
 
 impl Source for RawBufferSource {
   fn source(&self) -> Cow<str> {
-    Cow::Borrowed(
-      self
-        .value_as_string
-        .get_or_init(|| String::from_utf8_lossy(&self.value).to_string()),
-    )
+    Cow::Borrowed(self.get_or_init_value_as_string())
   }
 
   fn rope(&self) -> Rope<'_> {
     Rope::from(
-      self
-        .value_as_string
-        .get_or_init(|| String::from_utf8_lossy(&self.value).to_string()),
+      self.get_or_init_value_as_string()
     )
   }
 
   fn buffer(&self) -> Cow<[u8]> {
-    Cow::Borrowed(&self.value)
+    Cow::Borrowed(&self.borrow_value())
   }
 
   fn size(&self) -> usize {
-    self.value.len()
+    self.borrow_value().len()
   }
 
   fn map(&self, _: &MapOptions) -> Option<SourceMap> {
@@ -416,7 +441,7 @@ impl Source for RawBufferSource {
   }
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
-    writer.write_all(&self.value)
+    writer.write_all(self.borrow_value())
   }
 }
 
@@ -430,7 +455,7 @@ impl std::fmt::Debug for RawBufferSource {
     write!(
       f,
       "{indent_str}RawBufferSource::from({:?}).boxed()",
-      self.value
+      self.borrow_value()
     )
   }
 }
@@ -454,9 +479,7 @@ impl StreamChunks for RawBufferSource {
       get_generated_source_info(&*self.source())
     } else {
       stream_chunks_of_raw_source(
-        &**self
-          .value_as_string
-          .get_or_init(|| String::from_utf8_lossy(&self.value).to_string()),
+        self.get_or_init_value_as_string(),
         options,
         on_chunk,
         on_source,
