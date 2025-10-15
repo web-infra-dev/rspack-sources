@@ -262,13 +262,13 @@ impl SourceMap {
   }
 
   /// Get the ignoreList field in [SourceMap].
-  pub fn ignore_list(&self) -> Option<&Vec<u32>> {
-    self.ignore_list.as_ref()
+  pub fn ignore_list(&self) -> Option<&[u32]> {
+    self.ignore_list.as_deref()
   }
 
   /// Set the ignoreList field in [SourceMap].
-  pub fn set_ignore_list(&mut self, ignore_list: Option<Vec<u32>>) {
-    self.ignore_list = ignore_list;
+  pub fn set_ignore_list<T: Into<Vec<u32>>>(&mut self, ignore_list: Option<T>) {
+    self.ignore_list = ignore_list.map(Into::into);
   }
 
   /// Get the decoded mappings in [SourceMap].
