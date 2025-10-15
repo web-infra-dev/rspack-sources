@@ -240,7 +240,7 @@ pub fn get_generated_source_info<'a, S>(source: S) -> GeneratedInfo
 where
   S: SourceText<'a>,
 {
-  let (generated_line, generated_column) = if source.ends_with("\n") {
+  let (generated_line, generated_column) = if source.ends_with('\n') {
     (source.split_into_lines().count() + 1, 0)
   } else {
     let mut line_count = 0;
@@ -288,7 +288,7 @@ where
     last_line = Some(l);
   }
   if let Some(last_line) =
-    last_line.filter(|last_line| !last_line.ends_with("\n"))
+    last_line.filter(|last_line| !last_line.ends_with('\n'))
   {
     GeneratedInfo {
       generated_line: line - 1,
@@ -443,7 +443,7 @@ where
   }
   let last_line =
     &line_with_indices_list[line_with_indices_list.len() - 1].line;
-  let last_new_line = last_line.ends_with("\n");
+  let last_new_line = last_line.ends_with('\n');
   let final_line: u32 = if last_new_line {
     line_with_indices_list.len() + 1
   } else {
@@ -686,7 +686,7 @@ where
     current_generated_line += 1;
   }
   let last_line = &lines[lines.len() - 1];
-  let last_new_line = last_line.ends_with("\n");
+  let last_new_line = last_line.ends_with('\n');
   let final_line = if last_new_line {
     lines.len() + 1
   } else {
@@ -1249,7 +1249,7 @@ pub trait SourceText<'a>: Default + Clone + ToString {
   fn split_into_lines(&self) -> impl Iterator<Item = Self>;
 
   /// Checks if the text ends with the given string.
-  fn ends_with(&self, value: &str) -> bool;
+  fn ends_with(&self, value: char) -> bool;
 
   /// Returns an iterator over the char indices in the text.
   fn char_indices(&self) -> impl Iterator<Item = (usize, char)>;
@@ -1285,7 +1285,7 @@ impl<'a> SourceText<'a> for Rope<'a> {
   }
 
   #[inline]
-  fn ends_with(&self, value: &str) -> bool {
+  fn ends_with(&self, value: char) -> bool {
     (*self).ends_with(value)
   }
 
@@ -1327,7 +1327,7 @@ impl<'a> SourceText<'a> for &'a str {
   }
 
   #[inline]
-  fn ends_with(&self, value: &str) -> bool {
+  fn ends_with(&self, value: char) -> bool {
     (*self).ends_with(value)
   }
 

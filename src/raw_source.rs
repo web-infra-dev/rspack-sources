@@ -362,11 +362,41 @@ impl StreamChunks for RawStringSource {
 /// assert_eq!(s.map(&MapOptions::default()), None);
 /// assert_eq!(s.size(), 16);
 /// ```
-#[derive(Clone, PartialEq, Eq)]
 pub struct RawBufferSource {
   value: Vec<u8>,
-  value_as_string: OnceLock<String>,
+  value_as_string: OnceLock<Option<String>>,
 }
+
+impl RawBufferSource {
+  #[allow(unsafe_code)]
+  fn get_or_init_value_as_string(&self) -> &str {
+    self
+      .value_as_string
+      .get_or_init(|| match String::from_utf8_lossy(&self.value) {
+        Cow::Owned(s) => Some(s),
+        Cow::Borrowed(_) => None,
+      })
+      .as_deref()
+      .unwrap_or_else(|| unsafe { std::str::from_utf8_unchecked(&self.value) })
+  }
+}
+
+impl Clone for RawBufferSource {
+  fn clone(&self) -> Self {
+    Self {
+      value: self.value.clone(),
+      value_as_string: Default::default(),
+    }
+  }
+}
+
+impl PartialEq for RawBufferSource {
+  fn eq(&self, other: &Self) -> bool {
+    self.value == other.value
+  }
+}
+
+impl Eq for RawBufferSource {}
 
 impl From<Vec<u8>> for RawBufferSource {
   fn from(value: Vec<u8>) -> Self {
@@ -388,19 +418,11 @@ impl From<&[u8]> for RawBufferSource {
 
 impl Source for RawBufferSource {
   fn source(&self) -> Cow<str> {
-    Cow::Borrowed(
-      self
-        .value_as_string
-        .get_or_init(|| String::from_utf8_lossy(&self.value).to_string()),
-    )
+    Cow::Borrowed(self.get_or_init_value_as_string())
   }
 
   fn rope(&self) -> Rope<'_> {
-    Rope::from(
-      self
-        .value_as_string
-        .get_or_init(|| String::from_utf8_lossy(&self.value).to_string()),
-    )
+    Rope::from(self.get_or_init_value_as_string())
   }
 
   fn buffer(&self) -> Cow<[u8]> {
@@ -430,7 +452,7 @@ impl std::fmt::Debug for RawBufferSource {
     write!(
       f,
       "{indent_str}RawBufferSource::from({:?}).boxed()",
-      self.value
+      &self.value
     )
   }
 }
@@ -454,9 +476,7 @@ impl StreamChunks for RawBufferSource {
       get_generated_source_info(&*self.source())
     } else {
       stream_chunks_of_raw_source(
-        &**self
-          .value_as_string
-          .get_or_init(|| String::from_utf8_lossy(&self.value).to_string()),
+        self.get_or_init_value_as_string(),
         options,
         on_chunk,
         on_source,
@@ -475,7 +495,7 @@ mod tests {
   // Fix https://github.com/web-infra-dev/rspack/issues/6793
   #[test]
   fn fix_rspack_issue_6793() {
-    let source1 = RawSource::from("hello\n\n".to_string());
+    let source1 = RawStringSource::from_static("hello\n\n");
     let source1 = ReplaceSource::new(source1);
     let source2 = OriginalSource::new("world".to_string(), "world.txt");
     let concat = ConcatSource::new([source1.boxed(), source2.boxed()]);

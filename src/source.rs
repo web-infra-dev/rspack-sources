@@ -194,7 +194,7 @@ fn is_all_empty(val: &Arc<[String]>) -> bool {
 }
 
 /// The source map created by [Source::map].
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Clone, PartialEq, Eq, Serialize)]
 pub struct SourceMap {
   version: u8,
   #[serde(skip_serializing_if = "Option::is_none")]
@@ -212,6 +212,23 @@ pub struct SourceMap {
   ignore_list: Option<Vec<u32>>,
 }
 
+impl std::fmt::Debug for SourceMap {
+  fn fmt(
+    &self,
+    f: &mut std::fmt::Formatter<'_>,
+  ) -> std::result::Result<(), std::fmt::Error> {
+    let indent = f.width().unwrap_or(0);
+    let indent_str = format!("{:indent$}", "", indent = indent);
+
+    write!(
+      f,
+      "{indent_str}SourceMap::from_json({:?}).unwrap()",
+      self.clone().to_json().unwrap()
+    )?;
+
+    Ok(())
+  }
+}
 impl Hash for SourceMap {
   fn hash<H: Hasher>(&self, state: &mut H) {
     self.file.hash(state);

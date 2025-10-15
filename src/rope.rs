@@ -59,33 +59,42 @@ impl<'a> Rope<'a> {
   pub fn append(&mut self, value: Rope<'a>) {
     match (&mut self.repr, value.repr) {
       (Repr::Light(s), Repr::Light(other)) => {
+        if other.is_empty() {
+          return;
+        }
         let raw = Vec::from_iter([(*s, 0), (other, s.len())]);
         self.repr = Repr::Full(Rc::new(raw));
       }
       (Repr::Full(s), Repr::Full(other)) => {
-        if !other.is_empty() {
-          let mut len = s
-            .last()
-            .map_or(0, |(chunk, start_pos)| *start_pos + chunk.len());
+        if other.is_empty() {
+          return;
+        }
+        let mut len = s
+          .last()
+          .map_or(0, |(chunk, start_pos)| *start_pos + chunk.len());
 
-          let cur = Rc::make_mut(s);
-          cur.reserve_exact(other.len());
+        let cur = Rc::make_mut(s);
+        cur.reserve_exact(other.len());
 
-          for &(chunk, _) in other.iter() {
-            cur.push((chunk, len));
-            len += chunk.len();
-          }
+        for &(chunk, _) in other.iter() {
+          cur.push((chunk, len));
+          len += chunk.len();
         }
       }
       (Repr::Full(s), Repr::Light(other)) => {
-        if !other.is_empty() {
-          let len = s
-            .last()
-            .map_or(0, |(chunk, start_pos)| *start_pos + chunk.len());
-          Rc::make_mut(s).push((other, len));
+        if other.is_empty() {
+          return;
         }
+        let len = s
+          .last()
+          .map_or(0, |(chunk, start_pos)| *start_pos + chunk.len());
+        Rc::make_mut(s).push((other, len));
       }
       (Repr::Light(s), Repr::Full(other)) => {
+        if s.is_empty() {
+          self.repr = Repr::Full(other.clone());
+          return;
+        }
         let mut raw = Vec::with_capacity(other.len() + 1);
         raw.push((*s, 0));
         let mut len = s.len();
@@ -228,7 +237,7 @@ impl<'a> Rope<'a> {
 
   /// Returns whether the rope ends with the given string.
   #[inline]
-  pub fn ends_with(&self, value: &str) -> bool {
+  pub fn ends_with(&self, value: char) -> bool {
     match &self.repr {
       Repr::Light(s) => s.ends_with(value),
       Repr::Full(data) => {
@@ -975,10 +984,13 @@ impl<'a> FromIterator<&'a str> for Rope<'a> {
     let mut len = 0;
     let raw = iter
       .into_iter()
-      .map(|chunk| {
+      .filter_map(|chunk| {
+        if chunk.is_empty() {
+          return None;
+        }
         let cur = (chunk, len);
         len += chunk.len();
-        cur
+        Some(cur)
       })
       .collect::<Vec<_>>();
 
@@ -1336,5 +1348,21 @@ mod tests {
     assert!(rope.starts_with(&Rope::from_iter(vec!["a", "b", "c"])));
     assert!(!rope.starts_with(&Rope::from_iter(vec!["a", "b", "c", "d"])));
     assert!(!rope.starts_with(&Rope::from_iter(vec!["b", "c"])));
+  }
+
+  #[test]
+  fn ends_with() {
+    let rope = Rope::from("abc\n");
+    assert!(rope.ends_with('\n'));
+
+    let mut rope = Rope::from("abc\n");
+    rope.append("".into());
+    assert!(rope.ends_with('\n'));
+
+    let rope = Rope::from_iter(["abc\n", ""]);
+    assert!(rope.ends_with('\n'));
+
+    let rope = Rope::from_iter(["abc", "\n"]);
+    assert!(rope.ends_with('\n'));
   }
 }
