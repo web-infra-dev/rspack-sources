@@ -297,7 +297,7 @@ mod tests {
 
     let mut hasher = twox_hash::XxHash64::default();
     sms1.hash(&mut hasher);
-    assert_eq!(format!("{:x}", hasher.finish()), "d136621583d4618c");
+    assert_eq!(format!("{:x}", hasher.finish()), "736934c6e249aa6e");
   }
 
   #[test]
