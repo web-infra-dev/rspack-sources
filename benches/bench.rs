@@ -1,6 +1,7 @@
 #![allow(missing_docs)]
 
 mod bench_complex_replace_source;
+mod bench_source_map;
 
 use std::collections::HashMap;
 
@@ -16,6 +17,7 @@ use rspack_sources::{
 };
 
 use bench_complex_replace_source::benchmark_complex_replace_source;
+use bench_source_map::benchmark_parse_source_map_from_json;
 
 const HELLOWORLD_JS: &str = include_str!(concat!(
   env!("CARGO_MANIFEST_DIR"),
@@ -40,14 +42,6 @@ const BUNDLE_JS: &str = include_str!(concat!(
 const BUNDLE_JS_MAP: &str = include_str!(concat!(
   env!("CARGO_MANIFEST_DIR"),
   "/benches/fixtures/transpile-rollup/files/bundle.js.map"
-));
-const ANTD_MIN_JS: &str = include_str!(concat!(
-  env!("CARGO_MANIFEST_DIR"),
-  "/benches/fixtures/antd-mini/antd.min.js"
-));
-const ANTD_MIN_JS_MAP: &str = include_str!(concat!(
-  env!("CARGO_MANIFEST_DIR"),
-  "/benches/fixtures/antd-mini/antd.min.js.map"
 ));
 
 fn benchmark_concat_generate_string(b: &mut Bencher) {
@@ -250,6 +244,11 @@ fn bench_rspack_sources(criterion: &mut Criterion) {
 
   group
     .bench_function("complex_replace_source", benchmark_complex_replace_source);
+
+  group.bench_function(
+    "benchmark_parse_source_map_from_json",
+    benchmark_parse_source_map_from_json,
+  );
 
   group.finish();
 }
