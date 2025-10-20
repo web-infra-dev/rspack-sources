@@ -17,7 +17,9 @@ use rspack_sources::{
 };
 
 use bench_complex_replace_source::benchmark_complex_replace_source;
-use bench_source_map::benchmark_parse_source_map_from_json;
+use bench_source_map::{
+  benchmark_parse_source_map_from_json, benchmark_source_map_clone,
+};
 
 const HELLOWORLD_JS: &str = include_str!(concat!(
   env!("CARGO_MANIFEST_DIR"),
@@ -246,9 +248,11 @@ fn bench_rspack_sources(criterion: &mut Criterion) {
     .bench_function("complex_replace_source", benchmark_complex_replace_source);
 
   group.bench_function(
-    "benchmark_parse_source_map_from_json",
+    "parse_source_map_from_json",
     benchmark_parse_source_map_from_json,
   );
+
+  group.bench_function("source_map_clone", benchmark_source_map_clone);
 
   group.finish();
 }
