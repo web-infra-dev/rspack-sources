@@ -225,6 +225,8 @@ pub struct SourceMap {
   source_root: Option<Arc<str>>,
   #[serde(rename = "debugId", skip_serializing_if = "Option::is_none")]
   debug_id: Option<Arc<str>>,
+  #[serde(rename = "ignoreList", skip_serializing_if = "Option::is_none")]
+  ignore_list: Option<Vec<u32>>,
 }
 
 impl std::fmt::Debug for SourceMap {
@@ -252,6 +254,7 @@ impl Hash for SourceMap {
     self.sources_content.hash(state);
     self.names.hash(state);
     self.source_root.hash(state);
+    self.ignore_list.hash(state);
   }
 }
 
@@ -278,6 +281,7 @@ impl SourceMap {
       names: names.into(),
       source_root: None,
       debug_id: None,
+      ignore_list: None,
     }
   }
 
@@ -289,6 +293,16 @@ impl SourceMap {
   /// Set the file field in [SourceMap].
   pub fn set_file<T: Into<Arc<str>>>(&mut self, file: Option<T>) {
     self.file = file.map(Into::into);
+  }
+
+  /// Get the ignoreList field in [SourceMap].
+  pub fn ignore_list(&self) -> Option<&[u32]> {
+    self.ignore_list.as_deref()
+  }
+
+  /// Set the ignoreList field in [SourceMap].
+  pub fn set_ignore_list<T: Into<Vec<u32>>>(&mut self, ignore_list: Option<T>) {
+    self.ignore_list = ignore_list.map(Into::into);
   }
 
   /// Get the decoded mappings in [SourceMap].
@@ -415,6 +429,11 @@ impl SourceMap {
         .get_str("sourceRoot")
         .map(|v| Arc::from(v.to_string())),
       debug_id: value.get_str("debugId").map(|v| Arc::from(v.to_string())),
+      ignore_list: value.get_array("ignoreList").map(|v| {
+        v.into_iter()
+          .map(|n| n.as_u32().unwrap_or_default())
+          .collect::<Vec<_>>()
+      }),
     })
   }
 
@@ -426,7 +445,7 @@ impl SourceMap {
   }
 
   /// Generate source map to a json string.
-  pub fn to_json(self) -> Result<String> {
+  pub fn to_json(&self) -> Result<String> {
     let json = simd_json::to_string(&self)?;
     Ok(json)
   }
@@ -539,7 +558,7 @@ mod tests {
     RawBufferSource::from("a".as_bytes()).hash(&mut state);
     (&RawSource::from("h") as &dyn Source).hash(&mut state);
     ReplaceSource::new(RawSource::from("i").boxed()).hash(&mut state);
-    assert_eq!(format!("{:x}", state.finish()), "1b50b537fa997c34");
+    assert_eq!(format!("{:x}", state.finish()), "6abed98aa11f84e5");
   }
 
   #[test]
