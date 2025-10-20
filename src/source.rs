@@ -391,7 +391,7 @@ impl SourceMap {
     Self::from_slice(&mut json_bytes)
   }
 
-  /// Create a [SourceMap] from [&mut [u8]].
+  /// Create a SourceMap from a mutable byte slice (`&mut [u8]`).
   pub fn from_slice(json_bytes: &mut [u8]) -> Result<Self> {
     let value = simd_json::to_borrowed_value(json_bytes)?;
     Ok(Self {
@@ -440,13 +440,13 @@ impl SourceMap {
   /// Create a [SourceMap] from reader.
   pub fn from_reader<R: std::io::Read>(mut s: R) -> Result<Self> {
     let mut json_bytes = vec![];
-    let _ = s.read_to_end(&mut json_bytes);
+    s.read_to_end(&mut json_bytes)?;
     Self::from_slice(&mut json_bytes)
   }
 
   /// Generate source map to a json string.
   pub fn to_json(&self) -> Result<String> {
-    let json = simd_json::to_string(&self)?;
+    let json = simd_json::serde::to_string(&self)?;
     Ok(json)
   }
 
