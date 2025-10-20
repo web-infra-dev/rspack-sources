@@ -400,7 +400,7 @@ impl SourceMap {
       sources: value
         .get_array("sources")
         .map(|v| {
-          v.into_iter()
+          v.iter()
             .map(|s| s.as_str().map(|s| s.to_string()).unwrap_or_default())
             .collect::<Vec<_>>()
             .into()
@@ -409,7 +409,7 @@ impl SourceMap {
       sources_content: value
         .get_array("sourcesContent")
         .map(|v| {
-          v.into_iter()
+          v.iter()
             .map(|s| s.as_str().map(|s| s.to_string()).unwrap_or_default())
             .collect::<Vec<_>>()
             .into()
@@ -418,7 +418,7 @@ impl SourceMap {
       names: value
         .get_array("names")
         .map(|v| {
-          v.into_iter()
+          v.iter()
             .map(|s| s.as_str().map(|s| s.to_string()).unwrap_or_default())
             .collect::<Vec<_>>()
             .into()
@@ -430,7 +430,7 @@ impl SourceMap {
         .map(|v| Arc::from(v.to_string())),
       debug_id: value.get_str("debugId").map(|v| Arc::from(v.to_string())),
       ignore_list: value.get_array("ignoreList").map(|v| {
-        v.into_iter()
+        v.iter()
           .map(|n| n.as_u32().unwrap_or_default())
           .collect::<Vec<_>>()
       }),
