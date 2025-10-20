@@ -419,7 +419,7 @@ impl SourceMap {
   }
 
   /// Generate source map to a json string.
-  pub fn to_json(self) -> Result<String> {
+  pub fn to_json(&self) -> Result<String> {
     let json = simd_json::serde::to_string(&self)?;
     Ok(json)
   }
