@@ -19,6 +19,7 @@ use rspack_sources::{
 use bench_complex_replace_source::benchmark_complex_replace_source;
 use bench_source_map::{
   benchmark_parse_source_map_from_json, benchmark_source_map_clone,
+  benchmark_stringify_source_map_to_json,
 };
 
 const HELLOWORLD_JS: &str = include_str!(concat!(
@@ -253,6 +254,11 @@ fn bench_rspack_sources(criterion: &mut Criterion) {
   );
 
   group.bench_function("source_map_clone", benchmark_source_map_clone);
+
+  group.bench_function(
+    "stringify_source_map_to_json",
+    benchmark_stringify_source_map_to_json,
+  );
 
   group.finish();
 }
