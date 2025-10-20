@@ -1,14 +1,17 @@
 use std::{
   any::{Any, TypeId},
   borrow::Cow,
-  convert::{TryFrom, TryInto},
   fmt,
   hash::{Hash, Hasher},
   sync::Arc,
 };
 
 use dyn_clone::DynClone;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
+use simd_json::{
+  base::ValueAsScalar,
+  derived::{ValueObjectAccessAsArray, ValueObjectAccessAsScalar},
+};
 
 use crate::{
   helpers::{decode_mappings, StreamChunks},
@@ -193,7 +196,21 @@ fn is_all_empty(val: &Arc<[String]>) -> bool {
   val.iter().all(|s| s.is_empty())
 }
 
-/// The source map created by [Source::map].
+/// Source map representation and utilities.
+///
+/// This struct serves multiple purposes in the source mapping ecosystem:
+///
+/// 1. **Source Map Generation**: Created by the `map()` method of various `Source`
+///    implementations to provide mapping information between generated and original code
+///
+/// 2. **JSON Deserialization**: Can be constructed from JSON strings via `from_json()`,
+///    enabling integration with external source map files and `SourceMapSource` usage
+///
+/// 3. **Caching Optimization**: Used by `CachedSource` to store computed source maps,
+///    preventing expensive recomputation of mapping data during repeated access
+///
+/// The source map follows the [Source Map Specification v3](https://docs.google.com/document/d/1U1RGAehQwRypUTovF1KRlpiOFze0b-_2gc6fAH0KY0k/edit)
+/// and provides efficient serialization/deserialization capabilities.
 #[derive(Clone, PartialEq, Eq, Serialize)]
 pub struct SourceMap {
   version: u8,
@@ -353,58 +370,64 @@ impl SourceMap {
   }
 }
 
-#[derive(Debug, Default, Deserialize)]
-struct RawSourceMap {
-  pub file: Option<String>,
-  pub sources: Option<Vec<Option<String>>>,
-  #[serde(rename = "sourceRoot")]
-  pub source_root: Option<String>,
-  #[serde(rename = "sourcesContent")]
-  pub sources_content: Option<Vec<Option<String>>>,
-  pub names: Option<Vec<Option<String>>>,
-  pub mappings: String,
-  #[serde(rename = "debugId")]
-  pub debug_id: Option<String>,
-}
-
-impl RawSourceMap {
-  pub fn from_reader<R: std::io::Read>(r: R) -> Result<Self> {
-    let raw: RawSourceMap = simd_json::serde::from_reader(r)?;
-    Ok(raw)
-  }
-
-  pub fn from_slice(val: &[u8]) -> Result<Self> {
-    let mut v = val.to_vec();
-    let raw: RawSourceMap = simd_json::serde::from_slice(&mut v)?;
-    Ok(raw)
-  }
-
-  pub fn from_json(val: &str) -> Result<Self> {
-    let mut v = val.as_bytes().to_vec();
-    let raw: RawSourceMap = simd_json::serde::from_slice(&mut v)?;
-    Ok(raw)
-  }
-}
-
 impl SourceMap {
   /// Create a [SourceMap] from json string.
-  pub fn from_json(s: &str) -> Result<Self> {
-    RawSourceMap::from_json(s)?.try_into()
+  pub fn from_json(json: impl Into<String>) -> Result<Self> {
+    let mut json_bytes = json.into().into_bytes();
+    Self::from_slice(&mut json_bytes)
   }
 
-  /// Create a [SourceMap] from [&[u8]].
-  pub fn from_slice(s: &[u8]) -> Result<Self> {
-    RawSourceMap::from_slice(s)?.try_into()
+  /// Create a [SourceMap] from [&mut [u8]].
+  pub fn from_slice(json_bytes: &mut [u8]) -> Result<Self> {
+    let value = simd_json::to_borrowed_value(json_bytes)?;
+    Ok(Self {
+      version: 3,
+      file: value.get_str("file").map(|v| Arc::from(v.to_string())),
+      sources: value
+        .get_array("sources")
+        .map(|v| {
+          v.into_iter()
+            .map(|s| s.as_str().map(|s| s.to_string()).unwrap_or_default())
+            .collect::<Vec<_>>()
+            .into()
+        })
+        .unwrap_or_default(),
+      sources_content: value
+        .get_array("sourcesContent")
+        .map(|v| {
+          v.into_iter()
+            .map(|s| s.as_str().map(|s| s.to_string()).unwrap_or_default())
+            .collect::<Vec<_>>()
+            .into()
+        })
+        .unwrap_or_default(),
+      names: value
+        .get_array("names")
+        .map(|v| {
+          v.into_iter()
+            .map(|s| s.as_str().map(|s| s.to_string()).unwrap_or_default())
+            .collect::<Vec<_>>()
+            .into()
+        })
+        .unwrap_or_default(),
+      mappings: value.get_str("mappings").unwrap_or_default().into(),
+      source_root: value
+        .get_str("sourceRoot")
+        .map(|v| Arc::from(v.to_string())),
+      debug_id: value.get_str("debugId").map(|v| Arc::from(v.to_string())),
+    })
   }
 
   /// Create a [SourceMap] from reader.
-  pub fn from_reader<R: std::io::Read>(s: R) -> Result<Self> {
-    RawSourceMap::from_reader(s)?.try_into()
+  pub fn from_reader<R: std::io::Read>(mut s: R) -> Result<Self> {
+    let mut json_bytes = vec![];
+    let _ = s.read_to_end(&mut json_bytes);
+    Self::from_slice(&mut json_bytes)
   }
 
   /// Generate source map to a json string.
   pub fn to_json(self) -> Result<String> {
-    let json = simd_json::serde::to_string(&self)?;
+    let json = simd_json::to_string(&self)?;
     Ok(json)
   }
 
@@ -412,49 +435,6 @@ impl SourceMap {
   pub fn to_writer<W: std::io::Write>(self, w: W) -> Result<()> {
     simd_json::serde::to_writer(w, &self)?;
     Ok(())
-  }
-}
-
-impl TryFrom<RawSourceMap> for SourceMap {
-  type Error = crate::Error;
-
-  fn try_from(raw: RawSourceMap) -> Result<Self> {
-    let file = raw.file.map(Into::into);
-    let mappings = raw.mappings.into();
-    let sources = raw
-      .sources
-      .unwrap_or_default()
-      .into_iter()
-      .map(Option::unwrap_or_default)
-      .collect::<Vec<_>>()
-      .into();
-    let sources_content = raw
-      .sources_content
-      .unwrap_or_default()
-      .into_iter()
-      .map(Option::unwrap_or_default)
-      .collect::<Vec<_>>()
-      .into();
-    let names = raw
-      .names
-      .unwrap_or_default()
-      .into_iter()
-      .map(Option::unwrap_or_default)
-      .collect::<Vec<_>>()
-      .into();
-    let source_root = raw.source_root.map(Into::into);
-    let debug_id = raw.debug_id.map(Into::into);
-
-    Ok(Self {
-      version: 3,
-      file,
-      mappings,
-      sources,
-      sources_content,
-      names,
-      source_root,
-      debug_id,
-    })
   }
 }
 

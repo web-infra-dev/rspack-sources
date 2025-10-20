@@ -1044,14 +1044,14 @@ Line 2"#
   #[test]
   fn should_allow_replacements_at_the_start() {
     let map = SourceMap::from_slice(
-      r#"{
+      &mut r#"{
         "version":3,
         "sources":["abc"],
         "names":["StaticPage","data","foo"],
         "mappings":";;AAAA,eAAe,SAASA,UAAT,OAA8B;AAAA,MAARC,IAAQ,QAARA,IAAQ;AAC3C,sBAAO;AAAA,cAAMA,IAAI,CAACC;AAAX,IAAP;AACD",
         "sourcesContent":["export default function StaticPage({ data }) {\nreturn <div>{data.foo}</div>\n}\n"],
         "file":"x"
-      }"#.as_bytes(),
+      }"#.as_bytes().to_vec(),
     ).unwrap();
 
     let code = r#"import { jsx as _jsx } from "react/jsx-runtime";
