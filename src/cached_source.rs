@@ -57,8 +57,8 @@ struct CachedSourceOwner {
 
 #[derive(Debug)]
 struct CachedSourceDependent<'a> {
-  cached_colomns_map: OnceLock<Option<SourceMap<'static>>>,
-  cached_line_only_map: OnceLock<Option<SourceMap<'static>>>,
+  cached_colomns_map: OnceLock<Option<Cow<'static, SourceMap<'static>>>>,
+  cached_line_only_map: OnceLock<Option<Cow<'static, SourceMap<'static>>>>,
   phantom: std::marker::PhantomData<&'a ()>,
 }
 
@@ -116,31 +116,39 @@ impl Source for CachedSource {
   }
 
   fn map<'a>(&'a self, options: &MapOptions) -> Option<Cow<'a, SourceMap<'a>>> {
+    fn get_or_init_cache<'b>(
+      owner: &'b CachedSourceOwner,
+      cache: &'b OnceLock<Option<Cow<'static, SourceMap<'static>>>>,
+      options: &MapOptions,
+    ) -> Option<Cow<'b, SourceMap<'b>>> {
+      cache
+        .get_or_init(|| {
+          let map = owner.inner.map(options);
+          // SAFETY: This transmute is safe because:
+          // 1. BoxSource is an immutable wrapper around Arc<dyn Source>, ensuring the underlying
+          //    data remains stable throughout the CachedSource's lifetime
+          // 2. The SourceMap references string data that lives in the BoxSource, which is owned
+          //    by the CachedSourceOwner and guaranteed to outlive any cached references
+          // 3. The self_cell structure ensures that the dependent (cache) cannot outlive the
+          //    owner (BoxSource), maintaining memory safety invariants
+          // 4. We're extending the lifetime to 'static for caching purposes, but the actual
+          //    data lifetime is managed by the self-referential structure
+          #[allow(unsafe_code)]
+          unsafe { std::mem::transmute::<_, Option<Cow<'static, SourceMap<'static>>>>(map) }
+        })
+        .as_ref()
+        .map(|map| {
+          Cow::Borrowed(map.as_ref())
+        })
+    }
+
     if options.columns {
       self.0.with_dependent(|owner, dependent| {
-        dependent
-          .cached_colomns_map
-          .get_or_init(|| {
-            owner
-              .inner
-              .map(options)
-              .map(|m| m.as_ref().clone().into_owned())
-          })
-          .as_ref()
-          .map(Cow::Borrowed)
+        get_or_init_cache(owner, &dependent.cached_colomns_map, options)
       })
     } else {
       self.0.with_dependent(|owner, dependent| {
-        dependent
-          .cached_line_only_map
-          .get_or_init(|| {
-            owner
-              .inner
-              .map(options)
-              .map(|m| m.as_ref().clone().into_owned())
-          })
-          .as_ref()
-          .map(Cow::Borrowed)
+        get_or_init_cache(owner, &dependent.cached_line_only_map, options)
       })
     }
   }
@@ -187,7 +195,7 @@ impl StreamChunks for CachedSource {
           on_name,
         );
             dependent.cached_colomns_map.get_or_init(|| {
-              unsafe { std::mem::transmute::<Option<SourceMap>, Option<SourceMap<'static>>>(map) }
+              unsafe { std::mem::transmute::<Option<SourceMap>, Option<SourceMap<'static>>>(map) }.map(Cow::Owned)
             });
             generated_info
           })
@@ -201,7 +209,7 @@ impl StreamChunks for CachedSource {
           on_name,
         );
         dependent.cached_line_only_map.get_or_init(|| {
-              unsafe { std::mem::transmute::<Option<SourceMap>, Option<SourceMap<'static>>>(map) }
+              unsafe { std::mem::transmute::<Option<SourceMap>, Option<SourceMap<'static>>>(map) }.map(Cow::Owned)
             });
         generated_info
           })
