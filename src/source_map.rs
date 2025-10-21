@@ -190,17 +190,20 @@ impl StaticSourceMap {
   }
 
   pub fn from_json(json: String) -> Result<Self> {
-    let borrowed_value_cell =
-      BorrowedValueCell::try_new(json.into_bytes(), |owner| {
-        // We need a mutable slice from our owned data
-        // SAFETY: We're creating a mutable reference to the owned data.
-        // The self_cell ensures this reference is valid for the lifetime of the cell.
-        #[allow(unsafe_code)]
-        let bytes: &'static mut [u8] = unsafe {
-          std::slice::from_raw_parts_mut(owner.as_ptr().cast_mut(), owner.len())
-        };
-        simd_json::to_borrowed_value(bytes)
-      })?;
+    Self::from_slice(json.into_bytes())
+  }
+
+  pub fn from_slice(slice: Vec<u8>) -> Result<Self> {
+    let borrowed_value_cell = BorrowedValueCell::try_new(slice, |owner| {
+      // We need a mutable slice from our owned data
+      // SAFETY: We're creating a mutable reference to the owned data.
+      // The self_cell ensures this reference is valid for the lifetime of the cell.
+      #[allow(unsafe_code)]
+      let bytes: &'static mut [u8] = unsafe {
+        std::slice::from_raw_parts_mut(owner.as_ptr().cast_mut(), owner.len())
+      };
+      simd_json::to_borrowed_value(bytes)
+    })?;
     Ok(Self::from_borrowed_value_cell(Arc::new(
       borrowed_value_cell,
     )))
@@ -532,6 +535,12 @@ impl SourceMap {
     let mut json = String::default();
     s.read_to_string(&mut json)?;
     Self::from_json(json)
+  }
+
+  /// Creates a [SourceMap] from a byte slice containing JSON data.
+  pub fn from_slice(slice: impl Into<Vec<u8>>) -> Result<SourceMap> {
+    let s = StaticSourceMap::from_slice(slice.into())?;
+    Ok(SourceMap(SourceMapCell::Static(s.into())))
   }
 
   /// Generate source map to a json string.
