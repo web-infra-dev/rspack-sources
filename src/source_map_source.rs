@@ -453,15 +453,11 @@ mod tests {
     }
 
     test_cached!(source, |s: &dyn Source| s.source().to_string());
-    // test_cached!(source, |s: &dyn Source| s
-    //   .map(&MapOptions::default())
-    //   .map(|m| m.into_owned()));
-    // test_cached!(source, |s: &dyn Source| s
-    //   .map(&MapOptions {
-    //     columns: false,
-    //     final_source: true
-    //   })
-    //   .map(|m| m.into_owned()));
+    test_cached!(source, |s: &dyn Source| s.map(&MapOptions::default()));
+    test_cached!(source, |s: &dyn Source| s.map(&MapOptions {
+      columns: false,
+      final_source: true
+    }));
   }
 
   #[test]

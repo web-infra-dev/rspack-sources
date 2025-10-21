@@ -42,14 +42,13 @@ pub fn get_map<S: StreamChunks>(
     &mut |source_index, source, source_content| {
       let source_index = source_index as usize;
       if sources.len() <= source_index {
-        sources.resize(source_index + 1, "".into());
+        sources.resize(source_index + 1, "".to_string());
       }
       sources[source_index] = source.to_string();
       if let Some(source_content) = source_content {
         if sources_content.len() <= source_index {
-          sources_content.resize(source_index + 1, "".into());
+          sources_content.resize(source_index + 1, "".to_string());
         }
-        // TODO: avoid to_string allocation
         sources_content[source_index] = source_content.to_string();
       }
     },
@@ -57,7 +56,7 @@ pub fn get_map<S: StreamChunks>(
     &mut |name_index, name| {
       let name_index = name_index as usize;
       if names.len() <= name_index {
-        names.resize(name_index + 1, "".into());
+        names.resize(name_index + 1, "".to_string());
       }
       names[name_index] = name.to_string();
     },
@@ -1220,7 +1219,6 @@ pub fn stream_and_get_source_and_map<'a, S: StreamChunks>(
         while sources_content.len() <= source_index2 {
           sources_content.push("".into());
         }
-        // TODO: avoid allocation here
         sources_content[source_index2] = source_content.to_string();
       }
       on_source(source_index, source, source_content);
@@ -1239,12 +1237,7 @@ pub fn stream_and_get_source_and_map<'a, S: StreamChunks>(
   let map = if mappings.is_empty() {
     None
   } else {
-    Some(SourceMap::new(
-      mappings.to_string(),
-      sources,
-      sources_content,
-      names,
-    ))
+    Some(SourceMap::new(mappings, sources, sources_content, names))
   };
   (generated_info, map)
 }

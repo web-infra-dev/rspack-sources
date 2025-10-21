@@ -243,8 +243,8 @@ impl PartialEq for SourceMapCell {
 impl Hash for SourceMapCell {
   fn hash<H: Hasher>(&self, state: &mut H) {
     match self {
-        SourceMapCell::Static(s) => s.hash(state),
-        SourceMapCell::Owned(owned) => owned.hash(state),
+      SourceMapCell::Static(s) => s.hash(state),
+      SourceMapCell::Owned(owned) => owned.hash(state),
     }
   }
 }
@@ -380,7 +380,7 @@ impl SourceMap {
   }
 
   /// Get the sources field in [SourceMap].
-  pub fn sources(&self) -> Box<dyn Iterator<Item = &str> + '_> {
+  pub fn sources(&self) -> Box<dyn Iterator<Item = &str> + Send + '_> {
     match &self.0 {
       SourceMapCell::Static(s) => {
         Box::new(s.borrow_dependent().sources.iter().copied())
@@ -409,7 +409,7 @@ impl SourceMap {
   }
 
   /// Get the sourcesContent field in [SourceMap].
-  pub fn sources_content(&self) -> Box<dyn Iterator<Item = &str> + '_> {
+  pub fn sources_content(&self) -> Box<dyn Iterator<Item = &str> + Send + '_> {
     match &self.0 {
       SourceMapCell::Static(s) => {
         Box::new(s.borrow_dependent().sources_content.iter().copied())
@@ -421,7 +421,10 @@ impl SourceMap {
   }
 
   /// Set the sourcesContent field in [SourceMap].
-  pub fn set_sources_content(&mut self, sources_content: Vec<String>) {
+  pub fn set_sources_content<T: Into<Arc<[String]>>>(
+    &mut self,
+    sources_content: T,
+  ) {
     self.ensure_owned().sources_content = sources_content.into()
   }
 
@@ -438,7 +441,7 @@ impl SourceMap {
   }
 
   /// Get the names field in [SourceMap].
-  pub fn names(&self) -> Box<dyn Iterator<Item = &str> + '_> {
+  pub fn names(&self) -> Box<dyn Iterator<Item = &str> + Send + '_> {
     match &self.0 {
       SourceMapCell::Static(s) => {
         Box::new(s.borrow_dependent().names.iter().copied())
