@@ -1,10 +1,9 @@
 use std::{
   borrow::Cow,
-  hash::{BuildHasherDefault, Hash, Hasher},
-  sync::{Arc, OnceLock},
+  hash::{Hash, Hasher},
+  sync::OnceLock,
 };
 
-use dashmap::{mapref::entry::Entry, DashMap};
 use rustc_hash::FxHasher;
 
 use crate::{
@@ -116,22 +115,32 @@ impl Source for CachedSource {
     self.0.borrow_owner().inner.size()
   }
 
-  fn map(&self, options: &MapOptions) -> Option<SourceMap> {
+  fn map<'a>(&'a self, options: &MapOptions) -> Option<Cow<'a, SourceMap<'a>>> {
     if options.columns {
       self.0.with_dependent(|owner, dependent| {
         dependent
           .cached_colomns_map
-          .get_or_init(|| owner.inner.map(options).map(|m| m.into_owned()))
+          .get_or_init(|| {
+            owner
+              .inner
+              .map(options)
+              .map(|m| m.as_ref().clone().into_owned())
+          })
           .as_ref()
-          .map(|m| m.as_borrowed())
+          .map(Cow::Borrowed)
       })
     } else {
       self.0.with_dependent(|owner, dependent| {
         dependent
           .cached_line_only_map
-          .get_or_init(|| owner.inner.map(options).map(|m| m.into_owned()))
+          .get_or_init(|| {
+            owner
+              .inner
+              .map(options)
+              .map(|m| m.as_ref().clone().into_owned())
+          })
           .as_ref()
-          .map(|m| m.as_borrowed())
+          .map(Cow::Borrowed)
       })
     }
   }

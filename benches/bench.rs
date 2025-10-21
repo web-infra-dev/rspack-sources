@@ -253,7 +253,8 @@ fn bench_rspack_sources(criterion: &mut Criterion) {
     benchmark_parse_source_map_from_json,
   );
 
-  group.bench_function("source_map_as_borrowed", benchmark_source_map_as_borrowed);
+  group
+    .bench_function("source_map_as_borrowed", benchmark_source_map_as_borrowed);
 
   group.bench_function(
     "stringify_source_map_to_json",

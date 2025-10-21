@@ -67,8 +67,8 @@ impl Source for OriginalSource {
     self.value.len()
   }
 
-  fn map(&self, options: &MapOptions) -> Option<SourceMap> {
-    get_map(self, options)
+  fn map<'a>(&'a self, options: &MapOptions) -> Option<Cow<'a, SourceMap<'a>>> {
+    get_map(self, options).map(Cow::Owned)
   }
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {

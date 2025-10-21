@@ -265,12 +265,15 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for ReplaceSource<T> {
     self.source().len()
   }
 
-  fn map(&self, options: &crate::MapOptions) -> Option<SourceMap> {
+  fn map<'a>(
+    &'a self,
+    options: &crate::MapOptions,
+  ) -> Option<Cow<'a, SourceMap<'a>>> {
     let replacements = &self.replacements;
     if replacements.is_empty() {
       return self.inner.map(options);
     }
-    get_map(self, options)
+    get_map(self, options).map(Cow::Owned)
   }
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {

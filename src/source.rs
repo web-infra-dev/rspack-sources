@@ -39,7 +39,7 @@ pub trait Source:
   fn size(&self) -> usize;
 
   /// Get the [SourceMap].
-  fn map(&self, options: &MapOptions) -> Option<SourceMap<'_>>;
+  fn map(&self, options: &MapOptions) -> Option<Cow<SourceMap<'_>>>;
 
   /// Update hash based on the source.
   fn update_hash(&self, state: &mut dyn Hasher) {
@@ -67,7 +67,7 @@ impl Source for BoxSource {
     self.as_ref().size()
   }
 
-  fn map(&self, options: &MapOptions) -> Option<SourceMap> {
+  fn map<'a>(&'a self, options: &MapOptions) -> Option<Cow<'a, SourceMap<'a>>> {
     self.as_ref().map(options)
   }
 
