@@ -148,7 +148,7 @@ impl Source for RawSource {
     }
   }
 
-  fn map<'a>(&'a self, _: &MapOptions) -> Option<Cow<'a, SourceMap<'a>>> {
+  fn map(&self, _: &MapOptions) -> Option<SourceMap> {
     None
   }
 
@@ -300,7 +300,7 @@ impl Source for RawStringSource {
     self.0.len()
   }
 
-  fn map<'a>(&'a self, _: &MapOptions) -> Option<Cow<'a, SourceMap<'a>>> {
+  fn map(&self, _: &MapOptions) -> Option<SourceMap> {
     None
   }
 
@@ -433,7 +433,7 @@ impl Source for RawBufferSource {
     self.value.len()
   }
 
-  fn map<'a>(&'a self, _: &MapOptions) -> Option<Cow<'a, SourceMap<'a>>> {
+  fn map(&self, _: &MapOptions) -> Option<SourceMap> {
     None
   }
 

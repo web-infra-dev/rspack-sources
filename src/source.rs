@@ -6,18 +6,7 @@ use std::{
   sync::Arc,
 };
 
-use serde::Serialize;
-use simd_json::{
-  base::ValueAsScalar,
-  derived::{ValueObjectAccessAsArray, ValueObjectAccessAsScalar},
-  BorrowedValue,
-};
-
-use crate::{
-  helpers::{decode_mappings, StreamChunks},
-  rope::Rope,
-  Result, SourceMap,
-};
+use crate::{helpers::StreamChunks, rope::Rope, SourceMap};
 
 /// An alias for `Box<dyn Source>`.
 pub type BoxSource = Arc<dyn Source>;
@@ -39,7 +28,7 @@ pub trait Source:
   fn size(&self) -> usize;
 
   /// Get the [SourceMap].
-  fn map(&self, options: &MapOptions) -> Option<Cow<SourceMap<'_>>>;
+  fn map(&self, options: &MapOptions) -> Option<SourceMap>;
 
   /// Update hash based on the source.
   fn update_hash(&self, state: &mut dyn Hasher) {
@@ -67,7 +56,7 @@ impl Source for BoxSource {
     self.as_ref().size()
   }
 
-  fn map<'a>(&'a self, options: &MapOptions) -> Option<Cow<'a, SourceMap<'a>>> {
+  fn map(&self, options: &MapOptions) -> Option<SourceMap> {
     self.as_ref().map(options)
   }
 

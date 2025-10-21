@@ -1,9 +1,10 @@
 use std::{
   borrow::Cow,
-  hash::{Hash, Hasher},
-  sync::OnceLock,
+  hash::{BuildHasherDefault, Hash, Hasher},
+  sync::{Arc, OnceLock},
 };
 
+use dashmap::{mapref::entry::Entry, DashMap};
 use rustc_hash::FxHasher;
 
 use crate::{
@@ -12,7 +13,7 @@ use crate::{
     stream_chunks_of_source_map, StreamChunks,
   },
   rope::Rope,
-  BoxSource, MapOptions, Source, SourceExt, SourceMap,
+  MapOptions, Source, SourceMap,
 };
 
 /// It tries to reused cached results from other methods to avoid calculations,
@@ -48,61 +49,36 @@ use crate::{
 ///   "Hello World\nconsole.log('test');\nconsole.log('test2');\nHello2\n"
 /// );
 /// ```
-
-#[derive(Debug)]
-struct CachedSourceOwner {
-  inner: BoxSource,
-  cached_hash: OnceLock<u64>,
+pub struct CachedSource<T> {
+  inner: Arc<T>,
+  cached_hash: Arc<OnceLock<u64>>,
+  cached_maps:
+    Arc<DashMap<MapOptions, Option<SourceMap>, BuildHasherDefault<FxHasher>>>,
 }
 
-#[derive(Debug)]
-struct CachedSourceDependent<'a> {
-  cached_colomns_map: OnceLock<Option<Cow<'static, SourceMap<'static>>>>,
-  cached_line_only_map: OnceLock<Option<Cow<'static, SourceMap<'static>>>>,
-  phantom: std::marker::PhantomData<&'a ()>,
-}
-
-self_cell::self_cell!(
-  struct CachedSourceCell {
-    owner: CachedSourceOwner,
-
-    #[covariant]
-    dependent: CachedSourceDependent,
-  }
-
-  impl { Debug }
-);
-
-/// A wrapper around any [`Source`] that caches expensive computations to improve performance.
-pub struct CachedSource(CachedSourceCell);
-
-impl CachedSource {
+impl<T> CachedSource<T> {
   /// Create a [CachedSource] with the original [Source].
-  pub fn new<T: SourceExt>(inner: T) -> Self {
-    let owner = CachedSourceOwner {
-      inner: inner.boxed(),
-      cached_hash: OnceLock::new(),
-    };
-    Self(CachedSourceCell::new(owner, |_| CachedSourceDependent {
-      cached_colomns_map: Default::default(),
-      cached_line_only_map: Default::default(),
-      phantom: std::marker::PhantomData,
-    }))
+  pub fn new(inner: T) -> Self {
+    Self {
+      inner: Arc::new(inner),
+      cached_hash: Default::default(),
+      cached_maps: Default::default(),
+    }
   }
 
   /// Get the original [Source].
-  pub fn original(&self) -> &BoxSource {
-    &self.0.borrow_owner().inner
+  pub fn original(&self) -> &T {
+    &self.inner
   }
 }
 
-impl Source for CachedSource {
+impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
   fn source(&self) -> Cow<str> {
-    self.0.borrow_owner().inner.source()
+    self.inner.source()
   }
 
   fn rope(&self) -> Rope<'_> {
-    self.0.borrow_owner().inner.rope()
+    self.inner.rope()
   }
 
   fn buffer(&self) -> Cow<[u8]> {
@@ -112,53 +88,27 @@ impl Source for CachedSource {
   }
 
   fn size(&self) -> usize {
-    self.0.borrow_owner().inner.size()
+    self.inner.size()
   }
 
-  fn map<'a>(&'a self, options: &MapOptions) -> Option<Cow<'a, SourceMap<'a>>> {
-    fn get_or_init_cache<'b>(
-      owner: &'b CachedSourceOwner,
-      cache: &'b OnceLock<Option<Cow<'static, SourceMap<'static>>>>,
-      options: &MapOptions,
-    ) -> Option<Cow<'b, SourceMap<'b>>> {
-      cache
-        .get_or_init(|| {
-          let map = owner.inner.map(options);
-          // SAFETY: This transmute is safe because:
-          // 1. BoxSource is an immutable wrapper around Arc<dyn Source>, ensuring the underlying
-          //    data remains stable throughout the CachedSource's lifetime
-          // 2. The SourceMap references string data that lives in the BoxSource, which is owned
-          //    by the CachedSourceOwner and guaranteed to outlive any cached references
-          // 3. The self_cell structure ensures that the dependent (cache) cannot outlive the
-          //    owner (BoxSource), maintaining memory safety invariants
-          // 4. We're extending the lifetime to 'static for caching purposes, but the actual
-          //    data lifetime is managed by the self-referential structure
-          #[allow(unsafe_code)]
-          unsafe { std::mem::transmute::<_, Option<Cow<'static, SourceMap<'static>>>>(map) }
-        })
-        .as_ref()
-        .map(|map| {
-          Cow::Borrowed(map.as_ref())
-        })
-    }
-
-    if options.columns {
-      self.0.with_dependent(|owner, dependent| {
-        get_or_init_cache(owner, &dependent.cached_colomns_map, options)
-      })
+  fn map(&self, options: &MapOptions) -> Option<SourceMap> {
+    if let Some(map) = self.cached_maps.get(options) {
+      map.clone()
     } else {
-      self.0.with_dependent(|owner, dependent| {
-        get_or_init_cache(owner, &dependent.cached_line_only_map, options)
-      })
+      let map = self.inner.map(options);
+      self.cached_maps.insert(options.clone(), map.clone());
+      map
     }
   }
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
-    self.0.borrow_owner().inner.to_writer(writer)
+    self.inner.to_writer(writer)
   }
 }
 
-impl StreamChunks for CachedSource {
+impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks
+  for CachedSource<T>
+{
   fn stream_chunks<'a>(
     &'a self,
     options: &MapOptions,
@@ -166,80 +116,73 @@ impl StreamChunks for CachedSource {
     on_source: crate::helpers::OnSource<'_, 'a>,
     on_name: crate::helpers::OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {
-    let cached = if options.columns {
-      self.0.borrow_dependent().cached_colomns_map.get()
-    } else {
-      self.0.borrow_dependent().cached_line_only_map.get()
-    };
-    match cached {
-      Some(Some(map)) => {
-        let source = self.0.borrow_owner().inner.rope();
-        stream_chunks_of_source_map(
-          source, map, on_chunk, on_source, on_name, options,
-        )
-      }
-      Some(None) => {
-        let source = self.0.borrow_owner().inner.rope();
-        stream_chunks_of_raw_source(
-          source, options, on_chunk, on_source, on_name,
-        )
-      }
-      None => {
-        if options.columns {
-          self.0.with_dependent(|owner, dependent| {
-            let (generated_info, map) = stream_and_get_source_and_map(
-          &owner.inner,
-          options,
-          on_chunk,
-          on_source,
-          on_name,
-        );
-            dependent.cached_colomns_map.get_or_init(|| {
-              unsafe { std::mem::transmute::<Option<SourceMap>, Option<SourceMap<'static>>>(map) }.map(Cow::Owned)
-            });
-            generated_info
-          })
+    let cached_map = self.cached_maps.entry(options.clone());
+    match cached_map {
+      Entry::Occupied(entry) => {
+        let source = self.rope();
+        if let Some(map) = entry.get() {
+          #[allow(unsafe_code)]
+          // SAFETY: We guarantee that once a `SourceMap` is stored in the cache, it will never be removed.
+          // Therefore, even if we force its lifetime to be longer, the reference remains valid.
+          // This is based on the following assumptions:
+          // 1. `SourceMap` will be valid for the entire duration of the application.
+          // 2. The cached `SourceMap` will not be manually removed or replaced, ensuring the reference's safety.
+          let map =
+            unsafe { std::mem::transmute::<&SourceMap, &'a SourceMap>(map) };
+          stream_chunks_of_source_map(
+            source, map, on_chunk, on_source, on_name, options,
+          )
         } else {
-          self.0.with_dependent(|owner, dependent| {
-            let (generated_info, map) = stream_and_get_source_and_map(
-          &owner.inner,
+          stream_chunks_of_raw_source(
+            source, options, on_chunk, on_source, on_name,
+          )
+        }
+      }
+      Entry::Vacant(entry) => {
+        let (generated_info, map) = stream_and_get_source_and_map(
+          &self.inner as &T,
           options,
           on_chunk,
           on_source,
           on_name,
         );
-        dependent.cached_line_only_map.get_or_init(|| {
-              unsafe { std::mem::transmute::<Option<SourceMap>, Option<SourceMap<'static>>>(map) }.map(Cow::Owned)
-            });
+        entry.insert(map);
         generated_info
-          })
-        }
       }
     }
   }
 }
 
-impl Hash for CachedSource {
+impl<T> Clone for CachedSource<T> {
+  fn clone(&self) -> Self {
+    Self {
+      inner: self.inner.clone(),
+      cached_hash: self.cached_hash.clone(),
+      cached_maps: self.cached_maps.clone(),
+    }
+  }
+}
+
+impl<T: Source + Hash + PartialEq + Eq + 'static> Hash for CachedSource<T> {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-    let owner = self.0.borrow_owner();
-    (owner.cached_hash.get_or_init(|| {
+    (self.cached_hash.get_or_init(|| {
       let mut hasher = FxHasher::default();
-      owner.inner.hash(&mut hasher);
+      self.inner.hash(&mut hasher);
       hasher.finish()
     }))
     .hash(state);
   }
 }
 
-impl PartialEq for CachedSource {
+impl<T: PartialEq> PartialEq for CachedSource<T> {
   fn eq(&self, other: &Self) -> bool {
-    &self.0.borrow_owner().inner == &other.0.borrow_owner().inner
+    self.inner == other.inner
   }
 }
 
-impl Eq for CachedSource {}
+impl<T: Eq> Eq for CachedSource<T> {}
 
-impl std::fmt::Debug for CachedSource {
+impl<T: std::fmt::Debug> std::fmt::Debug for CachedSource<T> {
   fn fmt(
     &self,
     f: &mut std::fmt::Formatter<'_>,
@@ -251,7 +194,7 @@ impl std::fmt::Debug for CachedSource {
     writeln!(
       f,
       "{indent_str}{:indent$?}",
-      self.0.borrow_owner().inner,
+      self.inner,
       indent = indent + 2
     )?;
     write!(f, "{indent_str}).boxed()")
@@ -285,6 +228,25 @@ mod tests {
     ]);
     let map = source.map(&Default::default()).unwrap();
     assert_eq!(map.mappings(), ";;AACA");
+  }
+
+  #[test]
+  fn should_allow_to_store_and_share_cached_data() {
+    let original = OriginalSource::new("Hello World", "test.txt");
+    let source = CachedSource::new(original);
+    let clone = source.clone();
+
+    // fill up cache
+    let map_options = MapOptions::default();
+    source.source();
+    source.buffer();
+    source.size();
+    source.map(&map_options);
+
+    assert_eq!(
+      *clone.cached_maps.get(&map_options).unwrap().value(),
+      source.map(&map_options)
+    );
   }
 
   #[test]

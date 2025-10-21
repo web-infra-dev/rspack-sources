@@ -20,14 +20,14 @@ use crate::{
 type InnerSourceContentLine<'a, 'b> =
   RefCell<LinearMap<OnceCell<Option<Vec<WithIndices<'a, Rope<'b>>>>>>>;
 
-pub fn get_map<'a, S: StreamChunks>(
-  stream: &'a S,
+pub fn get_map<S: StreamChunks>(
+  stream: &S,
   options: &MapOptions,
-) -> Option<SourceMap<'a>> {
+) -> Option<SourceMap> {
   let mut mappings_encoder = create_encoder(options.columns);
-  let mut sources: Vec<Cow<str>> = Vec::new();
-  let mut sources_content: Vec<Cow<str>> = Vec::new();
-  let mut names: Vec<Cow<str>> = Vec::new();
+  let mut sources: Vec<String> = Vec::new();
+  let mut sources_content: Vec<String> = Vec::new();
+  let mut names: Vec<String> = Vec::new();
 
   stream.stream_chunks(
     &MapOptions {
@@ -44,13 +44,13 @@ pub fn get_map<'a, S: StreamChunks>(
       if sources.len() <= source_index {
         sources.resize(source_index + 1, "".into());
       }
-      sources[source_index] = source;
+      sources[source_index] = source.to_string();
       if let Some(source_content) = source_content {
         if sources_content.len() <= source_index {
           sources_content.resize(source_index + 1, "".into());
         }
         // TODO: avoid to_string allocation
-        sources_content[source_index] = Cow::Owned(source_content.to_string());
+        sources_content[source_index] = source_content.to_string();
       }
     },
     // on_name
@@ -59,7 +59,7 @@ pub fn get_map<'a, S: StreamChunks>(
       if names.len() <= name_index {
         names.resize(name_index + 1, "".into());
       }
-      names[name_index] = name;
+      names[name_index] = name.to_string();
     },
   );
   let mappings = mappings_encoder.drain();
@@ -120,9 +120,9 @@ pub struct GeneratedInfo {
 }
 
 /// Decodes the given mappings string into an iterator of `Mapping` items.
-pub fn decode_mappings<'a>(
-  source_map: &'a SourceMap<'a>,
-) -> impl Iterator<Item = Mapping> + 'a {
+pub fn decode_mappings(
+  source_map: &SourceMap,
+) -> impl Iterator<Item = Mapping> + '_ {
   MappingsDecoder::new(source_map.mappings())
 }
 
@@ -368,14 +368,14 @@ where
   if result.generated_line == 1 && result.generated_column == 0 {
     return result;
   }
-  for (i, source) in source_map.sources().iter().enumerate() {
+  for (i, source) in source_map.sources().enumerate() {
     on_source(
       i as u32,
       get_source(source_map, source),
       source_map.get_source_content(i).map(Rope::from),
     )
   }
-  for (i, name) in source_map.names().iter().enumerate() {
+  for (i, name) in source_map.names().enumerate() {
     on_name(i as u32, Cow::Borrowed(name));
   }
   let mut mapping_active_line = 0;
@@ -432,14 +432,14 @@ where
       generated_column: 0,
     };
   }
-  for (i, source) in source_map.sources().iter().enumerate() {
+  for (i, source) in source_map.sources().enumerate() {
     on_source(
       i as u32,
       get_source(source_map, source),
       source_map.get_source_content(i).map(Rope::from),
     )
   }
-  for (i, name) in source_map.names().iter().enumerate() {
+  for (i, name) in source_map.names().enumerate() {
     on_name(i as u32, Cow::Borrowed(name));
   }
   let last_line =
@@ -582,7 +582,7 @@ where
       generated_column: 0,
     };
   }
-  for (i, source) in source_map.sources().iter().enumerate() {
+  for (i, source) in source_map.sources().enumerate() {
     on_source(
       i as u32,
       get_source(source_map, source),
@@ -630,7 +630,7 @@ where
       generated_column: 0,
     };
   }
-  for (i, source) in source_map.sources().iter().enumerate() {
+  for (i, source) in source_map.sources().enumerate() {
     on_source(
       i as u32,
       get_source(source_map, source),
@@ -1198,11 +1198,11 @@ pub fn stream_and_get_source_and_map<'a, S: StreamChunks>(
   on_chunk: OnChunk<'_, 'a>,
   on_source: OnSource<'_, 'a>,
   on_name: OnName<'_, 'a>,
-) -> (GeneratedInfo, Option<SourceMap<'a>>) {
+) -> (GeneratedInfo, Option<SourceMap>) {
   let mut mappings_encoder = create_encoder(options.columns);
-  let mut sources: Vec<Cow<'a, str>> = Vec::new();
-  let mut sources_content: Vec<Cow<'static, str>> = Vec::new();
-  let mut names: Vec<Cow<'a, str>> = Vec::new();
+  let mut sources: Vec<String> = Vec::new();
+  let mut sources_content: Vec<String> = Vec::new();
+  let mut names: Vec<String> = Vec::new();
 
   let generated_info = input_source.stream_chunks(
     options,
@@ -1215,13 +1215,13 @@ pub fn stream_and_get_source_and_map<'a, S: StreamChunks>(
       while sources.len() <= source_index2 {
         sources.push("".into());
       }
-      sources[source_index2] = source.clone();
+      sources[source_index2] = source.to_string();
       if let Some(ref source_content) = source_content {
         while sources_content.len() <= source_index2 {
           sources_content.push("".into());
         }
         // TODO: avoid allocation here
-        sources_content[source_index2] = Cow::Owned(source_content.to_string());
+        sources_content[source_index2] = source_content.to_string();
       }
       on_source(source_index, source, source_content);
     },
@@ -1230,7 +1230,7 @@ pub fn stream_and_get_source_and_map<'a, S: StreamChunks>(
       while names.len() <= name_index2 {
         names.push("".into());
       }
-      names[name_index2] = name.clone();
+      names[name_index2] = name.to_string();
       on_name(name_index, name);
     },
   );
