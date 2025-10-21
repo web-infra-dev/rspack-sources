@@ -1,16 +1,16 @@
 use std::{
   any::{Any, TypeId},
   borrow::Cow,
-  fmt,
+  fmt::{self, Debug},
   hash::{Hash, Hasher},
   sync::Arc,
 };
 
-use dyn_clone::DynClone;
 use serde::Serialize;
 use simd_json::{
   base::ValueAsScalar,
   derived::{ValueObjectAccessAsArray, ValueObjectAccessAsScalar},
+  BorrowedValue,
 };
 
 use crate::{
@@ -24,7 +24,7 @@ pub type BoxSource = Arc<dyn Source>;
 
 /// [Source] abstraction, [webpack-sources docs](https://github.com/webpack/webpack-sources/#source).
 pub trait Source:
-  StreamChunks + DynHash + AsAny + DynEq + DynClone + fmt::Debug + Sync + Send
+  StreamChunks + DynHash + AsAny + DynEq + fmt::Debug + Sync + Send
 {
   /// Get the source code.
   fn source(&self) -> Cow<str>;
@@ -39,7 +39,7 @@ pub trait Source:
   fn size(&self) -> usize;
 
   /// Get the [SourceMap].
-  fn map(&self, options: &MapOptions) -> Option<SourceMap>;
+  fn map(&self, options: &MapOptions) -> Option<SourceMap<'_>>;
 
   /// Update hash based on the source.
   fn update_hash(&self, state: &mut dyn Hasher) {
@@ -75,8 +75,6 @@ impl Source for BoxSource {
     self.as_ref().to_writer(writer)
   }
 }
-
-dyn_clone::clone_trait_object!(Source);
 
 impl StreamChunks for BoxSource {
   fn stream_chunks<'a>(
@@ -189,11 +187,304 @@ impl MapOptions {
   }
 }
 
-fn is_all_empty(val: &Arc<[String]>) -> bool {
+fn is_all_empty(val: &[Cow<'_, str>]) -> bool {
   if val.is_empty() {
     return true;
   }
   val.iter().all(|s| s.is_empty())
+}
+
+#[derive(Clone, Eq, Serialize)]
+pub enum StringRef<'a> {
+  Borrowed(&'a str),
+  Shared(Arc<str>),
+}
+
+impl<'a> StringRef<'a> {
+  pub fn as_str(&self) -> &str {
+    match self {
+      StringRef::Borrowed(s) => s,
+      StringRef::Shared(s) => s.as_ref(),
+    }
+  }
+
+  pub fn into_owned(self) -> StringRef<'static> {
+    match self {
+      StringRef::Borrowed(s) => StringRef::Shared(Arc::from(s)),
+      StringRef::Shared(s) => StringRef::Shared(s),
+    }
+  }
+
+  pub fn as_borrowed(&'a self) -> Self {
+    match &self {
+      StringRef::Borrowed(s) => StringRef::Borrowed(s),
+      StringRef::Shared(s) => StringRef::Borrowed(s.as_ref()),
+    }
+  }
+}
+
+impl PartialEq for StringRef<'_> {
+  fn eq(&self, other: &Self) -> bool {
+    self.as_str() == other.as_str()
+  }
+}
+
+impl<'a> From<&'a str> for StringRef<'a> {
+  fn from(s: &'a str) -> Self {
+    StringRef::Borrowed(s)
+  }
+}
+
+impl From<String> for StringRef<'_> {
+  fn from(s: String) -> Self {
+    StringRef::Shared(Arc::from(s))
+  }
+}
+
+impl From<Arc<str>> for StringRef<'_> {
+  fn from(s: Arc<str>) -> Self {
+    StringRef::Shared(s)
+  }
+}
+
+impl Hash for StringRef<'_> {
+  fn hash<H: Hasher>(&self, state: &mut H) {
+    self.as_str().hash(state);
+  }
+}
+
+impl AsRef<str> for StringRef<'_> {
+  fn as_ref(&self) -> &str {
+    self.as_str()
+  }
+}
+
+#[derive(Clone, PartialEq, Eq, Serialize)]
+struct BorrowedSourceMap<'a> {
+  version: u8,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  file: Option<StringRef<'a>>,
+  sources: Arc<Vec<Cow<'a, str>>>,
+  #[serde(rename = "sourcesContent", skip_serializing_if = "is_all_empty")]
+  sources_content: Arc<Vec<Cow<'a, str>>>,
+  names: Arc<Vec<Cow<'a, str>>>,
+  mappings: StringRef<'a>,
+  #[serde(rename = "sourceRoot", skip_serializing_if = "Option::is_none")]
+  source_root: Option<StringRef<'a>>,
+  #[serde(rename = "debugId", skip_serializing_if = "Option::is_none")]
+  debug_id: Option<StringRef<'a>>,
+  #[serde(rename = "ignoreList", skip_serializing_if = "Option::is_none")]
+  ignore_list: Option<Vec<u32>>,
+}
+
+impl Hash for BorrowedSourceMap<'_> {
+  fn hash<H: Hasher>(&self, state: &mut H) {
+    self.file.hash(state);
+    self.mappings.hash(state);
+    self.sources.hash(state);
+    self.sources_content.hash(state);
+    self.names.hash(state);
+    self.source_root.hash(state);
+    self.ignore_list.hash(state);
+  }
+}
+
+impl BorrowedSourceMap<'_> {
+  pub fn into_owned(self) -> BorrowedSourceMap<'static> {
+    fn cow_to_owned(s: &Cow<'_, str>) -> Cow<'static, str> {
+      Cow::Owned(s.to_string())
+    }
+
+    BorrowedSourceMap {
+      version: self.version,
+      file: self.file.map(|s| s.into_owned()),
+      sources: self
+        .sources
+        .as_ref()
+        .iter()
+        .map(cow_to_owned)
+        .collect::<Vec<_>>()
+        .into(),
+      sources_content: self
+        .sources_content
+        .as_ref()
+        .iter()
+        .map(cow_to_owned)
+        .collect::<Vec<_>>()
+        .into(),
+      names: self
+        .names
+        .as_ref()
+        .iter()
+        .map(cow_to_owned)
+        .collect::<Vec<_>>()
+        .into(),
+      mappings: self.mappings.into_owned(),
+      source_root: self.source_root.map(|s| s.into_owned()),
+      debug_id: self.debug_id.map(|s| s.into_owned()),
+      ignore_list: self.ignore_list.clone(),
+    }
+  }
+
+  fn to_json(&self) -> Result<String> {
+    let json = simd_json::serde::to_string(&self)?;
+    Ok(json)
+  }
+
+  pub fn to_writer<W: std::io::Write>(&self, w: W) -> Result<()> {
+    simd_json::serde::to_writer(w, self)?;
+    Ok(())
+  }
+}
+
+type Owner = Vec<u8>;
+
+self_cell::self_cell!(
+  struct BorrowedValueCell {
+    owner: Owner,
+
+    #[covariant]
+    dependent: BorrowedValue,
+  }
+);
+
+self_cell::self_cell!(
+  struct StaticSourceMap {
+    owner: Arc<BorrowedValueCell>,
+
+    #[covariant]
+    dependent: BorrowedSourceMap,
+  }
+);
+
+impl Clone for StaticSourceMap {
+  fn clone(&self) -> Self {
+    Self::new(self.borrow_owner().clone(), |_| {
+      let dependent = self.borrow_dependent();
+      unsafe {
+        std::mem::transmute::<BorrowedSourceMap, BorrowedSourceMap<'static>>(
+          dependent.clone(),
+        )
+      }
+    })
+  }
+}
+
+impl PartialEq for StaticSourceMap {
+  fn eq(&self, other: &Self) -> bool {
+    self.borrow_dependent() == other.borrow_dependent()
+  }
+}
+
+impl Eq for StaticSourceMap {}
+
+impl Hash for StaticSourceMap {
+  fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+    self.borrow_dependent().hash(state);
+  }
+}
+
+impl StaticSourceMap {
+  fn from_borrowed_value_cell(cell: Arc<BorrowedValueCell>) -> Self {
+    Self::new(cell, |owner| BorrowedSourceMap {
+      version: 3,
+      file: owner.borrow_dependent().get_str("file").map(Into::into),
+      sources: owner
+        .borrow_dependent()
+        .get_array("sources")
+        .map(|v| {
+          v.iter()
+            .map(|s| Cow::Borrowed(s.as_str().unwrap_or_default()))
+            .collect::<Vec<_>>()
+        })
+        .unwrap_or_default()
+        .into(),
+      sources_content: owner
+        .borrow_dependent()
+        .get_array("sourcesContent")
+        .map(|v| {
+          v.iter()
+            .map(|s| Cow::Borrowed(s.as_str().unwrap_or_default()))
+            .collect::<Vec<_>>()
+        })
+        .unwrap_or_default()
+        .into(),
+      names: owner
+        .borrow_dependent()
+        .get_array("names")
+        .map(|v| {
+          v.iter()
+            .map(|s| Cow::Borrowed(s.as_str().unwrap_or_default()))
+            .collect::<Vec<_>>()
+        })
+        .unwrap_or_default()
+        .into(),
+      mappings: owner
+        .borrow_dependent()
+        .get_str("mappings")
+        .unwrap_or_default()
+        .into(),
+      source_root: owner
+        .borrow_dependent()
+        .get_str("sourceRoot")
+        .map(Into::into),
+      debug_id: owner.borrow_dependent().get_str("debugId").map(Into::into),
+      ignore_list: owner.borrow_dependent().get_array("ignoreList").map(|v| {
+        v.iter()
+          .map(|n| n.as_u32().unwrap_or_default())
+          .collect::<Vec<_>>()
+      }),
+    })
+  }
+
+  pub fn from_json(json: String) -> Result<Self> {
+    let borrowed_value_cell =
+      BorrowedValueCell::try_new(json.into_bytes(), |owner| {
+        // We need a mutable slice from our owned data
+        // SAFETY: We're creating a mutable reference to the owned data.
+        // The self_cell ensures this reference is valid for the lifetime of the cell.
+        let bytes: &'static mut [u8] = unsafe {
+          std::slice::from_raw_parts_mut(owner.as_ptr().cast_mut(), owner.len())
+        };
+        simd_json::to_borrowed_value(bytes)
+      })?;
+    Ok(Self::from_borrowed_value_cell(Arc::new(
+      borrowed_value_cell,
+    )))
+  }
+
+  pub fn to_json(&self) -> Result<String> {
+    self.borrow_dependent().to_json()
+  }
+
+  pub fn to_writer<W: std::io::Write>(&self, w: W) -> Result<()> {
+    self.borrow_dependent().to_writer(w)
+  }
+}
+
+#[derive(Clone, Eq, Hash)]
+enum SourceMapCell<'a> {
+  Static(StaticSourceMap),
+  Borrowed(BorrowedSourceMap<'a>),
+}
+
+impl PartialEq for SourceMapCell<'_> {
+  fn eq(&self, other: &Self) -> bool {
+    match (self, other) {
+      (SourceMapCell::Static(this), SourceMapCell::Static(other)) => {
+        this.borrow_dependent() == other.borrow_dependent()
+      }
+      (SourceMapCell::Static(this), SourceMapCell::Borrowed(other)) => {
+        this.borrow_dependent() == other
+      }
+      (SourceMapCell::Borrowed(this), SourceMapCell::Static(other)) => {
+        this == other.borrow_dependent()
+      }
+      (SourceMapCell::Borrowed(this), SourceMapCell::Borrowed(other)) => {
+        this == other
+      }
+    }
+  }
 }
 
 /// Source map representation and utilities.
@@ -211,98 +502,81 @@ fn is_all_empty(val: &Arc<[String]>) -> bool {
 ///
 /// The source map follows the [Source Map Specification v3](https://docs.google.com/document/d/1U1RGAehQwRypUTovF1KRlpiOFze0b-_2gc6fAH0KY0k/edit)
 /// and provides efficient serialization/deserialization capabilities.
-#[derive(Clone, PartialEq, Eq, Serialize)]
-pub struct SourceMap {
-  version: u8,
-  #[serde(skip_serializing_if = "Option::is_none")]
-  file: Option<Arc<str>>,
-  sources: Arc<[String]>,
-  #[serde(rename = "sourcesContent", skip_serializing_if = "is_all_empty")]
-  sources_content: Arc<[String]>,
-  names: Arc<[String]>,
-  mappings: Arc<str>,
-  #[serde(rename = "sourceRoot", skip_serializing_if = "Option::is_none")]
-  source_root: Option<Arc<str>>,
-  #[serde(rename = "debugId", skip_serializing_if = "Option::is_none")]
-  debug_id: Option<Arc<str>>,
-  #[serde(rename = "ignoreList", skip_serializing_if = "Option::is_none")]
-  ignore_list: Option<Vec<u32>>,
-}
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct SourceMap<'a>(SourceMapCell<'a>);
 
-impl std::fmt::Debug for SourceMap {
-  fn fmt(
-    &self,
-    f: &mut std::fmt::Formatter<'_>,
-  ) -> std::result::Result<(), std::fmt::Error> {
-    let indent = f.width().unwrap_or(0);
-    let indent_str = format!("{:indent$}", "", indent = indent);
-
-    write!(
-      f,
-      "{indent_str}SourceMap::from_json({:?}).unwrap()",
-      self.clone().to_json().unwrap()
-    )?;
-
-    Ok(())
-  }
-}
-impl Hash for SourceMap {
-  fn hash<H: Hasher>(&self, state: &mut H) {
-    self.file.hash(state);
-    self.mappings.hash(state);
-    self.sources.hash(state);
-    self.sources_content.hash(state);
-    self.names.hash(state);
-    self.source_root.hash(state);
-    self.ignore_list.hash(state);
-  }
-}
-
-impl SourceMap {
+impl<'a> SourceMap<'a> {
   /// Create a [SourceMap].
-  pub fn new<Mappings, Sources, SourcesContent, Names>(
+  pub fn new<Mappings>(
     mappings: Mappings,
-    sources: Sources,
-    sources_content: SourcesContent,
-    names: Names,
+    sources: Vec<Cow<'a, str>>,
+    sources_content: Vec<Cow<'a, str>>,
+    names: Vec<Cow<'a, str>>,
   ) -> Self
   where
-    Mappings: Into<Arc<str>>,
-    Sources: Into<Arc<[String]>>,
-    SourcesContent: Into<Arc<[String]>>,
-    Names: Into<Arc<[String]>>,
+    Mappings: Into<StringRef<'a>>,
   {
-    Self {
+    Self(SourceMapCell::Borrowed(BorrowedSourceMap {
       version: 3,
       file: None,
-      mappings: mappings.into(),
       sources: sources.into(),
       sources_content: sources_content.into(),
       names: names.into(),
+      mappings: mappings.into(),
       source_root: None,
       debug_id: None,
       ignore_list: None,
-    }
+    }))
   }
 
   /// Get the file field in [SourceMap].
   pub fn file(&self) -> Option<&str> {
-    self.file.as_deref()
+    match &self.0 {
+      SourceMapCell::Static(owned) => {
+        owned.borrow_dependent().file.as_ref().map(|s| s.as_str())
+      }
+      SourceMapCell::Borrowed(borrowed) => {
+        borrowed.file.as_ref().map(|s| s.as_str())
+      }
+    }
   }
 
   /// Set the file field in [SourceMap].
-  pub fn set_file<T: Into<Arc<str>>>(&mut self, file: Option<T>) {
-    self.file = file.map(Into::into);
+  pub fn set_file<T: Into<String>>(&mut self, file: Option<T>) {
+    match &mut self.0 {
+      SourceMapCell::Static(owned) => {
+        owned.with_dependent_mut(|_, dependent| {
+          dependent.file = file.map(|s| s.into().into());
+        })
+      }
+      SourceMapCell::Borrowed(borrowed) => {
+        borrowed.file = file.map(|s| s.into().into())
+      }
+    }
   }
 
   /// Get the ignoreList field in [SourceMap].
   pub fn ignore_list(&self) -> Option<&[u32]> {
-    self.ignore_list.as_deref()
+    match &self.0 {
+      SourceMapCell::Static(owned) => {
+        owned.borrow_dependent().ignore_list.as_deref()
+      }
+      SourceMapCell::Borrowed(borrowed) => borrowed.ignore_list.as_deref(),
+    }
   }
 
   /// Set the ignoreList field in [SourceMap].
   pub fn set_ignore_list<T: Into<Vec<u32>>>(&mut self, ignore_list: Option<T>) {
-    self.ignore_list = ignore_list.map(Into::into);
+    match &mut self.0 {
+      SourceMapCell::Static(owned) => {
+        owned.with_dependent_mut(|_, dependent| {
+          dependent.ignore_list = ignore_list.map(|v| v.into());
+        })
+      }
+      SourceMapCell::Borrowed(borrowed) => {
+        borrowed.ignore_list = ignore_list.map(|v| v.into());
+      }
+    }
   }
 
   /// Get the decoded mappings in [SourceMap].
@@ -312,148 +586,278 @@ impl SourceMap {
 
   /// Get the mappings string in [SourceMap].
   pub fn mappings(&self) -> &str {
-    &self.mappings
+    match &self.0 {
+      SourceMapCell::Static(owned) => {
+        owned.borrow_dependent().mappings.as_str()
+      }
+      SourceMapCell::Borrowed(borrowed) => borrowed.mappings.as_str(),
+    }
   }
 
   /// Get the sources field in [SourceMap].
-  pub fn sources(&self) -> &[String] {
-    &self.sources
+  pub fn sources(&self) -> &[Cow<'_, str>] {
+    match &self.0 {
+      SourceMapCell::Static(owned) => &owned.borrow_dependent().sources,
+      SourceMapCell::Borrowed(borrowed) => &borrowed.sources,
+    }
   }
 
   /// Set the sources field in [SourceMap].
-  pub fn set_sources<T: Into<Arc<[String]>>>(&mut self, sources: T) {
-    self.sources = sources.into();
+  pub fn set_sources(&mut self, sources: Vec<String>) {
+    match &mut self.0 {
+      SourceMapCell::Static(owned) => {
+        owned.with_dependent_mut(|_, dependent| {
+          dependent.sources = sources
+            .into_iter()
+            .map(Cow::Owned)
+            .collect::<Vec<_>>()
+            .into();
+        })
+      }
+      SourceMapCell::Borrowed(borrowed) => {
+        borrowed.sources = sources
+          .into_iter()
+          .map(Cow::Owned)
+          .collect::<Vec<_>>()
+          .into();
+      }
+    }
   }
 
   /// Get the source by index from sources field in [SourceMap].
   pub fn get_source(&self, index: usize) -> Option<&str> {
-    self.sources.get(index).map(|s| s.as_ref())
+    match &self.0 {
+      SourceMapCell::Static(owned) => owned
+        .borrow_dependent()
+        .sources
+        .get(index)
+        .map(AsRef::as_ref),
+      SourceMapCell::Borrowed(borrowed) => {
+        borrowed.sources.get(index).map(AsRef::as_ref)
+      }
+    }
   }
 
   /// Get the sourcesContent field in [SourceMap].
-  pub fn sources_content(&self) -> &[String] {
-    &self.sources_content
+  pub fn sources_content(&self) -> &[Cow<'_, str>] {
+    match &self.0 {
+      SourceMapCell::Static(owned) => &owned.borrow_dependent().sources_content,
+      SourceMapCell::Borrowed(borrowed) => &borrowed.sources_content,
+    }
   }
 
   /// Set the sourcesContent field in [SourceMap].
-  pub fn set_sources_content<T: Into<Arc<[String]>>>(
-    &mut self,
-    sources_content: T,
-  ) {
-    self.sources_content = sources_content.into();
+  pub fn set_sources_content(&mut self, sources_content: Vec<String>) {
+    match &mut self.0 {
+      SourceMapCell::Static(owned) => {
+        owned.with_dependent_mut(|_, dependent| {
+          dependent.sources = sources_content
+            .into_iter()
+            .map(Cow::Owned)
+            .collect::<Vec<_>>()
+            .into();
+        })
+      }
+      SourceMapCell::Borrowed(borrowed) => {
+        borrowed.sources = sources_content
+          .into_iter()
+          .map(Cow::Owned)
+          .collect::<Vec<_>>()
+          .into();
+      }
+    }
   }
 
   /// Get the source content by index from sourcesContent field in [SourceMap].
   pub fn get_source_content(&self, index: usize) -> Option<&str> {
-    self.sources_content.get(index).map(|s| s.as_ref())
+    match &self.0 {
+      SourceMapCell::Static(owned) => owned
+        .borrow_dependent()
+        .sources_content
+        .get(index)
+        .map(AsRef::as_ref),
+      SourceMapCell::Borrowed(borrowed) => {
+        borrowed.sources_content.get(index).map(AsRef::as_ref)
+      }
+    }
   }
 
   /// Get the names field in [SourceMap].
-  pub fn names(&self) -> &[String] {
-    &self.names
+  pub fn names(&self) -> &[Cow<'_, str>] {
+    match &self.0 {
+      SourceMapCell::Static(owned) => &owned.borrow_dependent().names,
+      SourceMapCell::Borrowed(borrowed) => &borrowed.names,
+    }
   }
 
   /// Set the names field in [SourceMap].
-  pub fn set_names<T: Into<Arc<[String]>>>(&mut self, names: T) {
-    self.names = names.into();
+  pub fn set_names(&mut self, names: Vec<String>) {
+    let names_vec: Arc<Vec<Cow<'static, str>>> =
+      names.into_iter().map(Cow::Owned).collect::<Vec<_>>().into();
+
+    match &mut self.0 {
+      SourceMapCell::Static(owned) => {
+        owned.with_dependent_mut(|_, dependent| {
+          dependent.names = names_vec;
+        })
+      }
+      SourceMapCell::Borrowed(borrowed) => {
+        borrowed.names = names_vec;
+      }
+    }
   }
 
   /// Get the name by index from names field in [SourceMap].
   pub fn get_name(&self, index: usize) -> Option<&str> {
-    self.names.get(index).map(|s| s.as_ref())
+    match &self.0 {
+      SourceMapCell::Static(owned) => {
+        owned.borrow_dependent().names.get(index).map(AsRef::as_ref)
+      }
+      SourceMapCell::Borrowed(borrowed) => {
+        borrowed.names.get(index).map(AsRef::as_ref)
+      }
+    }
   }
 
   /// Get the source_root field in [SourceMap].
   pub fn source_root(&self) -> Option<&str> {
-    self.source_root.as_deref()
+    match &self.0 {
+      SourceMapCell::Static(owned) => owned
+        .borrow_dependent()
+        .source_root
+        .as_ref()
+        .map(|s| s.as_str()),
+      SourceMapCell::Borrowed(borrowed) => {
+        borrowed.source_root.as_ref().map(|s| s.as_str())
+      }
+    }
   }
 
   /// Set the source_root field in [SourceMap].
-  pub fn set_source_root<T: Into<Arc<str>>>(&mut self, source_root: Option<T>) {
-    self.source_root = source_root.map(Into::into);
+  pub fn set_source_root<T: Into<String>>(&mut self, source_root: Option<T>) {
+    match &mut self.0 {
+      SourceMapCell::Static(owned) => {
+        owned.with_dependent_mut(|_, dependent| {
+          dependent.source_root = source_root.map(|s| s.into().into());
+        })
+      }
+      SourceMapCell::Borrowed(borrowed) => {
+        borrowed.source_root = source_root.map(|s| s.into().into());
+      }
+    }
   }
 
   /// Set the debug_id field in [SourceMap].
-  pub fn set_debug_id<T: Into<Arc<str>>>(&mut self, debug_id: Option<T>) {
-    self.debug_id = debug_id.map(Into::into);
+  pub fn set_debug_id(&mut self, debug_id: Option<String>) {
+    match &mut self.0 {
+      SourceMapCell::Static(owned) => {
+        owned.with_dependent_mut(|_, dependent| {
+          dependent.debug_id = debug_id.map(Into::into);
+        })
+      }
+      SourceMapCell::Borrowed(borrowed) => {
+        borrowed.debug_id = debug_id.map(Into::into);
+      }
+    }
   }
 
   /// Get the debug_id field in [SourceMap].
   pub fn get_debug_id(&self) -> Option<&str> {
-    self.debug_id.as_deref()
+    match &self.0 {
+      SourceMapCell::Static(owned) => owned
+        .borrow_dependent()
+        .debug_id
+        .as_ref()
+        .map(|s| s.as_str()),
+      SourceMapCell::Borrowed(borrowed) => {
+        borrowed.debug_id.as_ref().map(|s| s.as_str())
+      }
+    }
+  }
+
+  /// Converts this source map into a version with `'static` lifetime.
+  pub fn into_owned(self) -> SourceMap<'static> {
+    match self.0 {
+      SourceMapCell::Static(owned) => SourceMap(SourceMapCell::Static(owned)),
+      SourceMapCell::Borrowed(borrowed) => {
+        SourceMap(SourceMapCell::Borrowed(borrowed.into_owned()))
+      }
+    }
+  }
+
+  /// Creates a borrowed representation of this source map with lifetime `'a`.
+  pub fn as_borrowed(&'a self) -> Self {
+    match &self.0 {
+      SourceMapCell::Static(owned) => {
+        Self(SourceMapCell::Borrowed(BorrowedSourceMap {
+          version: owned.borrow_dependent().version,
+          file: owned
+            .borrow_dependent()
+            .file
+            .as_ref()
+            .map(|s| s.as_borrowed()),
+          sources: owned.borrow_dependent().sources.clone(),
+          sources_content: owned.borrow_dependent().sources_content.clone(),
+          names: owned.borrow_dependent().names.clone(),
+          mappings: owned.borrow_dependent().mappings.clone(),
+          source_root: owned.borrow_dependent().source_root.clone(),
+          debug_id: owned.borrow_dependent().debug_id.clone(),
+          ignore_list: owned.borrow_dependent().ignore_list.clone(),
+        }))
+      }
+      SourceMapCell::Borrowed(borrowed) => {
+        Self(SourceMapCell::Borrowed(borrowed.clone()))
+      }
+    }
   }
 }
 
-impl SourceMap {
-  /// Create a [SourceMap] from json string.
-  pub fn from_json(json: impl Into<String>) -> Result<Self> {
-    let mut json_bytes = json.into().into_bytes();
-    Self::from_slice(&mut json_bytes)
-  }
+impl std::fmt::Debug for SourceMap<'_> {
+  fn fmt(
+    &self,
+    f: &mut std::fmt::Formatter<'_>,
+  ) -> std::result::Result<(), std::fmt::Error> {
+    let indent = f.width().unwrap_or(0);
+    let indent_str = format!("{:indent$}", "", indent = indent);
 
-  /// Create a SourceMap from a mutable byte slice (`&mut [u8]`).
-  pub fn from_slice(json_bytes: &mut [u8]) -> Result<Self> {
-    let value = simd_json::to_borrowed_value(json_bytes)?;
-    Ok(Self {
-      version: 3,
-      file: value.get_str("file").map(|v| Arc::from(v.to_string())),
-      sources: value
-        .get_array("sources")
-        .map(|v| {
-          v.iter()
-            .map(|s| s.as_str().map(|s| s.to_string()).unwrap_or_default())
-            .collect::<Vec<_>>()
-            .into()
-        })
-        .unwrap_or_default(),
-      sources_content: value
-        .get_array("sourcesContent")
-        .map(|v| {
-          v.iter()
-            .map(|s| s.as_str().map(|s| s.to_string()).unwrap_or_default())
-            .collect::<Vec<_>>()
-            .into()
-        })
-        .unwrap_or_default(),
-      names: value
-        .get_array("names")
-        .map(|v| {
-          v.iter()
-            .map(|s| s.as_str().map(|s| s.to_string()).unwrap_or_default())
-            .collect::<Vec<_>>()
-            .into()
-        })
-        .unwrap_or_default(),
-      mappings: value.get_str("mappings").unwrap_or_default().into(),
-      source_root: value
-        .get_str("sourceRoot")
-        .map(|v| Arc::from(v.to_string())),
-      debug_id: value.get_str("debugId").map(|v| Arc::from(v.to_string())),
-      ignore_list: value.get_array("ignoreList").map(|v| {
-        v.iter()
-          .map(|n| n.as_u32().unwrap_or_default())
-          .collect::<Vec<_>>()
-      }),
-    })
+    write!(
+      f,
+      "{indent_str}SourceMap::from_json({:?}.to_string()).unwrap()",
+      self.clone().to_json().unwrap()
+    )?;
+
+    Ok(())
+  }
+}
+
+impl SourceMap<'_> {
+  /// Create a [SourceMap] from json string.
+  pub fn from_json(json: impl Into<String>) -> Result<SourceMap<'static>> {
+    let owned = StaticSourceMap::from_json(json.into())?;
+    Ok(SourceMap(SourceMapCell::Static(owned)))
   }
 
   /// Create a [SourceMap] from reader.
   pub fn from_reader<R: std::io::Read>(mut s: R) -> Result<Self> {
-    let mut json_bytes = vec![];
-    s.read_to_end(&mut json_bytes)?;
-    Self::from_slice(&mut json_bytes)
+    let mut json = String::default();
+    s.read_to_string(&mut json)?;
+    Self::from_json(json)
   }
 
   /// Generate source map to a json string.
   pub fn to_json(&self) -> Result<String> {
-    let json = simd_json::serde::to_string(&self)?;
-    Ok(json)
+    match &self.0 {
+      SourceMapCell::Static(owned) => owned.to_json(),
+      SourceMapCell::Borrowed(borrowed) => borrowed.to_json(),
+    }
   }
 
   /// Generate source map to writer.
-  pub fn to_writer<W: std::io::Write>(self, w: W) -> Result<()> {
-    simd_json::serde::to_writer(w, &self)?;
-    Ok(())
+  pub fn to_writer<W: std::io::Write>(&self, w: W) -> Result<()> {
+    match &self.0 {
+      SourceMapCell::Static(owned) => owned.to_writer(w),
+      SourceMapCell::Borrowed(borrowed) => borrowed.to_writer(w),
+    }
   }
 }
 
@@ -558,7 +962,7 @@ mod tests {
     RawBufferSource::from("a".as_bytes()).hash(&mut state);
     (&RawSource::from("h") as &dyn Source).hash(&mut state);
     ReplaceSource::new(RawSource::from("i").boxed()).hash(&mut state);
-    assert_eq!(format!("{:x}", state.finish()), "6abed98aa11f84e5");
+    assert_eq!(format!("{:x}", state.finish()), "80aebc8fe3a5ce4e");
   }
 
   #[test]
@@ -623,12 +1027,13 @@ mod tests {
       value: "c",
       name: "",
       source_map: SourceMap::from_json("{\"mappings\": \";\"}").unwrap(),
-    });
-    assert_eq!(c, c.clone());
+    })
+    .boxed();
+    assert_eq!(&c, &c.clone());
     let d = ConcatSource::new([RawSource::from("d")]);
     assert_eq!(d, d.clone());
-    let e = CachedSource::new(RawSource::from("e"));
-    assert_eq!(e, e.clone());
+    let e = CachedSource::new(RawSource::from("e")).boxed();
+    assert_eq!(&e, &e.clone());
     let f = ReplaceSource::new(RawSource::from("f"));
     assert_eq!(f, f.clone());
     let g = RawSource::from("g").boxed();
@@ -637,8 +1042,8 @@ mod tests {
     assert_eq!(h, h);
     let i = ReplaceSource::new(RawSource::from("i").boxed());
     assert_eq!(i, i.clone());
-    let j = CachedSource::new(RawSource::from("j").boxed());
-    assert_eq!(j, j.clone());
+    let j = CachedSource::new(RawSource::from("j").boxed()).boxed();
+    assert_eq!(&j, &j.clone());
     let k = RawStringSource::from_static("k");
     assert_eq!(k, k.clone());
     let l = RawBufferSource::from("l".as_bytes());

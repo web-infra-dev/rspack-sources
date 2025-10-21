@@ -12,32 +12,32 @@ use crate::{
 };
 
 /// Options for [SourceMapSource::new].
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct SourceMapSourceOptions<V, N> {
   /// The source code.
   pub value: V,
   /// Name of the file.
   pub name: N,
   /// The source map of the source code.
-  pub source_map: SourceMap,
+  pub source_map: SourceMap<'static>,
   /// The original source code.
   pub original_source: Option<String>,
   /// The original source map.
-  pub inner_source_map: Option<SourceMap>,
+  pub inner_source_map: Option<SourceMap<'static>>,
   /// Whether remove the original source.
   pub remove_original_source: bool,
 }
 
 /// An convenient options for [SourceMapSourceOptions], `original_source` and
 /// `inner_source_map` will be `None`, `remove_original_source` will be false.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct WithoutOriginalOptions<V, N> {
   /// The source code.
   pub value: V,
   /// Name of the file.
   pub name: N,
   /// The source map of the source code.
-  pub source_map: SourceMap,
+  pub source_map: SourceMap<'static>,
 }
 
 impl<V, N> From<WithoutOriginalOptions<V, N>> for SourceMapSourceOptions<V, N> {
@@ -61,9 +61,9 @@ impl<V, N> From<WithoutOriginalOptions<V, N>> for SourceMapSourceOptions<V, N> {
 pub struct SourceMapSource {
   value: String,
   name: String,
-  source_map: SourceMap,
+  source_map: SourceMap<'static>,
   original_source: Option<String>,
-  inner_source_map: Option<SourceMap>,
+  inner_source_map: Option<SourceMap<'static>>,
   remove_original_source: bool,
 }
 
@@ -104,7 +104,7 @@ impl Source for SourceMapSource {
     self.value.len()
   }
 
-  fn map(&self, options: &MapOptions) -> Option<SourceMap> {
+  fn map<'a>(&'a self, options: &MapOptions) -> Option<SourceMap<'a>> {
     if self.inner_source_map.is_none() {
       return Some(self.source_map.clone());
     }
@@ -250,7 +250,9 @@ mod tests {
       name: "text",
       source_map: source_r_map.clone(),
       original_source: Some(inner_source.source().to_string()),
-      inner_source_map: inner_source.map(&MapOptions::default()),
+      inner_source_map: inner_source
+        .map(&MapOptions::default())
+        .map(|m| m.into_owned()),
       remove_original_source: false,
     });
     let sms2 = SourceMapSource::new(SourceMapSourceOptions {
@@ -258,7 +260,9 @@ mod tests {
       name: "text",
       source_map: source_r_map,
       original_source: Some(inner_source.source().to_string()),
-      inner_source_map: inner_source.map(&MapOptions::default()),
+      inner_source_map: inner_source
+        .map(&MapOptions::default())
+        .map(|m| m.into_owned()),
       remove_original_source: true,
     });
     let expected_content =
@@ -297,7 +301,7 @@ mod tests {
 
     let mut hasher = twox_hash::XxHash64::default();
     sms1.hash(&mut hasher);
-    assert_eq!(format!("{:x}", hasher.finish()), "736934c6e249aa6e");
+    assert_eq!(format!("{:x}", hasher.finish()), "c88ebe5543a34d2");
   }
 
   #[test]
@@ -306,7 +310,7 @@ mod tests {
       value: "hello world\n",
       name: "hello.txt",
       source_map: SourceMap::new(
-        "AAAA".to_string(),
+        "AAAA",
         vec!["".into()],
         vec!["".into()],
         vec![],
@@ -321,7 +325,7 @@ mod tests {
       value: "hello world\n",
       name: "hello.txt",
       source_map: SourceMap::new(
-        "AAAA".to_string(),
+        "AAAA",
         vec!["hello-source.txt".into()],
         vec!["hello world\n".into()],
         vec![],
@@ -388,7 +392,7 @@ mod tests {
       value: "hello\n",
       name: "a",
       source_map: SourceMap::new(
-        "AAAA;AACA".to_string(),
+        "AAAA;AACA",
         vec!["hello1".into()],
         vec![],
         vec![],
@@ -398,7 +402,7 @@ mod tests {
       value: "hi",
       name: "b",
       source_map: SourceMap::new(
-        "AAAA,EAAE".to_string(),
+        "AAAA,EAAE",
         vec!["hello2".into()],
         vec![],
         vec![],
@@ -408,7 +412,7 @@ mod tests {
       value: "hi",
       name: "b",
       source_map: SourceMap::new(
-        "AAAA,EAAE".to_string(),
+        "AAAA,EAAE",
         vec!["hello3".into()],
         vec![],
         vec![],
@@ -417,12 +421,7 @@ mod tests {
     let c = SourceMapSource::new(WithoutOriginalOptions {
       value: "",
       name: "c",
-      source_map: SourceMap::new(
-        "AAAA".to_string(),
-        vec!["hello4".into()],
-        vec![],
-        vec![],
-      ),
+      source_map: SourceMap::new("AAAA", vec!["hello4".into()], vec![], vec![]),
     });
     let source = ConcatSource::new([
       a.clone(),
@@ -458,11 +457,15 @@ mod tests {
     }
 
     test_cached!(source, |s: &dyn Source| s.source().to_string());
-    test_cached!(source, |s: &dyn Source| s.map(&MapOptions::default()));
-    test_cached!(source, |s: &dyn Source| s.map(&MapOptions {
-      columns: false,
-      final_source: true
-    }));
+    test_cached!(source, |s: &dyn Source| s
+      .map(&MapOptions::default())
+      .map(|m| m.into_owned()));
+    test_cached!(source, |s: &dyn Source| s
+      .map(&MapOptions {
+        columns: false,
+        final_source: true
+      })
+      .map(|m| m.into_owned()));
   }
 
   #[test]
@@ -609,7 +612,7 @@ mod tests {
     let source = SourceMapSource::new(WithoutOriginalOptions {
       value: "console.log('a')\n",
       name: "a.js",
-      source_map: original.map(&MapOptions::new(false)).unwrap(),
+      source_map: original.map(&MapOptions::new(false)).unwrap().into_owned(),
     });
     let source = ConcatSource::new([
       RawSource::from("\n").boxed(),
@@ -617,7 +620,7 @@ mod tests {
       RawSource::from("\n").boxed(),
       source.boxed(),
     ]);
-    let map = source.map(&MapOptions::new(false)).unwrap();
+    let map = source.map(&MapOptions::new(false)).unwrap().into_owned();
     assert_eq!(map.mappings(), ";;;AAAA");
   }
 
@@ -643,7 +646,8 @@ mod tests {
     )
     .unwrap();
     let inner_source_map =
-      inner_source.map(&MapOptions::default()).map(|mut map| {
+      inner_source.map(&MapOptions::default()).map(|map| {
+        let mut map = map.into_owned();
         map.set_source_root(Some("/path/to/folder/".to_string()));
         map
       });
@@ -791,9 +795,9 @@ mod tests {
       r#"SourceMapSource::new(SourceMapSourceOptions {
   value: "hello world",
   name: "hello.txt",
-  source_map: SourceMap::from_json("{\"version\":3,\"sources\":[\"hello.txt\"],\"names\":[],\"mappings\":\"AAAA,MAAG\"}").unwrap(),
+  source_map: SourceMap::from_json("{\"version\":3,\"sources\":[\"hello.txt\"],\"names\":[],\"mappings\":\"AAAA,MAAG\"}".to_string()).unwrap(),
   original_source: Some("你好 世界".to_string()),
-  inner_source_map: Some(SourceMap::from_json("{\"version\":3,\"sources\":[\"hello world.txt\"],\"sourcesContent\":[\"你好✋世界\"],\"names\":[],\"mappings\":\"AAAA,EAAE\"}").unwrap()),
+  inner_source_map: Some(SourceMap::from_json("{\"version\":3,\"sources\":[\"hello world.txt\"],\"sourcesContent\":[\"你好✋世界\"],\"names\":[],\"mappings\":\"AAAA,EAAE\"}".to_string()).unwrap()),
   remove_original_source: false,
 }).boxed()"#
     );

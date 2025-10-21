@@ -10,7 +10,7 @@ use rspack_sources::{
 };
 
 #[derive(Debug, Eq)]
-struct CompatSource(&'static str, Option<SourceMap>);
+struct CompatSource(&'static str, Option<SourceMap<'static>>);
 
 impl Source for CompatSource {
   fn source(&self) -> Cow<str> {

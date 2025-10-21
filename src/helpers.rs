@@ -22,12 +22,12 @@ type InnerSourceContentLine<'a, 'b> =
 
 pub fn get_map<'a, S: StreamChunks>(
   stream: &'a S,
-  options: &'a MapOptions,
-) -> Option<SourceMap> {
+  options: &MapOptions,
+) -> Option<SourceMap<'a>> {
   let mut mappings_encoder = create_encoder(options.columns);
-  let mut sources: Vec<String> = Vec::new();
-  let mut sources_content: Vec<String> = Vec::new();
-  let mut names: Vec<String> = Vec::new();
+  let mut sources: Vec<Cow<str>> = Vec::new();
+  let mut sources_content: Vec<Cow<str>> = Vec::new();
+  let mut names: Vec<Cow<str>> = Vec::new();
 
   stream.stream_chunks(
     &MapOptions {
@@ -42,23 +42,24 @@ pub fn get_map<'a, S: StreamChunks>(
     &mut |source_index, source, source_content| {
       let source_index = source_index as usize;
       if sources.len() <= source_index {
-        sources.resize(source_index + 1, "".to_string());
+        sources.resize(source_index + 1, "".into());
       }
-      sources[source_index] = source.to_string();
+      sources[source_index] = source;
       if let Some(source_content) = source_content {
         if sources_content.len() <= source_index {
-          sources_content.resize(source_index + 1, "".to_string());
+          sources_content.resize(source_index + 1, "".into());
         }
-        sources_content[source_index] = source_content.to_string();
+        // TODO: avoid to_string allocation
+        sources_content[source_index] = Cow::Owned(source_content.to_string());
       }
     },
     // on_name
     &mut |name_index, name| {
       let name_index = name_index as usize;
       if names.len() <= name_index {
-        names.resize(name_index + 1, "".to_string());
+        names.resize(name_index + 1, "".into());
       }
-      names[name_index] = name.to_string();
+      names[name_index] = name;
     },
   );
   let mappings = mappings_encoder.drain();
@@ -119,9 +120,9 @@ pub struct GeneratedInfo {
 }
 
 /// Decodes the given mappings string into an iterator of `Mapping` items.
-pub fn decode_mappings(
-  source_map: &SourceMap,
-) -> impl Iterator<Item = Mapping> + '_ {
+pub fn decode_mappings<'a>(
+  source_map: &'a SourceMap<'a>,
+) -> impl Iterator<Item = Mapping> + 'a {
   MappingsDecoder::new(source_map.mappings())
 }
 
@@ -1197,11 +1198,11 @@ pub fn stream_and_get_source_and_map<'a, S: StreamChunks>(
   on_chunk: OnChunk<'_, 'a>,
   on_source: OnSource<'_, 'a>,
   on_name: OnName<'_, 'a>,
-) -> (GeneratedInfo, Option<SourceMap>) {
+) -> (GeneratedInfo, Option<SourceMap<'a>>) {
   let mut mappings_encoder = create_encoder(options.columns);
-  let mut sources: Vec<String> = Vec::new();
-  let mut sources_content: Vec<String> = Vec::new();
-  let mut names: Vec<String> = Vec::new();
+  let mut sources: Vec<Cow<'a, str>> = Vec::new();
+  let mut sources_content: Vec<Cow<'static, str>> = Vec::new();
+  let mut names: Vec<Cow<'a, str>> = Vec::new();
 
   let generated_info = input_source.stream_chunks(
     options,
@@ -1214,12 +1215,13 @@ pub fn stream_and_get_source_and_map<'a, S: StreamChunks>(
       while sources.len() <= source_index2 {
         sources.push("".into());
       }
-      sources[source_index2] = source.to_string();
+      sources[source_index2] = source.clone();
       if let Some(ref source_content) = source_content {
         while sources_content.len() <= source_index2 {
           sources_content.push("".into());
         }
-        sources_content[source_index2] = source_content.to_string();
+        // TODO: avoid allocation here
+        sources_content[source_index2] = Cow::Owned(source_content.to_string());
       }
       on_source(source_index, source, source_content);
     },
@@ -1228,7 +1230,7 @@ pub fn stream_and_get_source_and_map<'a, S: StreamChunks>(
       while names.len() <= name_index2 {
         names.push("".into());
       }
-      names[name_index2] = name.to_string();
+      names[name_index2] = name.clone();
       on_name(name_index, name);
     },
   );
@@ -1237,7 +1239,12 @@ pub fn stream_and_get_source_and_map<'a, S: StreamChunks>(
   let map = if mappings.is_empty() {
     None
   } else {
-    Some(SourceMap::new(mappings, sources, sources_content, names))
+    Some(SourceMap::new(
+      mappings.to_string(),
+      sources,
+      sources_content,
+      names,
+    ))
   };
   (generated_info, map)
 }
