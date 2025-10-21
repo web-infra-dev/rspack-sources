@@ -119,19 +119,17 @@ impl Source for CachedSource {
   fn map(&self, options: &MapOptions) -> Option<SourceMap> {
     if options.columns {
       self.0.with_dependent(|owner, dependent| {
-        dependent.cached_colomns_map.get_or_init(|| {
-          let map = owner.inner.map(options);
-          unsafe { std::mem::transmute::<Option<SourceMap>, Option<SourceMap<'static>>>(map) }
-        })
+        dependent
+          .cached_colomns_map
+          .get_or_init(|| owner.inner.map(options).map(|m| m.into_owned()))
           .as_ref()
           .map(|m| m.as_borrowed())
       })
     } else {
       self.0.with_dependent(|owner, dependent| {
-        dependent.cached_line_only_map.get_or_init(|| {
-          let map = owner.inner.map(options);
-          unsafe { std::mem::transmute::<Option<SourceMap>, Option<SourceMap<'static>>>(map) }
-        })
+        dependent
+          .cached_line_only_map
+          .get_or_init(|| owner.inner.map(options).map(|m| m.into_owned()))
           .as_ref()
           .map(|m| m.as_borrowed())
       })
