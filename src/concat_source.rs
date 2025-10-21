@@ -39,8 +39,8 @@ use crate::{
 ///   "Hello World\nconsole.log('test');\nconsole.log('test2');\nHello2\n"
 /// );
 /// assert_eq!(
-///   source.map(&MapOptions::new(false)).unwrap().as_ref(),
-///   &SourceMap::from_json(
+///   source.map(&MapOptions::new(false)).unwrap(),
+///   SourceMap::from_json(
 ///     r#"{
 ///       "version": 3,
 ///       "mappings": ";AAAA;AACA;ACDA",

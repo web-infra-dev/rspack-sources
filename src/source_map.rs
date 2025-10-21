@@ -60,7 +60,7 @@ fn is_all_borrowed_empty(val: &[&str]) -> bool {
   val.iter().all(|s| s.is_empty())
 }
 
-#[derive(Clone, PartialEq, Eq, Serialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Hash)]
 struct BorrowedSourceMap<'a> {
   version: u8,
   #[serde(skip_serializing_if = "Option::is_none")]
@@ -79,18 +79,6 @@ struct BorrowedSourceMap<'a> {
   debug_id: Option<&'a str>,
   #[serde(rename = "ignoreList", skip_serializing_if = "Option::is_none")]
   ignore_list: Option<Arc<Vec<u32>>>,
-}
-
-impl Hash for BorrowedSourceMap<'_> {
-  fn hash<H: Hasher>(&self, state: &mut H) {
-    self.file.hash(state);
-    self.mappings.hash(state);
-    self.sources.hash(state);
-    self.sources_content.hash(state);
-    self.names.hash(state);
-    self.source_root.hash(state);
-    self.ignore_list.hash(state);
-  }
 }
 
 impl PartialEq<OwnedSourceMap> for BorrowedSourceMap<'_> {
@@ -254,7 +242,10 @@ impl PartialEq for SourceMapCell {
 
 impl Hash for SourceMapCell {
   fn hash<H: Hasher>(&self, state: &mut H) {
-    core::mem::discriminant(self).hash(state);
+    match self {
+        SourceMapCell::Static(s) => s.hash(state),
+        SourceMapCell::Owned(owned) => owned.hash(state),
+    }
   }
 }
 
