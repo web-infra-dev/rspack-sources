@@ -12,6 +12,7 @@ mod raw_source;
 mod replace_source;
 mod rope;
 mod source;
+mod source_map;
 mod source_map_source;
 mod with_indices;
 
@@ -24,8 +25,8 @@ pub use replace_source::{ReplaceSource, ReplacementEnforce};
 pub use rope::Rope;
 pub use source::{
   BoxSource, MapOptions, Mapping, OriginalLocation, Source, SourceExt,
-  SourceMap,
 };
+pub use source_map::SourceMap;
 pub use source_map_source::{
   SourceMapSource, SourceMapSourceOptions, WithoutOriginalOptions,
 };

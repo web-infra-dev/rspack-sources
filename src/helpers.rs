@@ -20,9 +20,9 @@ use crate::{
 type InnerSourceContentLine<'a, 'b> =
   RefCell<LinearMap<OnceCell<Option<Vec<WithIndices<'a, Rope<'b>>>>>>>;
 
-pub fn get_map<'a, S: StreamChunks>(
-  stream: &'a S,
-  options: &'a MapOptions,
+pub fn get_map<S: StreamChunks>(
+  stream: &S,
+  options: &MapOptions,
 ) -> Option<SourceMap> {
   let mut mappings_encoder = create_encoder(options.columns);
   let mut sources: Vec<String> = Vec::new();
@@ -367,14 +367,14 @@ where
   if result.generated_line == 1 && result.generated_column == 0 {
     return result;
   }
-  for (i, source) in source_map.sources().iter().enumerate() {
+  for (i, source) in source_map.sources().enumerate() {
     on_source(
       i as u32,
       get_source(source_map, source),
       source_map.get_source_content(i).map(Rope::from),
     )
   }
-  for (i, name) in source_map.names().iter().enumerate() {
+  for (i, name) in source_map.names().enumerate() {
     on_name(i as u32, Cow::Borrowed(name));
   }
   let mut mapping_active_line = 0;
@@ -431,14 +431,14 @@ where
       generated_column: 0,
     };
   }
-  for (i, source) in source_map.sources().iter().enumerate() {
+  for (i, source) in source_map.sources().enumerate() {
     on_source(
       i as u32,
       get_source(source_map, source),
       source_map.get_source_content(i).map(Rope::from),
     )
   }
-  for (i, name) in source_map.names().iter().enumerate() {
+  for (i, name) in source_map.names().enumerate() {
     on_name(i as u32, Cow::Borrowed(name));
   }
   let last_line =
@@ -581,7 +581,7 @@ where
       generated_column: 0,
     };
   }
-  for (i, source) in source_map.sources().iter().enumerate() {
+  for (i, source) in source_map.sources().enumerate() {
     on_source(
       i as u32,
       get_source(source_map, source),
@@ -629,7 +629,7 @@ where
       generated_column: 0,
     };
   }
-  for (i, source) in source_map.sources().iter().enumerate() {
+  for (i, source) in source_map.sources().enumerate() {
     on_source(
       i as u32,
       get_source(source_map, source),
