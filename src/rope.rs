@@ -784,26 +784,6 @@ impl Iterator for CharIndices<'_> {
       }
     }
   }
-
-  fn size_hint(&self) -> (usize, Option<usize>) {
-    match &self.iter {
-      CharIndicesEnum::Light { iter } => iter.size_hint(),
-      CharIndicesEnum::Full { chunks, .. } => {
-        // Pre-compute total byte length to avoid repeated calculations
-        let total_bytes = chunks
-          .last()
-          .map_or(0, |(chunk, start_pos)| start_pos + chunk.len());
-
-        // For ASCII-heavy content, lower bound is close to byte length
-        // For worst case (all 4-byte UTF-8), upper bound is byte length
-        // This gives a reasonable approximation without expensive char counting
-        let lower_bound = total_bytes / 4; // Conservative estimate (4 bytes per char worst case)
-        let upper_bound = Some(total_bytes); // Each byte could be a 1-byte char (ASCII)
-
-        (lower_bound, upper_bound)
-      }
-    }
-  }
 }
 
 impl Default for Rope<'_> {
