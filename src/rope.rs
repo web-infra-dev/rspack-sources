@@ -2,7 +2,6 @@
 
 use std::{
   borrow::Cow,
-  collections::VecDeque,
   hash::Hash,
   ops::{Bound, RangeBounds},
   rc::Rc,
@@ -136,7 +135,7 @@ impl<'a> Rope<'a> {
   }
 
   /// Returns an iterator over the characters and their byte positions.
-  pub fn char_indices(&self) -> CharIndices<'_, 'a> {
+  pub fn char_indices(&self) -> CharIndices<'_> {
     match &self.repr {
       Repr::Light(s) => CharIndices {
         iter: CharIndicesEnum::Light {
@@ -146,8 +145,9 @@ impl<'a> Rope<'a> {
       Repr::Full(data) => CharIndices {
         iter: CharIndicesEnum::Full {
           chunks: data,
-          char_indices: VecDeque::new(),
           chunk_index: 0,
+          iter: data[0].0.char_indices(),
+          start_pos: 0,
         },
       },
     }
@@ -729,22 +729,23 @@ impl<'a> Iterator for Lines<'_, 'a> {
   }
 }
 
-enum CharIndicesEnum<'a, 'b> {
+enum CharIndicesEnum<'a> {
   Light {
-    iter: std::str::CharIndices<'b>,
+    iter: std::str::CharIndices<'a>,
   },
   Full {
-    chunks: &'a [(&'b str, usize)],
-    char_indices: VecDeque<(usize, char)>,
+    chunks: &'a [(&'a str, usize)],
     chunk_index: usize,
+    start_pos: usize,
+    iter: std::str::CharIndices<'a>,
   },
 }
 
-pub struct CharIndices<'a, 'b> {
-  iter: CharIndicesEnum<'a, 'b>,
+pub struct CharIndices<'a> {
+  iter: CharIndicesEnum<'a>,
 }
 
-impl Iterator for CharIndices<'_, '_> {
+impl Iterator for CharIndices<'_> {
   type Item = (usize, char);
 
   fn next(&mut self) -> Option<Self::Item> {
@@ -752,28 +753,54 @@ impl Iterator for CharIndices<'_, '_> {
       CharIndicesEnum::Light { iter } => iter.next(),
       CharIndicesEnum::Full {
         chunks,
-        char_indices,
         chunk_index,
+        iter,
+        start_pos,
       } => {
-        if let Some(item) = char_indices.pop_front() {
-          return Some(item);
+        if let Some((i, c)) = iter.next() {
+          return Some((*start_pos + i, c));
         }
-
-        if *chunk_index >= chunks.len() {
-          return None;
-        }
-
-        // skip empty chunks
-        while *chunk_index < chunks.len() && chunks[*chunk_index].0.is_empty() {
+        loop {
+          if *chunk_index == chunks.len() - 1 {
+            return None;
+          }
           *chunk_index += 1;
+          // SAFETY: We just checked bounds above
+          let (chunk, next_start_pos) =
+            unsafe { chunks.get_unchecked(*chunk_index) };
+
+          // Skip empty chunks without creating iterators
+          if chunk.is_empty() {
+            continue;
+          }
+
+          *iter = chunk.char_indices();
+          *start_pos = *next_start_pos;
+
+          if let Some((i, c)) = iter.next() {
+            return Some((*start_pos + i, c));
+          }
         }
+      }
+    }
+  }
 
-        let (chunk, start_pos) = chunks[*chunk_index];
+  fn size_hint(&self) -> (usize, Option<usize>) {
+    match &self.iter {
+      CharIndicesEnum::Light { iter } => iter.size_hint(),
+      CharIndicesEnum::Full { chunks, .. } => {
+        // Pre-compute total byte length to avoid repeated calculations
+        let total_bytes = chunks
+          .last()
+          .map_or(0, |(chunk, start_pos)| start_pos + chunk.len());
 
-        char_indices
-          .extend(chunk.char_indices().map(|(i, c)| (start_pos + i, c)));
-        *chunk_index += 1;
-        char_indices.pop_front()
+        // For ASCII-heavy content, lower bound is close to byte length
+        // For worst case (all 4-byte UTF-8), upper bound is byte length
+        // This gives a reasonable approximation without expensive char counting
+        let lower_bound = total_bytes / 4; // Conservative estimate (4 bytes per char worst case)
+        let upper_bound = Some(total_bytes); // Each byte could be a 1-byte char (ASCII)
+
+        (lower_bound, upper_bound)
       }
     }
   }
