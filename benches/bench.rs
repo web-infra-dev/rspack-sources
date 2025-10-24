@@ -2,6 +2,7 @@
 
 mod bench_complex_replace_source;
 mod bench_source_map;
+mod benchmark_repetitive_react_components;
 
 use std::collections::HashMap;
 
@@ -20,6 +21,11 @@ use bench_complex_replace_source::benchmark_complex_replace_source;
 use bench_source_map::{
   benchmark_parse_source_map_from_json, benchmark_source_map_clone,
   benchmark_stringify_source_map_to_json,
+};
+
+use benchmark_repetitive_react_components::{
+  benchmark_repetitive_react_components_map,
+  benchmark_repetitive_react_components_source,
 };
 
 const HELLOWORLD_JS: &str = include_str!(concat!(
@@ -106,66 +112,7 @@ fn benchmark_concat_generate_string_with_cache(b: &mut Bencher) {
   })
 }
 
-fn benchmark_concat_generate_base64(b: &mut Bencher) {
-  let sms_minify = SourceMapSource::new(SourceMapSourceOptions {
-    value: HELLOWORLD_MIN_JS,
-    name: "helloworld.min.js",
-    source_map: SourceMap::from_json(HELLOWORLD_MIN_JS_MAP).unwrap(),
-    original_source: Some(HELLOWORLD_JS.to_string()),
-    inner_source_map: Some(SourceMap::from_json(HELLOWORLD_JS_MAP).unwrap()),
-    remove_original_source: false,
-  });
-  let sms_rollup = SourceMapSource::new(SourceMapSourceOptions {
-    value: BUNDLE_JS,
-    name: "bundle.js",
-    source_map: SourceMap::from_json(BUNDLE_JS_MAP).unwrap(),
-    original_source: None,
-    inner_source_map: None,
-    remove_original_source: false,
-  });
-  let concat = ConcatSource::new([sms_minify, sms_rollup]);
-
-  b.iter(|| {
-    let json = concat
-      .map(&MapOptions::default())
-      .unwrap()
-      .to_json()
-      .unwrap();
-    let _ = base64_simd::STANDARD.encode_to_string(json.as_bytes());
-  })
-}
-
-fn benchmark_concat_generate_base64_with_cache(b: &mut Bencher) {
-  let sms_minify = SourceMapSource::new(SourceMapSourceOptions {
-    value: HELLOWORLD_MIN_JS,
-    name: "helloworld.min.js",
-    source_map: SourceMap::from_json(HELLOWORLD_MIN_JS_MAP).unwrap(),
-    original_source: Some(HELLOWORLD_JS.to_string()),
-    inner_source_map: Some(SourceMap::from_json(HELLOWORLD_JS_MAP).unwrap()),
-    remove_original_source: false,
-  });
-  let sms_rollup = SourceMapSource::new(SourceMapSourceOptions {
-    value: BUNDLE_JS,
-    name: "bundle.js",
-    source_map: SourceMap::from_json(BUNDLE_JS_MAP).unwrap(),
-    original_source: None,
-    inner_source_map: None,
-    remove_original_source: false,
-  });
-  let concat = ConcatSource::new([sms_minify, sms_rollup]);
-  let cached = CachedSource::new(concat);
-
-  b.iter(|| {
-    let json = cached
-      .map(&MapOptions::default())
-      .unwrap()
-      .to_json()
-      .unwrap();
-    let _ = base64_simd::STANDARD.encode_to_string(json.as_bytes());
-  })
-}
-
-fn benchmark_concat_generate_string_with_cache_as_key(b: &mut Bencher) {
+fn benchmark_cached_source_hash(b: &mut Bencher) {
   let sms_minify = SourceMapSource::new(SourceMapSourceOptions {
     value: HELLOWORLD_MIN_JS,
     name: "helloworld.min.js",
@@ -193,41 +140,8 @@ fn benchmark_concat_generate_string_with_cache_as_key(b: &mut Bencher) {
   })
 }
 
-fn benchmark_concat_generate_string_as_key(b: &mut Bencher) {
-  let sms_minify = SourceMapSource::new(SourceMapSourceOptions {
-    value: HELLOWORLD_MIN_JS,
-    name: "helloworld.min.js",
-    source_map: SourceMap::from_json(HELLOWORLD_MIN_JS_MAP).unwrap(),
-    original_source: Some(HELLOWORLD_JS.to_string()),
-    inner_source_map: Some(SourceMap::from_json(HELLOWORLD_JS_MAP).unwrap()),
-    remove_original_source: false,
-  });
-  let sms_rollup = SourceMapSource::new(SourceMapSourceOptions {
-    value: BUNDLE_JS,
-    name: "bundle.js",
-    source_map: SourceMap::from_json(BUNDLE_JS_MAP).unwrap(),
-    original_source: None,
-    inner_source_map: None,
-    remove_original_source: false,
-  });
-  let concat = ConcatSource::new([sms_minify, sms_rollup]).boxed();
-
-  b.iter(|| {
-    let mut m = HashMap::<BoxSource, ()>::new();
-    m.insert(concat.clone(), ());
-    let _ = black_box(|| m.get(&concat));
-    let _ = black_box(|| m.get(&concat));
-  })
-}
-
 fn bench_rspack_sources(criterion: &mut Criterion) {
   let mut group = criterion.benchmark_group("rspack_sources");
-  group.bench_function(
-    "concat_generate_base64_with_cache",
-    benchmark_concat_generate_base64_with_cache,
-  );
-  group
-    .bench_function("concat_generate_base64", benchmark_concat_generate_base64);
 
   group.bench_function(
     "concat_generate_string_with_cache",
@@ -236,14 +150,7 @@ fn bench_rspack_sources(criterion: &mut Criterion) {
   group
     .bench_function("concat_generate_string", benchmark_concat_generate_string);
 
-  group.bench_function(
-    "concat_generate_string_with_cache_as_key",
-    benchmark_concat_generate_string_with_cache_as_key,
-  );
-  group.bench_function(
-    "concat_generate_string_as_key",
-    benchmark_concat_generate_string_as_key,
-  );
+  group.bench_function("cached_source_hash", benchmark_cached_source_hash);
 
   group
     .bench_function("complex_replace_source", benchmark_complex_replace_source);
@@ -258,6 +165,16 @@ fn bench_rspack_sources(criterion: &mut Criterion) {
   group.bench_function(
     "stringify_source_map_to_json",
     benchmark_stringify_source_map_to_json,
+  );
+
+  group.bench_function(
+    "repetitive_react_components_map",
+    benchmark_repetitive_react_components_map,
+  );
+
+  group.bench_function(
+    "repetitive_react_components_source",
+    benchmark_repetitive_react_components_source,
   );
 
   group.finish();
