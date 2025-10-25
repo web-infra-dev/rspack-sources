@@ -118,13 +118,7 @@ impl ConcatSource {
 
 impl Source for ConcatSource {
   fn source(&self) -> Cow<str> {
-    let children = self.children();
-    if children.len() == 1 {
-      children[0].source()
-    } else {
-      let all = self.children().iter().map(|child| child.source()).collect();
-      Cow::Owned(all)
-    }
+    Cow::Owned(self.rope().to_string())
   }
 
   fn rope(&self) -> Rope<'_> {
