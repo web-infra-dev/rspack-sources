@@ -2,6 +2,7 @@
 
 use std::{
   borrow::Cow,
+  collections::{btree_map, BTreeMap},
   hash::Hash,
   ops::{Bound, RangeBounds},
   rc::Rc,
@@ -12,7 +13,7 @@ use crate::Error;
 #[derive(Clone, Debug)]
 pub(crate) enum Repr<'a> {
   Light(&'a str),
-  Full(Rc<Vec<(&'a str, usize)>>),
+  Full(Rc<BTreeMap<usize, &'a str>>),
 }
 
 /// A rope data structure.
@@ -40,14 +41,13 @@ impl<'a> Rope<'a> {
 
     match &mut self.repr {
       Repr::Light(s) => {
-        let vec = Vec::from_iter([(*s, 0), (value, s.len())]);
-        self.repr = Repr::Full(Rc::new(vec));
+        let root = BTreeMap::from_iter([(0, *s), (s.len(), value)]);
+        self.repr = Repr::Full(Rc::new(root));
       }
       Repr::Full(data) => {
-        let len = data
-          .last()
-          .map_or(0, |(chunk, start_pos)| *start_pos + chunk.len());
-        Rc::make_mut(data).push((value, len));
+        let len = data.last_key_value()
+          .map_or(0, |(start_pos, chunk)| *start_pos + chunk.len());
+        Rc::make_mut(data).insert(len, value);
       }
     }
   }
@@ -61,22 +61,21 @@ impl<'a> Rope<'a> {
         if other.is_empty() {
           return;
         }
-        let raw = Vec::from_iter([(*s, 0), (other, s.len())]);
+        let raw = BTreeMap::from_iter([(0, *s), (s.len(), other)]);
         self.repr = Repr::Full(Rc::new(raw));
       }
       (Repr::Full(s), Repr::Full(other)) => {
         if other.is_empty() {
           return;
         }
-        let mut len = s
-          .last()
-          .map_or(0, |(chunk, start_pos)| *start_pos + chunk.len());
+        let mut len = s.last_key_value()
+          .map_or(0, |(start_pos, chunk)| {
+            *start_pos + chunk.len()
+          });
 
         let cur = Rc::make_mut(s);
-        cur.reserve_exact(other.len());
-
-        for &(chunk, _) in other.iter() {
-          cur.push((chunk, len));
+        for (_, chunk) in other.iter() {
+          cur.insert(len, chunk);
           len += chunk.len();
         }
       }
@@ -84,21 +83,20 @@ impl<'a> Rope<'a> {
         if other.is_empty() {
           return;
         }
-        let len = s
-          .last()
-          .map_or(0, |(chunk, start_pos)| *start_pos + chunk.len());
-        Rc::make_mut(s).push((other, len));
+        let len = s.last_key_value()
+          .map_or(0, |(start_pos, chunk)| *start_pos + chunk.len());
+        Rc::make_mut(s).insert(len, other);
       }
       (Repr::Light(s), Repr::Full(other)) => {
         if s.is_empty() {
           self.repr = Repr::Full(other.clone());
           return;
         }
-        let mut raw = Vec::with_capacity(other.len() + 1);
-        raw.push((*s, 0));
+        let mut raw = BTreeMap::new();
+        raw.insert(0, *s);
         let mut len = s.len();
-        for &(chunk, _) in other.iter() {
-          raw.push((chunk, len));
+        for (_, chunk) in other.iter() {
+          raw.insert(len, chunk);
           len += chunk.len();
         }
         self.repr = Repr::Full(Rc::new(raw));
@@ -123,13 +121,14 @@ impl<'a> Rope<'a> {
     }
     match &self.repr {
       Repr::Light(s) => Some(s.as_bytes()[byte_index]),
-      Repr::Full(data) => {
-        let chunk_index = data
-          .binary_search_by(|(_, start_pos)| start_pos.cmp(&byte_index))
-          .unwrap_or_else(|index| index.saturating_sub(1));
-        let (s, start_pos) = &data.get(chunk_index)?;
-        let pos = byte_index - start_pos;
-        Some(s.as_bytes()[pos])
+      Repr::Full(tree) => {
+        if let Some((start_pos, chunk)) = tree.range(byte_index..).next()
+        {
+          let pos = byte_index - start_pos;
+          Some(chunk.as_bytes()[pos])
+        } else {
+          None
+        }
       }
     }
   }
@@ -142,11 +141,10 @@ impl<'a> Rope<'a> {
           iter: s.char_indices(),
         },
       },
-      Repr::Full(data) => CharIndices {
+      Repr::Full(tree) => CharIndices {
         iter: CharIndicesEnum::Full {
-          chunks: data,
-          chunk_index: 0,
-          iter: data[0].0.char_indices(),
+          chunks: tree.iter(),
+          iter: None,
           start_pos: 0,
         },
       },
@@ -160,7 +158,7 @@ impl<'a> Rope<'a> {
         Repr::Light(other) => s.starts_with(other),
         Repr::Full(data) => {
           let mut remaining = *s;
-          for (chunk, _) in data.iter() {
+          for (_, chunk) in data.iter() {
             if remaining.starts_with(chunk) {
               remaining = &remaining[chunk.len()..];
             } else {
@@ -175,7 +173,7 @@ impl<'a> Rope<'a> {
           Repr::Light(other) => {
             // Check if the concatenated chunks of `data` start with `other`
             let mut remaining_other = *other;
-            for (chunk, _) in data.iter() {
+            for (_, chunk) in data.iter() {
               if remaining_other.is_empty() {
                 return true;
               }
@@ -201,7 +199,7 @@ impl<'a> Rope<'a> {
             loop {
               // If `remaining_other` is empty, try to fill it with the next chunk from `other_data`
               if remaining_other.is_empty() {
-                if let Some((other_chunk, _)) = other_iter.next() {
+                if let Some((_, other_chunk)) = other_iter.next() {
                   remaining_other = other_chunk;
                 } else {
                   // If there are no more chunks in `other_data`, we have matched everything
@@ -211,7 +209,7 @@ impl<'a> Rope<'a> {
 
               // If `remaining_self` is empty, try to fill it with the next chunk from `data`
               if remaining_self.is_empty() {
-                if let Some((self_chunk, _)) = self_iter.next() {
+                if let Some((_, self_chunk)) = self_iter.next() {
                   remaining_self = self_chunk;
                 } else {
                   // If there are no more chunks in `data`, but `other_data` still has chunks, it cannot match
@@ -240,9 +238,9 @@ impl<'a> Rope<'a> {
   pub fn ends_with(&self, value: char) -> bool {
     match &self.repr {
       Repr::Light(s) => s.ends_with(value),
-      Repr::Full(data) => {
-        if let Some((last, _)) = data.last() {
-          last.ends_with(value)
+      Repr::Full(tree) => {
+        if let Some((_, chunk)) = tree.last_key_value() {
+          chunk.ends_with(value)
         } else {
           false
         }
@@ -255,7 +253,7 @@ impl<'a> Rope<'a> {
   pub fn is_empty(&self) -> bool {
     match &self.repr {
       Repr::Light(s) => s.is_empty(),
-      Repr::Full(data) => data.iter().all(|(s, _)| s.is_empty()),
+      Repr::Full(data) => data.iter().all(|(_, s)| s.is_empty()),
     }
   }
 
@@ -264,9 +262,8 @@ impl<'a> Rope<'a> {
   pub fn len(&self) -> usize {
     match &self.repr {
       Repr::Light(s) => s.len(),
-      Repr::Full(data) => data
-        .last()
-        .map_or(0, |(chunk, start_pos)| start_pos + chunk.len()),
+      Repr::Full(tree) => tree.last_key_value()
+        .map_or(0, |(start_pos, chunk)| start_pos + chunk.len()),
     }
   }
 
@@ -334,73 +331,57 @@ impl<'a> Rope<'a> {
         .get(start_range..end_range)
         .map(Rope::from)
         .ok_or(Error::Rope("invalid char boundary")),
-      Repr::Full(data) => {
-        // [start_chunk
-        let start_chunk_index = data
-          .binary_search_by(|(_, start_pos)| start_pos.cmp(&start_range))
-          .unwrap_or_else(|insert_pos| insert_pos.saturating_sub(1));
+      Repr::Full(tree) => {
+        // find the entry that may contain start_range (the largest key <= start_range)
+        let start_key = tree.range(..=start_range).next_back().map(|(k, _)| *k);
+        let mut iter = match start_key {
+          Some(k) => tree.range(k..),
+          None => tree.range(start_range..),
+        };
 
-        // end_chunk)
-        let end_chunk_index = data
-          .binary_search_by(|(chunk, start_pos)| {
-            let end_pos = start_pos + chunk.len(); // exclusive
-            end_pos.cmp(&end_range)
-          })
-          .unwrap_or_else(|insert_pos| insert_pos);
+        let mut slice = BTreeMap::new();
+        let mut len = 0usize;
 
-        // same chunk
-        if start_chunk_index == end_chunk_index {
-          // SAFETY: start_chunk_index guarantees valid range
-          let (chunk, start_pos) =
-            unsafe { data.get_unchecked(start_chunk_index) };
-          let start = start_range - start_pos;
-          let end = end_range - start_pos;
-          return chunk
-            .get(start..end)
-            .map(Rope::from)
-            .ok_or(Error::Rope("invalid char boundary"));
+        for (&chunk_start, &chunk) in iter {
+          let chunk_len = chunk.len();
+          let chunk_end = chunk_start + chunk_len;
+
+          // skip chunks entirely before the requested range
+          if chunk_end <= start_range {
+            continue;
+          }
+          // stop once we've passed the requested end
+          if chunk_start >= end_range {
+            break;
+          }
+
+          // compute local slice bounds within this chunk
+          let s = if start_range > chunk_start {
+            start_range - chunk_start
+          } else {
+            0
+          };
+          let e = if end_range < chunk_end {
+            end_range - chunk_start
+          } else {
+            chunk_len
+          };
+
+          // validate char boundaries and insert
+          if let Some(sub) = chunk.get(s..e) {
+            slice.insert(len, sub);
+            len += sub.len();
+          } else {
+            return Err(Error::Rope("invalid char boundary"));
+          }
         }
 
-        if end_chunk_index < start_chunk_index {
+        if slice.is_empty() {
           return Ok(Rope::new());
         }
 
-        let mut raw =
-          Vec::with_capacity(end_chunk_index - start_chunk_index + 1);
-        let mut len = 0;
-
-        // different chunk
-        // [start_chunk, end_chunk]
-        (start_chunk_index..end_chunk_index + 1).try_for_each(|i| {
-          // SAFETY: [start_chunk_index, end_chunk_index] guarantees valid range
-          let (chunk, start_pos) = unsafe { data.get_unchecked(i) };
-
-          if start_chunk_index == i {
-            let start = start_range - start_pos;
-            if let Some(chunk) = chunk.get(start..) {
-              raw.push((chunk, len));
-              len += chunk.len();
-            } else {
-              return Err(Error::Rope("invalid char boundary"));
-            }
-          } else if end_chunk_index == i {
-            let end = end_range - start_pos;
-            if let Some(chunk) = chunk.get(..end) {
-              raw.push((chunk, len));
-              len += chunk.len();
-            } else {
-              return Err(Error::Rope("invalid char boundary"));
-            }
-          } else {
-            raw.push((chunk, len));
-            len += chunk.len();
-          }
-
-          Ok(())
-        })?;
-
         Ok(Rope {
-          repr: Repr::Full(Rc::new(raw)),
+          repr: Repr::Full(Rc::new(slice)),
         })
       }
     }
@@ -431,65 +412,66 @@ impl<'a> Rope<'a> {
         Rope::from(unsafe { s.get_unchecked(start_range..end_range) })
       }
       Repr::Full(data) => {
-        // [start_chunk
-        let start_chunk_index = data
-          .binary_search_by(|(_, start_pos)| start_pos.cmp(&start_range))
-          .unwrap_or_else(|insert_pos| insert_pos.saturating_sub(1));
+        todo!();
+        // // [start_chunk
+        // let start_chunk_index = data
+        //   .binary_search_by(|(_, start_pos)| start_pos.cmp(&start_range))
+        //   .unwrap_or_else(|insert_pos| insert_pos.saturating_sub(1));
 
-        // end_chunk)
-        let end_chunk_index = data
-          .binary_search_by(|(chunk, start_pos)| {
-            let end_pos = start_pos + chunk.len(); // exclusive
-            end_pos.cmp(&end_range)
-          })
-          .unwrap_or_else(|insert_pos| insert_pos);
+        // // end_chunk)
+        // let end_chunk_index = data
+        //   .binary_search_by(|(chunk, start_pos)| {
+        //     let end_pos = start_pos + chunk.len(); // exclusive
+        //     end_pos.cmp(&end_range)
+        //   })
+        //   .unwrap_or_else(|insert_pos| insert_pos);
 
-        // same chunk
-        if start_chunk_index == end_chunk_index {
-          // SAFETY: start_chunk_index guarantees valid range
-          let (chunk, start_pos) =
-            unsafe { data.get_unchecked(start_chunk_index) };
-          let start = start_range - start_pos;
-          let end = end_range - start_pos;
-          // SAFETY: invariant guarantees valid range
-          return Rope::from(unsafe { chunk.get_unchecked(start..end) });
-        }
+        // // same chunk
+        // if start_chunk_index == end_chunk_index {
+        //   // SAFETY: start_chunk_index guarantees valid range
+        //   let (chunk, start_pos) =
+        //     unsafe { data.get_unchecked(start_chunk_index) };
+        //   let start = start_range - start_pos;
+        //   let end = end_range - start_pos;
+        //   // SAFETY: invariant guarantees valid range
+        //   return Rope::from(unsafe { chunk.get_unchecked(start..end) });
+        // }
 
-        if end_chunk_index < start_chunk_index {
-          return Rope::new();
-        }
+        // if end_chunk_index < start_chunk_index {
+        //   return Rope::new();
+        // }
 
-        let mut raw =
-          Vec::with_capacity(end_chunk_index - start_chunk_index + 1);
-        let mut len = 0;
+        // let mut raw =
+        //   Vec::with_capacity(end_chunk_index - start_chunk_index + 1);
+        // let mut len = 0;
 
-        // different chunk
-        // [start_chunk, end_chunk]
-        (start_chunk_index..end_chunk_index + 1).for_each(|i| {
-          // SAFETY: [start_chunk_index, end_chunk_index] guarantees valid range
-          let (chunk, start_pos) = unsafe { data.get_unchecked(i) };
+        // // different chunk
+        // // [start_chunk, end_chunk]
+        // (start_chunk_index..end_chunk_index + 1).for_each(|i| {
+        //   // SAFETY: [start_chunk_index, end_chunk_index] guarantees valid range
+        //   let (chunk, start_pos) = unsafe { data.get_unchecked(i) };
 
-          if start_chunk_index == i {
-            let start = start_range - start_pos;
-            // SAFETY: invariant guarantees valid range
-            let chunk = unsafe { chunk.get_unchecked(start..) };
-            raw.push((chunk, len));
-            len += chunk.len();
-          } else if end_chunk_index == i {
-            let end = end_range - start_pos;
-            // SAFETY: invariant guarantees valid range
-            let chunk = unsafe { chunk.get_unchecked(..end) };
-            raw.push((chunk, len));
-            len += chunk.len();
-          } else {
-            raw.push((chunk, len));
-            len += chunk.len();
-          }
-        });
+        //   if start_chunk_index == i {
+        //     let start = start_range - start_pos;
+        //     // SAFETY: invariant guarantees valid range
+        //     let chunk = unsafe { chunk.get_unchecked(start..) };
+        //     raw.push((chunk, len));
+        //     len += chunk.len();
+        //   } else if end_chunk_index == i {
+        //     let end = end_range - start_pos;
+        //     // SAFETY: invariant guarantees valid range
+        //     let chunk = unsafe { chunk.get_unchecked(..end) };
+        //     raw.push((chunk, len));
+        //     len += chunk.len();
+        //   } else {
+        //     raw.push((chunk, len));
+        //     len += chunk.len();
+        //   }
+        // });
 
-        Rope {
-          repr: Repr::Full(Rc::new(raw)),
-        }
+        // Rope {
+        //   repr: Repr::Full(Rc::new(raw)),
+        // }
       }
     }
   }
@@ -509,10 +491,10 @@ impl<'a> Rope<'a> {
     Lines {
       iter: match &self.repr {
         Repr::Light(s) => LinesEnum::Light(s),
-        Repr::Full(data) => LinesEnum::Complex {
-          iter: data,
+        Repr::Full(tree) => LinesEnum::Complex {
+          chunks: tree.iter(),
+          chunk: None,
           in_chunk_byte_idx: 0,
-          chunk_idx: 0,
         },
       },
       byte_idx: 0,
@@ -530,7 +512,7 @@ impl<'a> Rope<'a> {
       Repr::Light(s) => Cow::Borrowed(s.as_bytes()),
       Repr::Full(data) => {
         let mut bytes = vec![];
-        for (chunk, _) in data.iter() {
+        for (_, chunk) in data.iter() {
           bytes.extend_from_slice(chunk.as_bytes());
         }
         Cow::Owned(bytes)
@@ -552,12 +534,12 @@ impl Hash for Rope<'_> {
   }
 }
 
-enum LinesEnum<'a, 'b> {
-  Light(&'b str),
+enum LinesEnum<'iter, 'str> {
+  Light(&'str str),
   Complex {
-    iter: &'a Vec<(&'b str, usize)>,
+    chunks: btree_map::Iter<'iter, usize, &'str str>,
+    chunk: Option<&'str str>,
     in_chunk_byte_idx: usize,
-    chunk_idx: usize,
   },
 }
 
@@ -606,124 +588,103 @@ impl<'a> Iterator for Lines<'_, 'a> {
       Lines {
         iter:
           LinesEnum::Complex {
-            iter: chunks,
+            ref mut chunks,
+            ref mut chunk,
             ref mut in_chunk_byte_idx,
-            ref mut chunk_idx,
           },
         ref mut byte_idx,
         ref mut ended,
         ref total_bytes,
         trailing_line_break_as_newline,
       } => {
-        if *ended {
+        if self.ended {
           return None;
-        } else if byte_idx == total_bytes {
-          if trailing_line_break_as_newline {
-            *ended = true;
+        } else if self.byte_idx == self.total_bytes {
+          if self.trailing_line_break_as_newline {
+            self.ended = true;
             return Some(Rope::from(""));
           }
           return None;
-        } else if chunks.is_empty() {
-          return None;
         }
 
-        debug_assert!(*chunk_idx < chunks.len());
-
-        let &(chunk, _) = &chunks[*chunk_idx];
-
-        // If the current chunk has ran out of bytes, move to the next chunk.
-        if *in_chunk_byte_idx == chunk.len() && *chunk_idx < chunks.len() - 1 {
-          *chunk_idx += 1;
+        // Ensure we have a current chunk
+        if chunk.is_none() {
+          *chunk = chunks.next().map(|(_, c)| *c);
           *in_chunk_byte_idx = 0;
-          return self.next();
         }
 
-        let start_chunk_idx = *chunk_idx;
-        let start_in_chunk_byte_idx = *in_chunk_byte_idx;
-
-        let end_info = loop {
-          if *chunk_idx == chunks.len() {
-            break None;
-          }
-          let &(chunk, _) = &chunks[*chunk_idx];
-          if let Some(idx) =
-            memchr::memchr(b'\n', &chunk.as_bytes()[*in_chunk_byte_idx..])
-          {
-            *in_chunk_byte_idx += idx + 1;
-            break Some((*chunk_idx, *in_chunk_byte_idx));
-          } else {
-            *in_chunk_byte_idx = 0;
-            *chunk_idx += 1;
-          }
+        // If still no chunk, nothing to return
+        let cur = match chunk {
+          Some(c) => *c,
+          None => return None,
         };
 
-        // If we find a newline in the next few chunks, return the line.
-        if let Some((end_chunk_idx, end_in_chunk_byte_idx)) = end_info {
-          if start_chunk_idx == end_chunk_idx {
-            let &(chunk, _) = &chunks[start_chunk_idx];
-            *byte_idx += end_in_chunk_byte_idx - start_in_chunk_byte_idx;
-            return Some(Rope::from(
-              &chunk[start_in_chunk_byte_idx..end_in_chunk_byte_idx],
-            ));
+        // Fast-path: newline in current chunk
+        if let Some(idx) =
+          memchr::memchr(b'\n', &cur.as_bytes()[*in_chunk_byte_idx..])
+        {
+          let end = *in_chunk_byte_idx + idx + 1;
+          let result = Rope::from(&cur[*in_chunk_byte_idx..end]);
+          self.byte_idx += end - *in_chunk_byte_idx;
+          *in_chunk_byte_idx = end;
+          // if we've consumed the chunk, drop it so next call advances iterator
+          if *in_chunk_byte_idx == cur.len() {
+            *chunk = None;
+            *in_chunk_byte_idx = 0;
           }
-
-          // The line spans multiple chunks.
-          let mut raw = Vec::with_capacity(end_chunk_idx - start_chunk_idx + 1);
-          let mut len = 0;
-          (start_chunk_idx..end_chunk_idx + 1).for_each(|i| {
-            let &(chunk, _) = &chunks[i];
-
-            if start_chunk_idx == i {
-              let start = start_in_chunk_byte_idx;
-              raw.push((&chunk[start..], len));
-              len += chunk.len() - start;
-            } else if end_chunk_idx == i {
-              let end = end_in_chunk_byte_idx;
-              raw.push((&chunk[..end], len));
-              len += end;
-            } else {
-              raw.push((chunk, len));
-              len += chunk.len();
-            }
-          });
-          // Advance the byte index to the end of the line.
-          *byte_idx += len;
-          Some(Rope {
-            repr: Repr::Full(Rc::new(raw)),
-          })
-        } else {
-          // If we did not find a newline in the next few chunks,
-          // return the remaining bytes.  This is the end of the rope.
-          *ended = true;
-
-          // If we only have one chunk left, return the remaining bytes.
-          if chunks.len() - start_chunk_idx == 1 {
-            let &(chunk, _) = &chunks[start_chunk_idx];
-            let start = start_in_chunk_byte_idx;
-            let end = chunk.len();
-            *byte_idx += end - start;
-            return Some(Rope::from(&chunk[start..end]));
-          }
-
-          let mut raw = Vec::with_capacity(chunks.len() - start_chunk_idx);
-          let mut len = 0;
-          (start_chunk_idx..chunks.len()).for_each(|i| {
-            let &(chunk, _) = &chunks[i];
-            if start_chunk_idx == i {
-              let start = start_in_chunk_byte_idx;
-              raw.push((&chunk[start..], len));
-              len += chunk.len() - start;
-            } else {
-              raw.push((chunk, len));
-              len += chunk.len();
-            }
-          });
-          // Advance the byte index to the end of the rope.
-          *byte_idx += len;
-          Some(Rope {
-            repr: Repr::Full(Rc::new(raw)),
-          })
+          return Some(result);
         }
+
+        // No newline in current chunk: collect across chunks until newline or end
+        let mut raw = BTreeMap::default();
+        let mut len = 0usize;
+
+        // push remainder of current chunk
+        raw.insert(len, &cur[*in_chunk_byte_idx..]);
+        len += cur.len() - *in_chunk_byte_idx;
+
+        // consume current chunk
+        *chunk = None;
+        *in_chunk_byte_idx = 0;
+
+        while let Some((_, next_chunk)) = chunks.next() {
+          if next_chunk.is_empty() {
+            continue;
+          }
+          if let Some(idx) = memchr::memchr(b'\n', next_chunk.as_bytes()) {
+            // include up to and including newline
+            raw.insert(len, &next_chunk[..idx + 1]);
+            len += idx + 1;
+            // set current chunk to remainder after newline (may be empty)
+            if idx + 1 < next_chunk.len() {
+              *chunk = Some(&next_chunk[idx + 1..]);
+              *in_chunk_byte_idx = 0;
+            } else {
+              *chunk = None;
+              *in_chunk_byte_idx = 0;
+            }
+            self.byte_idx += len;
+            return Some(Rope {
+              repr: Repr::Full(Rc::new(raw)),
+            });
+          } else {
+            raw.insert(len, next_chunk);
+            len += next_chunk.len();
+            // continue looking
+          }
+        }
+
+        // Reached end without finding newline
+        self.ended = true;
+        self.byte_idx += len;
+        if raw.is_empty() {
+          return None;
+        }
+        // If only a single piece and it spans the remainder of a single original chunk,
+        // it's fine to return a Light Rope but keeping Full is OK and consistent with other code.
+        Some(Rope {
+          repr: Repr::Full(Rc::new(raw)),
+        })
       }
     }
   }
@@ -734,10 +695,9 @@ enum CharIndicesEnum<'a> {
     iter: std::str::CharIndices<'a>,
   },
   Full {
-    chunks: &'a [(&'a str, usize)],
-    chunk_index: usize,
+    chunks: btree_map::Iter<'a, usize, &'a str>,
+    iter: Option<std::str::CharIndices<'a>>,
     start_pos: usize,
-    iter: std::str::CharIndices<'a>,
   },
 }
 
@@ -753,34 +713,37 @@ impl Iterator for CharIndices<'_> {
       CharIndicesEnum::Light { iter } => iter.next(),
       CharIndicesEnum::Full {
         chunks,
-        chunk_index,
         iter,
         start_pos,
       } => {
-        if let Some((i, c)) = iter.next() {
-          return Some((*start_pos + i, c));
-        }
-        loop {
-          if *chunk_index == chunks.len() - 1 {
-            return None;
+        // try current chunk iterator first
+        if let Some(inner) = iter.as_mut() {
+          if let Some((i, c)) = inner.next() {
+            return Some((*start_pos + i, c));
           }
-          *chunk_index += 1;
-          // SAFETY: We just checked bounds above
-          let (chunk, next_start_pos) =
-            unsafe { chunks.get_unchecked(*chunk_index) };
+        }
 
-          // Skip empty chunks without creating iterators
+        // advance to next chunk from the BTreeMap iterator
+        while let Some((key, chunk)) = chunks.next() {
+          let key = *key;
           if chunk.is_empty() {
             continue;
           }
 
-          *iter = chunk.char_indices();
-          *start_pos = *next_start_pos;
-
-          if let Some((i, c)) = iter.next() {
-            return Some((*start_pos + i, c));
+          let mut new_iter = chunk.char_indices();
+          *start_pos = key;
+          if let Some((i, c)) = new_iter.next() {
+            *iter = Some(new_iter);
+            return Some((key + i, c));
+          } else {
+            // empty after decoding (shouldn't happen for non-empty chunk,
+            // but keep iter state consistent)
+            *iter = Some(new_iter);
+            continue;
           }
         }
+
+        None
       }
     }
   }
@@ -801,7 +764,7 @@ impl ToString for Rope<'_> {
       Repr::Light(s) => s.to_string(),
       Repr::Full(data) => {
         let mut s = String::with_capacity(self.len());
-        for (chunk, _) in data.iter() {
+        for (_, chunk) in data.iter() {
           s.push_str(chunk);
         }
         s
@@ -812,6 +775,7 @@ impl ToString for Rope<'_> {
 
 impl PartialEq<Rope<'_>> for Rope<'_> {
   fn eq(&self, other: &Rope<'_>) -> bool {
+    // fast path: different lengths
     if self.len() != other.len() {
       return false;
     }
@@ -828,77 +792,70 @@ impl PartialEq<Rope<'_>> for Rope<'_> {
       return s == other;
     }
 
-    let chunks = match &self.repr {
-      Repr::Light(s) => &[(*s, 0)][..],
-      Repr::Full(data) => &data[..],
+    let mut chunks: Box<dyn Iterator<Item = &str>> = match &self.repr {
+      Repr::Light(s) => Box::new([*s].into_iter()),
+      Repr::Full(tree) => Box::new(tree.iter().map(|(_, chunk)| *chunk)),
     };
-    let other_chunks = match &other.repr {
-      Repr::Light(s) => &[(*s, 0)][..],
-      Repr::Full(data) => &data[..],
+    let mut other_chunks: Box<dyn Iterator<Item = &str>> = match &other.repr {
+      Repr::Light(s) => Box::new([*s].into_iter()),
+      Repr::Full(tree) => Box::new(tree.iter().map(|(_, chunk)| *chunk)),
     };
 
-    let total_bytes = self.len();
-    let mut byte_idx = 0;
-
-    let mut chunks_idx = 0;
+    let mut chunk = chunks.next();
     let mut in_chunk_byte_idx = 0;
 
-    let mut other_chunks_idx = 0;
+    let mut other_chunk = other_chunks.next();
     let mut in_other_chunk_byte_idx = 0;
 
     loop {
-      if byte_idx == total_bytes {
-        break;
-      }
+      let Some(chunk_str) = chunk else {
+        return other_chunk.is_none();
+      };
+      let Some(other_chunk_str) = other_chunk else {
+        return false;
+      };
 
-      let &(chunk, _) = &chunks[chunks_idx];
-      let chunk_len = chunk.len();
-      let &(other_chunk, _) = &other_chunks[other_chunks_idx];
-      let other_chunk_len = other_chunk.len();
+      let chunk_len = chunk_str.len();
+      let other_chunk_len = other_chunk_str.len();
 
       let chunk_remaining = chunk_len - in_chunk_byte_idx;
       let other_chunk_remaining = other_chunk_len - in_other_chunk_byte_idx;
 
       match chunk_remaining.cmp(&other_chunk_remaining) {
         std::cmp::Ordering::Less => {
-          if other_chunk
+          if other_chunk_str
             [in_other_chunk_byte_idx..in_other_chunk_byte_idx + chunk_remaining]
-            != chunk[in_chunk_byte_idx..]
+            != chunk_str[in_chunk_byte_idx..]
           {
             return false;
           }
           in_other_chunk_byte_idx += chunk_remaining;
-          chunks_idx += 1;
+          chunk = chunks.next();
           in_chunk_byte_idx = 0;
-          byte_idx += chunk_remaining;
         }
         std::cmp::Ordering::Equal => {
-          if chunk[in_chunk_byte_idx..]
-            != other_chunk[in_other_chunk_byte_idx..]
+          if chunk_str[in_chunk_byte_idx..]
+            != other_chunk_str[in_other_chunk_byte_idx..]
           {
             return false;
           }
-          chunks_idx += 1;
-          other_chunks_idx += 1;
+          chunk = chunks.next();
+          other_chunk = other_chunks.next();
           in_chunk_byte_idx = 0;
           in_other_chunk_byte_idx = 0;
-          byte_idx += chunk_remaining;
         }
         std::cmp::Ordering::Greater => {
-          if chunk[in_chunk_byte_idx..in_chunk_byte_idx + other_chunk_remaining]
-            != other_chunk[in_other_chunk_byte_idx..]
+          if chunk_str[in_chunk_byte_idx..in_chunk_byte_idx + other_chunk_remaining]
+            != other_chunk_str[in_other_chunk_byte_idx..]
           {
             return false;
           }
           in_chunk_byte_idx += other_chunk_remaining;
-          other_chunks_idx += 1;
+          other_chunk = other_chunks.next();
           in_other_chunk_byte_idx = 0;
-          byte_idx += other_chunk_remaining;
         }
       }
     }
-
-    true
   }
 }
 
@@ -918,7 +875,7 @@ impl PartialEq<str> for Rope<'_> {
       }
       Repr::Full(data) => {
         let mut idx = 0;
-        for (chunk, _) in data.iter() {
+        for (_, chunk) in data.iter() {
           let chunk = chunk.as_bytes();
           if chunk != &other[idx..(idx + chunk.len())] {
             return false;
@@ -948,7 +905,7 @@ impl PartialEq<&str> for Rope<'_> {
       }
       Repr::Full(data) => {
         let mut idx = 0;
-        for (chunk, _) in data.iter() {
+        for (_, chunk) in data.iter() {
           let chunk = chunk.as_bytes();
           if chunk != &other[idx..(idx + chunk.len())] {
             return false;
@@ -989,20 +946,20 @@ impl<'a> From<&'a Cow<'a, str>> for Rope<'a> {
 impl<'a> FromIterator<&'a str> for Rope<'a> {
   fn from_iter<T: IntoIterator<Item = &'a str>>(iter: T) -> Self {
     let mut len = 0;
-    let raw = iter
+    let tree = iter
       .into_iter()
       .filter_map(|chunk| {
         if chunk.is_empty() {
           return None;
         }
-        let cur = (chunk, len);
+        let cur = (len, chunk);
         len += chunk.len();
         Some(cur)
       })
-      .collect::<Vec<_>>();
+      .collect::<BTreeMap<_, _>>();
 
     Self {
-      repr: Repr::Full(Rc::new(raw)),
+      repr: Repr::Full(Rc::new(tree)),
     }
   }
 }
@@ -1027,7 +984,7 @@ fn end_bound_to_range_end(end: Bound<&usize>) -> Option<usize> {
 
 #[cfg(test)]
 mod tests {
-  use std::rc::Rc;
+  use std::{collections::BTreeMap, rc::Rc};
 
   use crate::rope::{Repr, Rope};
 
@@ -1053,7 +1010,7 @@ mod tests {
     assert_eq!(simple, "abcdef");
     assert_eq!(
       simple.repr,
-      Repr::Full(Rc::new(Vec::from_iter([("abc", 0), ("def", 3)])))
+      Repr::Full(Rc::new(BTreeMap::from_iter([(0, "abc"), (3, "def")])))
     );
     assert_eq!(simple.len(), 6);
 
@@ -1061,10 +1018,10 @@ mod tests {
     assert_eq!(simple, "abcdefghi");
     assert_eq!(
       simple.repr,
-      Repr::Full(Rc::new(Vec::from_iter([
-        ("abc", 0),
-        ("def", 3),
-        ("ghi", 6),
+      Repr::Full(Rc::new(BTreeMap::from_iter([
+        (0, "abc"),
+        (3, "def"),
+        (6, "ghi"),
       ])))
     );
     assert_eq!(simple.len(), 9);
@@ -1084,7 +1041,7 @@ mod tests {
     assert_eq!(append1, "abcdef");
     assert_eq!(
       append1.repr,
-      Repr::Full(Rc::new(Vec::from_iter([("abc", 0), ("def", 3),])))
+      Repr::Full(Rc::new(BTreeMap::from_iter([(0, "abc"), (3, "def"),])))
     );
 
     // simple - complex
@@ -1093,11 +1050,11 @@ mod tests {
     assert_eq!(append2, "abc123");
     assert_eq!(
       append2.repr,
-      Repr::Full(Rc::new(Vec::from_iter([
-        ("abc", 0),
-        ("1", 3),
-        ("2", 4),
-        ("3", 5),
+      Repr::Full(Rc::new(BTreeMap::from_iter([
+        (0, "abc"),
+        (3, "1"),
+        (4, "2"),
+        (5, "3"),
       ])))
     );
 
@@ -1107,11 +1064,11 @@ mod tests {
     assert_eq!(append3, "123abc");
     assert_eq!(
       append3.repr,
-      Repr::Full(Rc::new(Vec::from_iter([
-        ("1", 0),
-        ("2", 1),
-        ("3", 2),
-        ("abc", 3),
+      Repr::Full(Rc::new(BTreeMap::from_iter([
+        (0, "1"),
+        (1, "2"),
+        (2, "3"),
+        (3, "abc"),
       ])))
     );
 
@@ -1121,13 +1078,13 @@ mod tests {
     assert_eq!(append4, "123456");
     assert_eq!(
       append4.repr,
-      Repr::Full(Rc::new(Vec::from_iter([
-        ("1", 0),
-        ("2", 1),
-        ("3", 2),
-        ("4", 3),
-        ("5", 4),
-        ("6", 5),
+      Repr::Full(Rc::new(BTreeMap::from_iter([
+        (0, "1"),
+        (1, "2"),
+        (2, "3"),
+        (3, "4"),
+        (4, "5"),
+        (5, "6"),
       ])))
     );
   }
@@ -1219,7 +1176,7 @@ mod tests {
     assert_eq!(rope, "abcdef");
     assert_eq!(
       rope.repr,
-      Repr::Full(Rc::new(Vec::from_iter([("abc", 0), ("def", 3)])))
+      Repr::Full(Rc::new(BTreeMap::from_iter([(0, "abc"), (3, "def")])))
     );
   }
 
