@@ -248,14 +248,20 @@ mod tests {
     let result_list_map = source.map(&MapOptions::new(false)).unwrap();
 
     assert_eq!(result_text, "Line1\n\nLine3\n");
-    assert_eq!(result_map.sources(), &["file.js".to_string()]);
-    assert_eq!(result_list_map.sources(), ["file.js".to_string()]);
     assert_eq!(
-      result_map.sources_content(),
+      result_map.sources().collect::<Vec<_>>(),
+      ["file.js".to_string()]
+    );
+    assert_eq!(
+      result_list_map.sources().collect::<Vec<_>>(),
+      ["file.js".to_string()]
+    );
+    assert_eq!(
+      result_map.sources_content().collect::<Vec<_>>(),
       ["Line1\n\nLine3\n".to_string()],
     );
     assert_eq!(
-      result_list_map.sources_content(),
+      result_list_map.sources_content().collect::<Vec<_>>(),
       ["Line1\n\nLine3\n".to_string()],
     );
     assert_eq!(result_map.mappings(), "AAAA;;AAEA");

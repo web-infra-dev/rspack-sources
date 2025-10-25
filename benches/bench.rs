@@ -19,8 +19,7 @@ use rspack_sources::{
 
 use bench_complex_replace_source::benchmark_complex_replace_source;
 use bench_source_map::{
-  benchmark_parse_source_map_from_json, benchmark_source_map_clone,
-  benchmark_stringify_source_map_to_json,
+  benchmark_parse_source_map_from_json, benchmark_stringify_source_map_to_json,
 };
 
 use benchmark_repetitive_react_components::{
@@ -159,8 +158,6 @@ fn bench_rspack_sources(criterion: &mut Criterion) {
     "parse_source_map_from_json",
     benchmark_parse_source_map_from_json,
   );
-
-  group.bench_function("source_map_clone", benchmark_source_map_clone);
 
   group.bench_function(
     "stringify_source_map_to_json",
