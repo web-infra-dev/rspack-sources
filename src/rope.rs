@@ -1,11 +1,7 @@
 #![allow(unsafe_code)]
 
 use std::{
-  borrow::Cow,
-  collections::{btree_map, BTreeMap},
-  hash::Hash,
-  ops::{Bound, RangeBounds},
-  rc::Rc,
+  borrow::Cow, cell::Cell, collections::{btree_map, BTreeMap}, hash::Hash, ops::{Bound, RangeBounds}, rc::Rc
 };
 
 use crate::Error;
@@ -13,7 +9,7 @@ use crate::Error;
 #[derive(Clone, Debug)]
 pub(crate) enum Repr<'a> {
   Light(&'a str),
-  Full(Rc<BTreeMap<usize, &'a str>>),
+  Full(Rc<BTreeMap<Cell<usize>, &'a str>>),
 }
 
 /// A rope data structure.
@@ -41,13 +37,13 @@ impl<'a> Rope<'a> {
 
     match &mut self.repr {
       Repr::Light(s) => {
-        let root = BTreeMap::from_iter([(0, *s), (s.len(), value)]);
+        let root = BTreeMap::from_iter([(Cell::new(0), *s), (Cell::new(s.len()), value)]);
         self.repr = Repr::Full(Rc::new(root));
       }
       Repr::Full(data) => {
         let len = data.last_key_value()
-          .map_or(0, |(start_pos, chunk)| *start_pos + chunk.len());
-        Rc::make_mut(data).insert(len, value);
+          .map_or(0, |(start_pos, chunk)| start_pos.get() + chunk.len());
+        Rc::make_mut(data).insert(Cell::new(len), value);
       }
     }
   }
@@ -61,31 +57,34 @@ impl<'a> Rope<'a> {
         if other.is_empty() {
           return;
         }
-        let raw = BTreeMap::from_iter([(0, *s), (s.len(), other)]);
+        let raw = BTreeMap::from_iter([(Cell::new(0), *s), (Cell::new(s.len()), other)]);
         self.repr = Repr::Full(Rc::new(raw));
       }
-      (Repr::Full(s), Repr::Full(other)) => {
+      (Repr::Full(s), Repr::Full(mut other)) => {
         if other.is_empty() {
           return;
         }
         let mut len = s.last_key_value()
           .map_or(0, |(start_pos, chunk)| {
-            *start_pos + chunk.len()
+            start_pos.get() + chunk.len()
           });
 
-        let cur = Rc::make_mut(s);
-        for (_, chunk) in other.iter() {
-          cur.insert(len, chunk);
+        let other = Rc::make_mut(&mut other);
+        for (start_pot, chunk) in other.iter() {
+          start_pot.set(len);
           len += chunk.len();
         }
+
+        let cur: &mut BTreeMap<Cell<usize>, &str> = Rc::make_mut(s);
+        cur.append(other);
       }
       (Repr::Full(s), Repr::Light(other)) => {
         if other.is_empty() {
           return;
         }
         let len = s.last_key_value()
-          .map_or(0, |(start_pos, chunk)| *start_pos + chunk.len());
-        Rc::make_mut(s).insert(len, other);
+          .map_or(0, |(start_pos, chunk)| start_pos.get() + chunk.len());
+        Rc::make_mut(s).insert(Cell::new(len), other);
       }
       (Repr::Light(s), Repr::Full(other)) => {
         if s.is_empty() {
@@ -93,10 +92,10 @@ impl<'a> Rope<'a> {
           return;
         }
         let mut raw = BTreeMap::new();
-        raw.insert(0, *s);
+        raw.insert(Cell::new(0), *s);
         let mut len = s.len();
         for (_, chunk) in other.iter() {
-          raw.insert(len, chunk);
+          raw.insert(Cell::new(len), chunk);
           len += chunk.len();
         }
         self.repr = Repr::Full(Rc::new(raw));
@@ -122,9 +121,9 @@ impl<'a> Rope<'a> {
     match &self.repr {
       Repr::Light(s) => Some(s.as_bytes()[byte_index]),
       Repr::Full(tree) => {
-        if let Some((start_pos, chunk)) = tree.range(byte_index..).next()
+        if let Some((start_pos, chunk)) = tree.range(Cell::new(byte_index)..).next()
         {
-          let pos = byte_index - start_pos;
+          let pos = byte_index - start_pos.get();
           Some(chunk.as_bytes()[pos])
         } else {
           None
@@ -263,7 +262,7 @@ impl<'a> Rope<'a> {
     match &self.repr {
       Repr::Light(s) => s.len(),
       Repr::Full(tree) => tree.last_key_value()
-        .map_or(0, |(start_pos, chunk)| start_pos + chunk.len()),
+        .map_or(0, |(start_pos, chunk)| start_pos.get() + chunk.len()),
     }
   }
 
@@ -333,43 +332,43 @@ impl<'a> Rope<'a> {
         .ok_or(Error::Rope("invalid char boundary")),
       Repr::Full(tree) => {
         // find the entry that may contain start_range (the largest key <= start_range)
-        let start_key = tree.range(..=start_range).next_back().map(|(k, _)| *k);
-        let mut iter = match start_key {
+        let start_key = tree.range(..=Cell::new(start_range)).next_back().map(|(k, _)| k.clone());
+        let iter = match start_key {
           Some(k) => tree.range(k..),
-          None => tree.range(start_range..),
+          None => tree.range(Cell::new(start_range)..),
         };
 
         let mut slice = BTreeMap::new();
         let mut len = 0usize;
 
-        for (&chunk_start, &chunk) in iter {
+        for (ref chunk_start, &chunk) in iter {
           let chunk_len = chunk.len();
-          let chunk_end = chunk_start + chunk_len;
+          let chunk_end = chunk_start.get() + chunk_len;
 
           // skip chunks entirely before the requested range
           if chunk_end <= start_range {
             continue;
           }
           // stop once we've passed the requested end
-          if chunk_start >= end_range {
+          if chunk_start.get() >= end_range {
             break;
           }
 
           // compute local slice bounds within this chunk
-          let s = if start_range > chunk_start {
-            start_range - chunk_start
+          let s = if start_range > chunk_start.get() {
+            start_range - chunk_start.get()
           } else {
             0
           };
           let e = if end_range < chunk_end {
-            end_range - chunk_start
+            end_range - chunk_start.get()
           } else {
             chunk_len
           };
 
           // validate char boundaries and insert
           if let Some(sub) = chunk.get(s..e) {
-            slice.insert(len, sub);
+            slice.insert(Cell::new(len), sub);
             len += sub.len();
           } else {
             return Err(Error::Rope("invalid char boundary"));
@@ -527,7 +526,7 @@ impl Hash for Rope<'_> {
       Repr::Light(s) => s.hash(state),
       Repr::Full(data) => {
         for (s, _) in data.iter() {
-          s.hash(state);
+          s.get().hash(state);
         }
       }
     }
@@ -537,7 +536,7 @@ impl Hash for Rope<'_> {
 enum LinesEnum<'iter, 'str> {
   Light(&'str str),
   Complex {
-    chunks: btree_map::Iter<'iter, usize, &'str str>,
+    chunks: btree_map::Iter<'iter, Cell<usize>, &'str str>,
     chunk: Option<&'str str>,
     in_chunk_byte_idx: usize,
   },
@@ -636,11 +635,11 @@ impl<'a> Iterator for Lines<'_, 'a> {
         }
 
         // No newline in current chunk: collect across chunks until newline or end
-        let mut raw = BTreeMap::default();
+        let mut raw: BTreeMap<Cell<usize>, &str> = BTreeMap::default();
         let mut len = 0usize;
 
         // push remainder of current chunk
-        raw.insert(len, &cur[*in_chunk_byte_idx..]);
+        raw.insert(Cell::new(len), &cur[*in_chunk_byte_idx..]);
         len += cur.len() - *in_chunk_byte_idx;
 
         // consume current chunk
@@ -653,7 +652,7 @@ impl<'a> Iterator for Lines<'_, 'a> {
           }
           if let Some(idx) = memchr::memchr(b'\n', next_chunk.as_bytes()) {
             // include up to and including newline
-            raw.insert(len, &next_chunk[..idx + 1]);
+            raw.insert(Cell::new(len), &next_chunk[..idx + 1]);
             len += idx + 1;
             // set current chunk to remainder after newline (may be empty)
             if idx + 1 < next_chunk.len() {
@@ -668,7 +667,7 @@ impl<'a> Iterator for Lines<'_, 'a> {
               repr: Repr::Full(Rc::new(raw)),
             });
           } else {
-            raw.insert(len, next_chunk);
+            raw.insert(Cell::new(len), next_chunk);
             len += next_chunk.len();
             // continue looking
           }
@@ -695,7 +694,7 @@ enum CharIndicesEnum<'a> {
     iter: std::str::CharIndices<'a>,
   },
   Full {
-    chunks: btree_map::Iter<'a, usize, &'a str>,
+    chunks: btree_map::Iter<'a, Cell<usize>, &'a str>,
     iter: Option<std::str::CharIndices<'a>>,
     start_pos: usize,
   },
@@ -725,16 +724,16 @@ impl Iterator for CharIndices<'_> {
 
         // advance to next chunk from the BTreeMap iterator
         while let Some((key, chunk)) = chunks.next() {
-          let key = *key;
+          let key = key;
           if chunk.is_empty() {
             continue;
           }
 
           let mut new_iter = chunk.char_indices();
-          *start_pos = key;
+          *start_pos = key.get();
           if let Some((i, c)) = new_iter.next() {
             *iter = Some(new_iter);
-            return Some((key + i, c));
+            return Some((key.get() + i, c));
           } else {
             // empty after decoding (shouldn't happen for non-empty chunk,
             // but keep iter state consistent)
@@ -952,7 +951,7 @@ impl<'a> FromIterator<&'a str> for Rope<'a> {
         if chunk.is_empty() {
           return None;
         }
-        let cur = (len, chunk);
+        let cur = (Cell::new(len), chunk);
         len += chunk.len();
         Some(cur)
       })
@@ -1010,7 +1009,7 @@ mod tests {
     assert_eq!(simple, "abcdef");
     assert_eq!(
       simple.repr,
-      Repr::Full(Rc::new(BTreeMap::from_iter([(0, "abc"), (3, "def")])))
+      Repr::Full(Rc::new(BTreeMap::from_iter([(0.into(), "abc"), (3.into(), "def")])))
     );
     assert_eq!(simple.len(), 6);
 
@@ -1019,9 +1018,9 @@ mod tests {
     assert_eq!(
       simple.repr,
       Repr::Full(Rc::new(BTreeMap::from_iter([
-        (0, "abc"),
-        (3, "def"),
-        (6, "ghi"),
+        (0.into(), "abc"),
+        (3.into(), "def"),
+        (6.into(), "ghi"),
       ])))
     );
     assert_eq!(simple.len(), 9);
@@ -1041,7 +1040,7 @@ mod tests {
     assert_eq!(append1, "abcdef");
     assert_eq!(
       append1.repr,
-      Repr::Full(Rc::new(BTreeMap::from_iter([(0, "abc"), (3, "def"),])))
+      Repr::Full(Rc::new(BTreeMap::from_iter([(0.into(), "abc"), (3.into(), "def"),])))
     );
 
     // simple - complex
@@ -1051,10 +1050,10 @@ mod tests {
     assert_eq!(
       append2.repr,
       Repr::Full(Rc::new(BTreeMap::from_iter([
-        (0, "abc"),
-        (3, "1"),
-        (4, "2"),
-        (5, "3"),
+        (0.into(), "abc"),
+        (3.into(), "1"),
+        (4.into(), "2"),
+        (5.into(), "3"),
       ])))
     );
 
@@ -1065,10 +1064,10 @@ mod tests {
     assert_eq!(
       append3.repr,
       Repr::Full(Rc::new(BTreeMap::from_iter([
-        (0, "1"),
-        (1, "2"),
-        (2, "3"),
-        (3, "abc"),
+        (0.into(), "1"),
+        (1.into(), "2"),
+        (2.into(), "3"),
+        (3.into(), "abc"),
       ])))
     );
 
@@ -1079,12 +1078,12 @@ mod tests {
     assert_eq!(
       append4.repr,
       Repr::Full(Rc::new(BTreeMap::from_iter([
-        (0, "1"),
-        (1, "2"),
-        (2, "3"),
-        (3, "4"),
-        (4, "5"),
-        (5, "6"),
+        (0.into(), "1"),
+        (1.into(), "2"),
+        (2.into(), "3"),
+        (3.into(), "4"),
+        (4.into(), "5"),
+        (5.into(), "6"),
       ])))
     );
   }
@@ -1176,7 +1175,7 @@ mod tests {
     assert_eq!(rope, "abcdef");
     assert_eq!(
       rope.repr,
-      Repr::Full(Rc::new(BTreeMap::from_iter([(0, "abc"), (3, "def")])))
+      Repr::Full(Rc::new(BTreeMap::from_iter([(0.into(), "abc"), (3.into(), "def")])))
     );
   }
 
