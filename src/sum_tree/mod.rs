@@ -7,9 +7,6 @@ use std::marker::PhantomData;
 use std::mem;
 use std::{cmp::Ordering, fmt, iter::FromIterator, sync::Arc};
 
-#[cfg(test)]
-pub const TREE_BASE: usize = 2;
-#[cfg(not(test))]
 pub const TREE_BASE: usize = 6;
 
 /// An item that can be stored in a [`SumTree`]

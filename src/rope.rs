@@ -182,10 +182,12 @@ impl<'a> Rope<'a> {
   /// Returns an iterator over the characters and their byte positions.
   pub fn char_indices(&self) -> CharIndices<'_, 'a> {
     match &self.repr {
-      Repr::Light(s) => CharIndices {
-        iter: CharIndicesEnum::Light {
-          iter: s.char_indices(),
-        },
+      Repr::Light(s) => {
+        CharIndices {
+          iter: CharIndicesEnum::Light {
+            iter: s.char_indices(),
+          },
+        }
       },
       Repr::Full(chunks) => {
         CharIndices {

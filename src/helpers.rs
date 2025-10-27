@@ -1279,8 +1279,7 @@ impl<'a> SourceText<'a> for Rope<'a> {
     // Split the text into lines, including the line ending character.
     // If the text ends with a newline, the last line will be ignored
     // For example: "abc\nefg\n" => ["abc\n", "efg\n"]
-    // self.lines_impl(false)
-    [].into_iter()
+    self.lines_impl(false)
   }
 
   #[inline]
@@ -1289,8 +1288,7 @@ impl<'a> SourceText<'a> for Rope<'a> {
   }
 
   fn char_indices(&self) -> impl Iterator<Item = (usize, char)> {
-    // self.char_indices()
-    [].into_iter()
+    self.char_indices()
   }
 
   fn byte_slice(&self, range: Range<usize>) -> Self {
