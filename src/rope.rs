@@ -73,7 +73,7 @@ impl<'a> Rope<'a> {
           .map_or(0, |(chunk, start_pos)| *start_pos + chunk.len());
 
         let cur = Rc::make_mut(s);
-        cur.reserve_exact(other.len());
+        cur.reserve(other.len());
 
         for &(chunk, _) in other.iter() {
           cur.push((chunk, len));
