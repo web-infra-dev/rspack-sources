@@ -5,6 +5,7 @@ use std::{
   ops::Range,
 };
 
+use bumpalo::Bump;
 use rustc_hash::FxHashMap as HashMap;
 
 use crate::{
@@ -33,6 +34,7 @@ pub fn get_map<'a, S: StreamChunks>(
     &MapOptions {
       columns: options.columns,
       final_source: true,
+      bump: options.bump.clone(),
     },
     // on_chunk
     &mut |_, mapping| {
@@ -317,26 +319,30 @@ where
     MapOptions {
       columns: true,
       final_source: true,
+      ..
     } => stream_chunks_of_source_map_final(
       source, source_map, on_chunk, on_source, on_name,
     ),
     MapOptions {
       columns: true,
       final_source: false,
+      ..
     } => stream_chunks_of_source_map_full(
-      source, source_map, on_chunk, on_source, on_name,
+      options.bump.as_ref(), source, source_map, on_chunk, on_source, on_name,
     ),
     MapOptions {
       columns: false,
       final_source: true,
+      ..
     } => stream_chunks_of_source_map_lines_final(
       source, source_map, on_chunk, on_source, on_name,
     ),
     MapOptions {
       columns: false,
       final_source: false,
+      ..
     } => stream_chunks_of_source_map_lines_full(
-      source, source_map, on_chunk, on_source, on_name,
+      options.bump.as_ref(), source, source_map, on_chunk, on_source, on_name,
     ),
   }
 }
@@ -413,6 +419,7 @@ where
 }
 
 fn stream_chunks_of_source_map_full<'a, S>(
+  bump: &Bump,
   source: S,
   source_map: &'a SourceMap,
   on_chunk: OnChunk<'_, 'a>,
@@ -423,7 +430,7 @@ where
   S: SourceText<'a> + 'a,
 {
   let lines = split_into_lines(&source);
-  let line_with_indices_list = lines.map(WithIndices::new).collect::<Vec<_>>();
+  let line_with_indices_list = bump.alloc(lines.map(WithIndices::new).collect::<Vec<_>>());
 
   if line_with_indices_list.is_empty() {
     return GeneratedInfo {
@@ -613,6 +620,7 @@ where
 }
 
 fn stream_chunks_of_source_map_lines_full<'a, S>(
+  bump: &Bump,
   source: S,
   source_map: &'a SourceMap,
   on_chunk: OnChunk<'_, 'a>,
@@ -622,7 +630,7 @@ fn stream_chunks_of_source_map_lines_full<'a, S>(
 where
   S: SourceText<'a>,
 {
-  let lines: Vec<S> = split_into_lines(&source).collect();
+  let lines = bump.alloc(split_into_lines(&source).collect::<Vec<_>>());
   if lines.is_empty() {
     return GeneratedInfo {
       generated_line: 1,
@@ -724,32 +732,34 @@ pub fn stream_chunks_of_combined_source_map<'a, S>(
 where
   S: SourceText<'a> + 'a,
 {
-  let on_source = RefCell::new(on_source);
-  let inner_source: RefCell<Option<Rope<'a>>> = RefCell::new(inner_source);
-  let source_mapping: RefCell<HashMap<Cow<str>, u32>> =
-    RefCell::new(HashMap::default());
-  let mut name_mapping: HashMap<Cow<str>, u32> = HashMap::default();
-  let source_index_mapping: RefCell<LinearMap<i64>> =
-    RefCell::new(LinearMap::default());
-  let name_index_mapping: RefCell<LinearMap<i64>> =
-    RefCell::new(LinearMap::default());
-  let name_index_value_mapping: RefCell<LinearMap<Cow<str>>> =
-    RefCell::new(LinearMap::default());
-  let inner_source_index: RefCell<i64> = RefCell::new(-2);
-  let inner_source_index_mapping: RefCell<LinearMap<i64>> =
-    RefCell::new(LinearMap::default());
-  let inner_source_index_value_mapping: RefCell<InnerSourceIndexValueMapping> =
-    RefCell::new(LinearMap::default());
-  let inner_source_contents: RefCell<LinearMap<Option<Rope<'a>>>> =
-    RefCell::new(LinearMap::default());
-  let inner_source_content_lines: InnerSourceContentLine =
-    RefCell::new(LinearMap::default());
-  let inner_name_index_mapping: RefCell<LinearMap<i64>> =
-    RefCell::new(LinearMap::default());
-  let inner_name_index_value_mapping: RefCell<LinearMap<Cow<str>>> =
-    RefCell::new(LinearMap::default());
-  let inner_source_map_line_data: RefCell<Vec<SourceMapLineData>> =
-    RefCell::new(Vec::new());
+  let bump = options.bump.as_ref();
+
+  let on_source = &*bump.alloc(RefCell::new(on_source));
+  let inner_source = &*bump.alloc(RefCell::new(inner_source));
+  let source_mapping =
+    &*bump.alloc(RefCell::new(HashMap::<Cow<str>, u32>::default()));
+  let name_mapping = bump.alloc(HashMap::<Cow<str>, u32>::default());
+  let source_index_mapping =
+    &*bump.alloc(RefCell::new(LinearMap::<i64>::default()));
+  let name_index_mapping =
+    &*bump.alloc(RefCell::new(LinearMap::<i64>::default()));
+  let name_index_value_mapping =
+    &*bump.alloc(RefCell::new(LinearMap::<Cow<str>>::default()));
+  let inner_source_index = &*bump.alloc(RefCell::<i64>::new(-2));
+  let inner_source_index_mapping =
+    &*bump.alloc(RefCell::new(LinearMap::<i64>::default()));
+  let inner_source_index_value_mapping =
+    &*bump.alloc(RefCell::new(InnerSourceIndexValueMapping::default()));
+  let inner_source_contents =
+    &*bump.alloc(RefCell::new(LinearMap::<Option::<Rope<'a>>>::default()));
+  let inner_source_content_lines =
+    &*bump.alloc(InnerSourceContentLine::default());
+  let inner_name_index_mapping =
+    &*bump.alloc(RefCell::new(LinearMap::<i64>::default()));
+  let inner_name_index_value_mapping =
+    &*bump.alloc(RefCell::new(LinearMap::<Cow<str>>::default()));
+  let inner_source_map_line_data =
+    &*bump.alloc(RefCell::new(Vec::<SourceMapLineData>::new()));
 
   let find_inner_mapping = |line: i64, column: i64| -> Option<u32> {
     let inner_source_map_line_data = inner_source_map_line_data.borrow();
@@ -1167,6 +1177,7 @@ where
           &MapOptions {
             columns: options.columns,
             final_source: false,
+            bump: options.bump.clone(),
           },
         );
       } else {

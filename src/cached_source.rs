@@ -53,7 +53,7 @@ pub struct CachedSource<T> {
   inner: Arc<T>,
   cached_hash: Arc<OnceLock<u64>>,
   cached_maps:
-    Arc<DashMap<MapOptions, Option<SourceMap>, BuildHasherDefault<FxHasher>>>,
+    Arc<DashMap<bool, Option<SourceMap>, BuildHasherDefault<FxHasher>>>,
 }
 
 impl<T> CachedSource<T> {
@@ -92,11 +92,11 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for CachedSource<T> {
   }
 
   fn map(&self, options: &MapOptions) -> Option<SourceMap> {
-    if let Some(map) = self.cached_maps.get(options) {
+    if let Some(map) = self.cached_maps.get(&options.columns) {
       map.clone()
     } else {
       let map = self.inner.map(options);
-      self.cached_maps.insert(options.clone(), map.clone());
+      self.cached_maps.insert(options.columns, map.clone());
       map
     }
   }
@@ -116,7 +116,7 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> StreamChunks
     on_source: crate::helpers::OnSource<'_, 'a>,
     on_name: crate::helpers::OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {
-    let cached_map = self.cached_maps.entry(options.clone());
+    let cached_map = self.cached_maps.entry(options.columns);
     match cached_map {
       Entry::Occupied(entry) => {
         let source = self.rope();
@@ -203,7 +203,11 @@ impl<T: std::fmt::Debug> std::fmt::Debug for CachedSource<T> {
 
 #[cfg(test)]
 mod tests {
-  use crate::{
+  use std::rc::Rc;
+
+use bumpalo::Bump;
+
+use crate::{
     ConcatSource, OriginalSource, RawBufferSource, RawSource, ReplaceSource,
     SourceExt, SourceMapSource, WithoutOriginalOptions,
   };
@@ -226,7 +230,7 @@ mod tests {
       })
       .boxed(),
     ]);
-    let map = source.map(&Default::default()).unwrap();
+    let map = source.map(&mut Default::default()).unwrap();
     assert_eq!(map.mappings(), ";;AACA");
   }
 
@@ -237,15 +241,15 @@ mod tests {
     let clone = source.clone();
 
     // fill up cache
-    let map_options = MapOptions::default();
+    let mut map_options = MapOptions::default();
     source.source();
     source.buffer();
     source.size();
-    source.map(&map_options);
+    source.map(&mut map_options);
 
     assert_eq!(
-      *clone.cached_maps.get(&map_options).unwrap().value(),
-      source.map(&map_options)
+      *clone.cached_maps.get(&map_options.columns).unwrap().value(),
+      source.map(&mut map_options)
     );
   }
 
@@ -295,9 +299,10 @@ mod tests {
 
   #[test]
   fn should_produce_correct_output_for_cached_raw_source() {
-    let map_options = MapOptions {
+    let mut map_options = MapOptions {
       columns: true,
       final_source: true,
+      bump: Rc::new(Bump::new()),
     };
 
     let source = RawSource::from("Test\nTest\nTest\n");
@@ -305,7 +310,7 @@ mod tests {
     let mut on_source_count = 0;
     let mut on_name_count = 0;
     let generated_info = source.stream_chunks(
-      &map_options,
+      &mut map_options,
       &mut |_chunk, _mapping| {
         on_chunk_count += 1;
       },
@@ -319,7 +324,7 @@ mod tests {
 
     let cached_source = CachedSource::new(source);
     cached_source.stream_chunks(
-      &map_options,
+      &mut map_options,
       &mut |_chunk, _mapping| {},
       &mut |_source_index, _source, _source_content| {},
       &mut |_name_index, _name| {},
@@ -329,7 +334,7 @@ mod tests {
     let mut cached_on_source_count = 0;
     let mut cached_on_name_count = 0;
     let cached_generated_info = cached_source.stream_chunks(
-      &map_options,
+      &mut map_options,
       &mut |_chunk, _mapping| {
         cached_on_chunk_count += 1;
       },

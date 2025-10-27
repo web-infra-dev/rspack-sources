@@ -348,7 +348,9 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
     on_source: crate::helpers::OnSource<'_, 'a>,
     on_name: crate::helpers::OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {
-    let on_name = RefCell::new(on_name);
+    let bump = &options.bump;
+
+    let on_name = bump.alloc(RefCell::new(on_name));
     let repls = &self.sorted_replacement();
     let mut pos: u32 = 0;
     let mut i: usize = 0;
@@ -357,12 +359,12 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
     let mut generated_line_offset: i64 = 0;
     let mut generated_column_offset: i64 = 0;
     let mut generated_column_offset_line = 0;
-    let source_content_lines: RefCell<LinearMap<Option<SourceContent>>> =
-      RefCell::new(LinearMap::default());
-    let name_mapping: RefCell<HashMap<Cow<str>, u32>> =
-      RefCell::new(HashMap::default());
-    let name_index_mapping: RefCell<LinearMap<u32>> =
-      RefCell::new(LinearMap::default());
+    let source_content_lines =
+      bump.alloc(RefCell::new(LinearMap::<Option<SourceContent<'_>>>::default()));
+    let name_mapping =
+      bump.alloc(RefCell::new(HashMap::<Cow<str>, u32>::default()));
+    let name_index_mapping =
+      bump.alloc(RefCell::<LinearMap<u32>>::new(LinearMap::default()));
 
     // check if source_content[line][col] is equal to expect
     // Why this is needed?
@@ -418,6 +420,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
       &MapOptions {
         columns: options.columns,
         final_source: false,
+        bump: bump.clone(),
       },
       &mut |chunk, mut mapping| {
         // SAFETY: final_source is false in ReplaceSource

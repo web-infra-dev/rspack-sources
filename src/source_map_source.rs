@@ -217,7 +217,11 @@ impl StreamChunks for SourceMapSource {
 
 #[cfg(test)]
 mod tests {
-  use crate::{
+  use std::rc::Rc;
+
+use bumpalo::Bump;
+
+use crate::{
     CachedSource, ConcatSource, OriginalSource, RawSource, ReplaceSource,
     SourceExt,
   };
@@ -461,7 +465,8 @@ mod tests {
     test_cached!(source, |s: &dyn Source| s.map(&MapOptions::default()));
     test_cached!(source, |s: &dyn Source| s.map(&MapOptions {
       columns: false,
-      final_source: true
+      final_source: true,
+      bump: Rc::new(Bump::new()),
     }));
   }
 

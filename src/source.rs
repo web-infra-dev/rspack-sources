@@ -1,12 +1,8 @@
 use std::{
-  any::{Any, TypeId},
-  borrow::Cow,
-  convert::{TryFrom, TryInto},
-  fmt,
-  hash::{Hash, Hasher},
-  sync::Arc,
+  any::{Any, TypeId}, borrow::Cow, convert::{TryFrom, TryInto}, fmt, hash::{Hash, Hasher}, rc::Rc, sync::Arc
 };
 
+use bumpalo::Bump;
 use dyn_clone::DynClone;
 use serde::{Deserialize, Serialize};
 
@@ -159,12 +155,13 @@ impl<T: Source + 'static> SourceExt for T {
 }
 
 /// Options for [Source::map].
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug)]
 pub struct MapOptions {
   /// Whether have columns info in generated [SourceMap] mappings.
   pub columns: bool,
   /// Whether the source will have changes, internal used for `ReplaceSource`, etc.
   pub(crate) final_source: bool,
+  pub(crate) bump: Rc<Bump>,
 }
 
 impl Default for MapOptions {
@@ -172,6 +169,7 @@ impl Default for MapOptions {
     Self {
       columns: true,
       final_source: false,
+      bump: Rc::new(Bump::new()),
     }
   }
 }
