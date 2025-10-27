@@ -239,7 +239,7 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for ReplaceSource<T> {
         let slice = inner_source_code.byte_slice(inner_pos as usize..end_pos);
         source_code.append(slice);
       }
-      source_code.add(&replacement.content);
+      source_code.push(&replacement.content);
       #[allow(clippy::manual_clamp)]
       {
         inner_pos = inner_pos
@@ -709,7 +709,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
     // Handle remaining replacements
     let mut remainder = Rope::new();
     while i < repls.len() {
-      remainder.add(&repls[i].content);
+      remainder.push(&repls[i].content);
       i += 1;
     }
 

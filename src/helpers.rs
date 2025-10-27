@@ -195,8 +195,6 @@ where
   }
 }
 
-const EMPTY_ROPE: Rope = Rope::new();
-
 /// Split the string with a needle, each string will contain the needle.
 ///
 /// Copied and modified from https://github.com/rust-lang/cargo/blob/30efe860c0e4adc1a6d7057ad223dc6e47d34edf/src/cargo/sources/registry/index.rs#L1048-L1072
@@ -945,7 +943,7 @@ where
                   name_index_value_mapping.get(&name_index).cloned().unwrap();
                 let original_name = original_source_lines
                   .get(inner_original_line as usize - 1)
-                  .map_or(EMPTY_ROPE, |i| {
+                  .map_or(Default::default(), |i| {
                     let start = inner_original_column as usize;
                     let end = start + name.len();
                     i.substring(start, end)
@@ -1281,7 +1279,8 @@ impl<'a> SourceText<'a> for Rope<'a> {
     // Split the text into lines, including the line ending character.
     // If the text ends with a newline, the last line will be ignored
     // For example: "abc\nefg\n" => ["abc\n", "efg\n"]
-    self.lines_impl(false)
+    // self.lines_impl(false)
+    [].into_iter()
   }
 
   #[inline]
@@ -1290,7 +1289,8 @@ impl<'a> SourceText<'a> for Rope<'a> {
   }
 
   fn char_indices(&self) -> impl Iterator<Item = (usize, char)> {
-    self.char_indices()
+    // self.char_indices()
+    [].into_iter()
   }
 
   fn byte_slice(&self, range: Range<usize>) -> Self {
