@@ -1,10 +1,9 @@
 use std::{
   borrow::Cow,
-  hash::{BuildHasherDefault, Hash, Hasher},
+  hash::{Hash, Hasher},
   sync::{Arc, OnceLock},
 };
 
-use dashmap::{mapref::entry::Entry, DashMap};
 use rustc_hash::FxHasher;
 
 use crate::{
@@ -15,6 +14,13 @@ use crate::{
   rope::Rope,
   BoxSource, MapOptions, Source, SourceExt, SourceMap,
 };
+
+#[derive(Default)]
+struct CachedData {
+  hash: OnceLock<u64>,
+  line_only_map: OnceLock<Option<SourceMap>>,
+  columns_map: OnceLock<Option<SourceMap>>,
+}
 
 /// It tries to reused cached results from other methods to avoid calculations,
 /// usually used after modify is finished.
@@ -51,9 +57,7 @@ use crate::{
 /// ```
 pub struct CachedSource {
   inner: BoxSource,
-  cached_hash: Arc<OnceLock<u64>>,
-  cached_maps:
-    Arc<DashMap<MapOptions, Option<SourceMap>, BuildHasherDefault<FxHasher>>>,
+  cache: Arc<CachedData>,
 }
 
 impl CachedSource {
@@ -69,8 +73,7 @@ impl CachedSource {
 
     Self {
       inner: box_source,
-      cached_hash: Default::default(),
-      cached_maps: Default::default(),
+      cache: Arc::new(CachedData::default()),
     }
   }
 }
@@ -95,12 +98,18 @@ impl Source for CachedSource {
   }
 
   fn map(&self, options: &MapOptions) -> Option<SourceMap> {
-    if let Some(map) = self.cached_maps.get(options) {
-      map.clone()
+    if options.columns {
+      self
+        .cache
+        .columns_map
+        .get_or_init(|| self.inner.map(options))
+        .clone()
     } else {
-      let map = self.inner.map(options);
-      self.cached_maps.insert(options.clone(), map.clone());
-      map
+      self
+        .cache
+        .line_only_map
+        .get_or_init(|| self.inner.map(options))
+        .clone()
     }
   }
 
@@ -117,19 +126,15 @@ impl StreamChunks for CachedSource {
     on_source: crate::helpers::OnSource<'_, 'a>,
     on_name: crate::helpers::OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {
-    let cached_map = self.cached_maps.entry(options.clone());
-    match cached_map {
-      Entry::Occupied(entry) => {
+    let cell = if options.columns {
+      &self.cache.columns_map
+    } else {
+      &self.cache.line_only_map
+    };
+    match cell.get() {
+      Some(map) => {
         let source = self.rope();
-        if let Some(map) = entry.get() {
-          #[allow(unsafe_code)]
-          // SAFETY: We guarantee that once a `SourceMap` is stored in the cache, it will never be removed.
-          // Therefore, even if we force its lifetime to be longer, the reference remains valid.
-          // This is based on the following assumptions:
-          // 1. `SourceMap` will be valid for the entire duration of the application.
-          // 2. The cached `SourceMap` will not be manually removed or replaced, ensuring the reference's safety.
-          let map =
-            unsafe { std::mem::transmute::<&SourceMap, &'a SourceMap>(map) };
+        if let Some(map) = map {
           stream_chunks_of_source_map(
             source, map, on_chunk, on_source, on_name, options,
           )
@@ -139,7 +144,7 @@ impl StreamChunks for CachedSource {
           )
         }
       }
-      Entry::Vacant(entry) => {
+      None => {
         let (generated_info, map) = stream_and_get_source_and_map(
           &self.inner,
           options,
@@ -147,7 +152,7 @@ impl StreamChunks for CachedSource {
           on_source,
           on_name,
         );
-        entry.insert(map);
+        cell.get_or_init(|| map);
         generated_info
       }
     }
@@ -158,15 +163,14 @@ impl Clone for CachedSource {
   fn clone(&self) -> Self {
     Self {
       inner: self.inner.clone(),
-      cached_hash: self.cached_hash.clone(),
-      cached_maps: self.cached_maps.clone(),
+      cache: self.cache.clone(),
     }
   }
 }
 
 impl Hash for CachedSource {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-    (self.cached_hash.get_or_init(|| {
+    (self.cache.hash.get_or_init(|| {
       let mut hasher = FxHasher::default();
       self.inner.hash(&mut hasher);
       hasher.finish()
@@ -245,7 +249,7 @@ mod tests {
     source.map(&map_options);
 
     assert_eq!(
-      *clone.cached_maps.get(&map_options).unwrap().value(),
+      *clone.cache.columns_map.get().unwrap(),
       source.map(&map_options)
     );
   }
