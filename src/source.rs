@@ -19,12 +19,100 @@ use crate::{
 /// An alias for `Box<dyn Source>`.
 pub type BoxSource = Arc<dyn Source>;
 
+/// A unified representation for source content that can be either text or binary data.
+///
+/// `SourceValue` provides a flexible way to handle source content regardless of whether
+/// it's originally stored as a string or raw bytes. This is particularly useful for
+/// build tools and bundlers that need to process various types of source files.
+#[derive(Debug)]
+pub enum SourceValue<'a> {
+  /// Text content stored as a UTF-8 string.
+  String(Cow<'a, str>),
+  /// Binary content stored as raw bytes.
+  Buffer(Cow<'a, [u8]>),
+}
+
+impl<'a> SourceValue<'a> {
+  /// Convert the source value to a string using lossy UTF-8 conversion.
+  ///
+  /// This method converts both string and buffer variants to `Cow<str>`.
+  /// For buffer data that contains invalid UTF-8 sequences, replacement
+  /// characters (�) will be used in place of invalid sequences.
+  pub fn into_string_lossy(self) -> Cow<'a, str> {
+    match self {
+      SourceValue::String(cow) => cow,
+      SourceValue::Buffer(cow) => match cow {
+        Cow::Borrowed(bytes) => String::from_utf8_lossy(bytes),
+        Cow::Owned(bytes) => {
+          match String::from_utf8_lossy(&bytes) {
+            Cow::Borrowed(_) => {
+              // SAFETY: When `String::from_utf8_lossy` returns `Cow::Borrowed(_)`,
+              // it guarantees that the input slice contains only valid UTF-8 bytes.
+              // Since we're operating on the exact same `bytes` that were just
+              // validated by `from_utf8_lossy`, we can safely skip the UTF-8
+              // validation in `String::from_utf8_unchecked`.
+              //
+              // This optimization avoids the redundant UTF-8 validation that would
+              // occur if we used `String::from_utf8(bytes).unwrap()` or similar.
+              #[allow(unsafe_code)]
+              Cow::Owned(unsafe { String::from_utf8_unchecked(bytes) })
+            }
+            Cow::Owned(s) => Cow::Owned(s),
+          }
+        }
+      },
+    }
+  }
+
+  /// Get a reference to the source content as bytes.
+  ///
+  /// This method provides access to the raw byte representation of the source
+  /// content regardless of whether it was originally stored as a string or buffer.
+  pub fn as_bytes(&self) -> &[u8] {
+    match self {
+      SourceValue::String(cow) => cow.as_bytes(),
+      SourceValue::Buffer(cow) => cow.as_ref(),
+    }
+  }
+
+  /// Convert the source value into bytes.
+  ///
+  /// This method consumes the `SourceValue` and converts it to `Cow<'a, [u8]>`,
+  /// providing the most efficient representation possible while preserving
+  /// the original borrowing relationships.
+  pub fn into_bytes(self) -> Cow<'a, [u8]> {
+    match self {
+      SourceValue::String(cow) => match cow {
+        Cow::Borrowed(s) => Cow::Borrowed(s.as_bytes()),
+        Cow::Owned(s) => Cow::Owned(s.into_bytes()),
+      },
+      SourceValue::Buffer(cow) => cow,
+    }
+  }
+
+  /// Check if the source value contains binary data.
+  ///
+  /// Returns `true` if this `SourceValue` is a `Buffer` variant containing
+  /// raw bytes, `false` if it's a `String` variant containing text data.
+  pub fn is_buffer(&self) -> bool {
+    matches!(self, SourceValue::Buffer(_))
+  }
+
+  /// Returns `true` if `self` has a length of zero bytes.
+  pub fn is_empty(&self) -> bool {
+    match self {
+      SourceValue::String(string) => string.is_empty(),
+      SourceValue::Buffer(buffer) => buffer.is_empty(),
+    }
+  }
+}
+
 /// [Source] abstraction, [webpack-sources docs](https://github.com/webpack/webpack-sources/#source).
 pub trait Source:
   StreamChunks + DynHash + AsAny + DynEq + DynClone + fmt::Debug + Sync + Send
 {
   /// Get the source code.
-  fn source(&self) -> Cow<str>;
+  fn source(&self) -> SourceValue;
 
   /// Get the source code as a [Rope].
   fn rope(&self) -> Rope<'_>;
@@ -48,7 +136,7 @@ pub trait Source:
 }
 
 impl Source for BoxSource {
-  fn source(&self) -> Cow<str> {
+  fn source(&self) -> SourceValue {
     self.as_ref().source()
   }
 
@@ -539,7 +627,7 @@ mod tests {
   use std::collections::HashMap;
 
   use crate::{
-    CachedSource, ConcatSource, OriginalSource, RawBufferSource, RawSource,
+    CachedSource, ConcatSource, OriginalSource, RawBufferSource,
     RawStringSource, ReplaceSource, SourceMapSource, WithoutOriginalOptions,
   };
 
@@ -561,7 +649,7 @@ mod tests {
   #[test]
   fn hash_available() {
     let mut state = twox_hash::XxHash64::default();
-    RawSource::from("a").hash(&mut state);
+    RawStringSource::from("a").hash(&mut state);
     OriginalSource::new("b", "").hash(&mut state);
     SourceMapSource::new(WithoutOriginalOptions {
       value: "c",
@@ -569,20 +657,20 @@ mod tests {
       source_map: SourceMap::from_json("{\"mappings\": \";\"}").unwrap(),
     })
     .hash(&mut state);
-    ConcatSource::new([RawSource::from("d")]).hash(&mut state);
-    CachedSource::new(RawSource::from("e")).hash(&mut state);
-    ReplaceSource::new(RawSource::from("f")).hash(&mut state);
-    RawSource::from("g").boxed().hash(&mut state);
+    ConcatSource::new([RawStringSource::from("d")]).hash(&mut state);
+    CachedSource::new(RawStringSource::from("e")).hash(&mut state);
+    ReplaceSource::new(RawStringSource::from("f")).hash(&mut state);
+    RawStringSource::from("g").boxed().hash(&mut state);
     RawStringSource::from_static("a").hash(&mut state);
     RawBufferSource::from("a".as_bytes()).hash(&mut state);
-    (&RawSource::from("h") as &dyn Source).hash(&mut state);
-    ReplaceSource::new(RawSource::from("i").boxed()).hash(&mut state);
-    assert_eq!(format!("{:x}", state.finish()), "6abed98aa11f84e5");
+    (&RawStringSource::from("h") as &dyn Source).hash(&mut state);
+    ReplaceSource::new(RawStringSource::from("i").boxed()).hash(&mut state);
+    assert_eq!(format!("{:x}", state.finish()), "eca744ab8681f278");
   }
 
   #[test]
   fn eq_available() {
-    assert_eq!(RawSource::from("a"), RawSource::from("a"));
+    assert_eq!(RawStringSource::from("a"), RawStringSource::from("a"));
     assert_eq!(
       RawStringSource::from_static("a"),
       RawStringSource::from_static("a")
@@ -605,36 +693,39 @@ mod tests {
       })
     );
     assert_eq!(
-      ConcatSource::new([RawSource::from("d")]),
-      ConcatSource::new([RawSource::from("d")])
+      ConcatSource::new([RawStringSource::from("d")]),
+      ConcatSource::new([RawStringSource::from("d")])
     );
     assert_eq!(
-      CachedSource::new(RawSource::from("e")),
-      CachedSource::new(RawSource::from("e"))
+      CachedSource::new(RawStringSource::from("e")),
+      CachedSource::new(RawStringSource::from("e"))
     );
     assert_eq!(
-      ReplaceSource::new(RawSource::from("f")),
-      ReplaceSource::new(RawSource::from("f"))
-    );
-    assert_eq!(&RawSource::from("g").boxed(), &RawSource::from("g").boxed());
-    assert_eq!(
-      (&RawSource::from("h") as &dyn Source),
-      (&RawSource::from("h") as &dyn Source)
+      ReplaceSource::new(RawStringSource::from("f")),
+      ReplaceSource::new(RawStringSource::from("f"))
     );
     assert_eq!(
-      ReplaceSource::new(RawSource::from("i").boxed()),
-      ReplaceSource::new(RawSource::from("i").boxed())
+      &RawStringSource::from("g").boxed(),
+      &RawStringSource::from("g").boxed()
     );
     assert_eq!(
-      CachedSource::new(RawSource::from("j").boxed()),
-      CachedSource::new(RawSource::from("j").boxed())
+      (&RawStringSource::from("h") as &dyn Source),
+      (&RawStringSource::from("h") as &dyn Source)
+    );
+    assert_eq!(
+      ReplaceSource::new(RawStringSource::from("i").boxed()),
+      ReplaceSource::new(RawStringSource::from("i").boxed())
+    );
+    assert_eq!(
+      CachedSource::new(RawStringSource::from("j").boxed()),
+      CachedSource::new(RawStringSource::from("j").boxed())
     );
   }
 
   #[test]
   #[allow(suspicious_double_ref_op)]
   fn clone_available() {
-    let a = RawSource::from("a");
+    let a = RawStringSource::from("a");
     assert_eq!(a, a.clone());
     let b = OriginalSource::new("b", "");
     assert_eq!(b, b.clone());
@@ -644,19 +735,19 @@ mod tests {
       source_map: SourceMap::from_json("{\"mappings\": \";\"}").unwrap(),
     });
     assert_eq!(c, c.clone());
-    let d = ConcatSource::new([RawSource::from("d")]);
+    let d = ConcatSource::new([RawStringSource::from("d")]);
     assert_eq!(d, d.clone());
-    let e = CachedSource::new(RawSource::from("e"));
+    let e = CachedSource::new(RawStringSource::from("e"));
     assert_eq!(e, e.clone());
-    let f = ReplaceSource::new(RawSource::from("f"));
+    let f = ReplaceSource::new(RawStringSource::from("f"));
     assert_eq!(f, f.clone());
-    let g = RawSource::from("g").boxed();
+    let g = RawStringSource::from("g").boxed();
     assert_eq!(&g, &g.clone());
-    let h = &RawSource::from("h") as &dyn Source;
+    let h = &RawStringSource::from("h") as &dyn Source;
     assert_eq!(h, h);
-    let i = ReplaceSource::new(RawSource::from("i").boxed());
+    let i = ReplaceSource::new(RawStringSource::from("i").boxed());
     assert_eq!(i, i.clone());
-    let j = CachedSource::new(RawSource::from("j").boxed());
+    let j = CachedSource::new(RawStringSource::from("j").boxed());
     assert_eq!(j, j.clone());
     let k = RawStringSource::from_static("k");
     assert_eq!(k, k.clone());
@@ -667,7 +758,7 @@ mod tests {
   #[test]
   fn box_dyn_source_use_hashmap_available() {
     let mut map = HashMap::new();
-    let a = RawSource::from("a").boxed();
+    let a = RawStringSource::from("a").boxed();
     map.insert(a.clone(), a.clone());
     assert_eq!(map.get(&a).unwrap(), &a);
   }
@@ -676,15 +767,17 @@ mod tests {
   #[allow(suspicious_double_ref_op)]
   fn ref_dyn_source_use_hashmap_available() {
     let mut map = HashMap::new();
-    let a = &RawSource::from("a") as &dyn Source;
+    let a = &RawStringSource::from("a") as &dyn Source;
     map.insert(a, a);
     assert_eq!(map.get(&a).unwrap(), &a);
   }
 
   #[test]
   fn to_writer() {
-    let sources =
-      ConcatSource::new([RawSource::from("a"), RawSource::from("b")]);
+    let sources = ConcatSource::new([
+      RawStringSource::from("a"),
+      RawStringSource::from("b"),
+    ]);
     let mut writer = std::io::BufWriter::new(Vec::new());
     let result = sources.to_writer(&mut writer);
     assert!(result.is_ok());

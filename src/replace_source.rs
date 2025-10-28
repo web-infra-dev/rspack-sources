@@ -19,7 +19,7 @@ use crate::{
   rope::Rope,
   with_indices::WithIndices,
   BoxSource, MapOptions, Mapping, OriginalLocation, Source, SourceExt,
-  SourceMap,
+  SourceMap, SourceValue,
 };
 
 /// Decorates a Source with replacements and insertions of source code,
@@ -39,7 +39,7 @@ use crate::{
 /// source.insert(888, "end1\n", None);
 /// source.replace(0, 999, "replaced!\n", Some("whole"));
 ///
-/// assert_eq!(source.source(), "start1\nstart2\nreplaced!\nend1\nend2");
+/// assert_eq!(source.source().into_string_lossy(), "start1\nstart2\nreplaced!\nend1\nend2");
 /// ```
 pub struct ReplaceSource {
   inner: BoxSource,
@@ -182,14 +182,14 @@ impl ReplaceSource {
 }
 
 impl Source for ReplaceSource {
-  fn source(&self) -> Cow<str> {
-    let inner_source_code = self.inner.source();
+  fn source(&self) -> SourceValue {
+    let inner_source_code = self.inner.source().into_string_lossy();
 
     // mut_string_push_str is faster that vec join
     // concatenate strings benchmark, see https://github.com/hoodie/concatenation_benchmarks-rs
     let replacements = self.sorted_replacement();
     if replacements.is_empty() {
-      return inner_source_code;
+      return SourceValue::String(inner_source_code);
     }
     let max_len = replacements
       .iter()
@@ -215,7 +215,7 @@ impl Source for ReplaceSource {
       &inner_source_code[inner_pos as usize..inner_source_code.len()],
     );
 
-    source_code.into()
+    SourceValue::String(Cow::Owned(source_code))
   }
 
   fn rope(&self) -> Rope<'_> {
@@ -251,14 +251,11 @@ impl Source for ReplaceSource {
   }
 
   fn buffer(&self) -> Cow<[u8]> {
-    match self.source() {
-      Cow::Borrowed(s) => Cow::Borrowed(s.as_bytes()),
-      Cow::Owned(s) => Cow::Owned(s.into_bytes()),
-    }
+    self.source().into_bytes()
   }
 
   fn size(&self) -> usize {
-    self.source().len()
+    self.source().as_bytes().len()
   }
 
   fn map(&self, options: &crate::MapOptions) -> Option<SourceMap> {
@@ -787,7 +784,7 @@ impl Eq for ReplaceSource {}
 #[cfg(test)]
 mod tests {
   use crate::{
-    source_map_source::WithoutOriginalOptions, OriginalSource, RawSource,
+    source_map_source::WithoutOriginalOptions, OriginalSource, RawStringSource,
     ReplacementEnforce, SourceExt, SourceMapSource,
   };
 
@@ -874,7 +871,7 @@ Line"#
     );
 
     assert_eq!(
-      result,
+      result.into_string_lossy(),
       r#"Hi bye W0000rld!
 {
  Multi Line
@@ -911,7 +908,7 @@ Last Line"#
       ["Hello", "World!"].join("\n").as_str(),
       "file.txt",
     ));
-    let original_code = source.source().to_string();
+    let original_code = source.source().into_string_lossy().into_owned();
     source.insert(0, "Message: ", None);
     source.replace(2, (line1.len() + 5) as u32, "y A", None);
     let result_text = source.source();
@@ -923,7 +920,7 @@ Last Line"#
       r#"Hello
 World!"#
     );
-    assert_eq!(result_text, "Message: Hey Ad!");
+    assert_eq!(result_text.into_string_lossy(), "Message: Hey Ad!");
     assert_eq!(
       with_readable_mappings(&result_map),
       r#"
@@ -949,7 +946,7 @@ World!"#
     let result_map = source.map(&MapOptions::default()).unwrap();
     let result_list_map = source.map(&MapOptions::new(false)).unwrap();
 
-    assert_eq!(result_text, "Line -1\nLine 0\nLine 1");
+    assert_eq!(result_text.into_string_lossy(), "Line -1\nLine 0\nLine 1");
     assert_eq!(
       with_readable_mappings(&result_map),
       r#"
@@ -979,7 +976,7 @@ World!"#
     let result_list_map = source.map(&MapOptions::new(false)).unwrap();
 
     assert_eq!(
-      result_text,
+      result_text.into_string_lossy(),
       r#"Line 0
 Hello
 Line 2"#
@@ -1003,7 +1000,7 @@ Line 2"#
     let result_map = source.map(&MapOptions::default()).unwrap();
     let result_list_map = source.map(&MapOptions::new(false)).unwrap();
 
-    assert_eq!(result_text, "Line 1\nLine 2\n");
+    assert_eq!(result_text.into_string_lossy(), "Line 1\nLine 2\n");
     assert_eq!(
       result_map.to_json().unwrap(),
       r#"{"version":3,"sources":["file.txt"],"sourcesContent":["Line 1\n"],"names":[],"mappings":"AAAA"}"#
@@ -1024,7 +1021,7 @@ Line 2"#
     let result_map = source.map(&MapOptions::default()).expect("failed");
 
     let target_code = source.source();
-    assert_eq!(target_code, "   var h\n   var w\n");
+    assert_eq!(target_code.into_string_lossy(), "   var h\n   var w\n");
 
     assert_eq!(
       with_readable_mappings(&result_map),
@@ -1089,7 +1086,7 @@ export default function StaticPage(_ref) {
     let source_map = source.map(&MapOptions::default()).unwrap();
 
     assert_eq!(
-      target_code,
+      target_code.into_string_lossy(),
       r#"
 var __N_SSG = true;
 function StaticPage(_ref) {
@@ -1139,7 +1136,7 @@ return <div>{data.foo}</div>
     let target_code = source.source();
     let source_map = source.map(&MapOptions::default()).unwrap();
 
-    assert_eq!(target_code, "if (false) {}");
+    assert_eq!(target_code.into_string_lossy(), "if (false) {}");
     assert_eq!(
       with_readable_mappings(&source_map),
       r#"
@@ -1165,7 +1162,10 @@ return <div>{data.foo}</div>
     let result_text = source.source();
     let result_map = source.map(&MapOptions::default()).unwrap();
 
-    assert_eq!(result_text, "start1\nstart2\nreplaced!\nend1\nend2");
+    assert_eq!(
+      result_text.into_string_lossy(),
+      "start1\nstart2\nreplaced!\nend1\nend2"
+    );
     assert_eq!(
       with_readable_mappings(&result_map),
       r#"
@@ -1177,14 +1177,14 @@ return <div>{data.foo}</div>
 
   #[test]
   fn replace_source_over_a_box_source() {
-    let mut source = ReplaceSource::new(RawSource::from("boxed").boxed());
+    let mut source = ReplaceSource::new(RawStringSource::from("boxed").boxed());
     source.replace(3, 5, "", None);
     assert_eq!(source.size(), 3);
-    assert_eq!(source.source(), "box");
+    assert_eq!(source.source().into_string_lossy(), "box");
     assert_eq!(source.map(&MapOptions::default()), None);
     let mut hasher = twox_hash::XxHash64::default();
     source.hash(&mut hasher);
-    assert_eq!(format!("{:x}", hasher.finish()), "5781cda25d360a42");
+    assert_eq!(format!("{:x}", hasher.finish()), "899cecd4bd020d47");
   }
 
   #[test]
@@ -1205,7 +1205,7 @@ return <div>{data.foo}</div>
       source.replace(mat.start() as u32, mat.end() as u32, "../", None);
     }
     assert_eq!(
-      source.source(),
+      source.source().into_string_lossy(),
       r#"
 "abc"; url(../logo.png);
 "ヒラギノ角ゴ"; url(../logo.png);
@@ -1227,16 +1227,23 @@ return <div>{data.foo}</div>
   #[test]
   fn replace_same_position_with_enforce() {
     // Enforce sort HarmonyExportExpressionDependency after PureExpressionDependency, to generate valid code
-    let mut source =
-      ReplaceSource::new(RawSource::from("export default foo;aaa").boxed());
+    let mut source = ReplaceSource::new(
+      RawStringSource::from("export default foo;aaa").boxed(),
+    );
     let mut source2 = source.clone();
     source.replace(18, 19, ");", None);
     source.replace(18, 19, "))", None);
-    assert_eq!(source.source(), "export default foo);))aaa");
+    assert_eq!(
+      source.source().into_string_lossy(),
+      "export default foo);))aaa"
+    );
 
     source2.replace_with_enforce(18, 19, ");", None, ReplacementEnforce::Post);
     source2.replace(18, 19, "))", None);
-    assert_eq!(source2.source(), "export default foo)));aaa");
+    assert_eq!(
+      source2.source().into_string_lossy(),
+      "export default foo)));aaa"
+    );
   }
 
   #[test]
