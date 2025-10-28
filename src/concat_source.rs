@@ -10,7 +10,7 @@ use crate::{
   helpers::{get_map, GeneratedInfo, OnChunk, OnName, OnSource, StreamChunks},
   linear_map::LinearMap,
   source::{Mapping, OriginalLocation},
-  BoxSource, MapOptions, Rope, Source, SourceExt, SourceMap,
+  BoxSource, MapOptions, Rope, Source, SourceExt, SourceMap, SourceValue,
 };
 
 /// Concatenate multiple [Source]s to a single [Source].
@@ -24,7 +24,7 @@ use crate::{
 /// };
 ///
 /// let mut source = ConcatSource::new([
-///   RawSource::from("Hello World\n".to_string()).boxed(),
+///   RawStringSource::from("Hello World\n".to_string()).boxed(),
 ///   OriginalSource::new(
 ///     "console.log('test');\nconsole.log('test2');\n",
 ///     "console.js",
@@ -117,13 +117,16 @@ impl ConcatSource {
 }
 
 impl Source for ConcatSource {
-  fn source(&self) -> Cow<str> {
+  fn source(&self) -> SourceValue {
     let children = self.children();
     if children.len() == 1 {
       children[0].source()
     } else {
-      let all = self.children().iter().map(|child| child.source()).collect();
-      Cow::Owned(all)
+      let mut content = String::new();
+      for child in self.children() {
+        content.push_str(child.source().into_string_lossy().as_ref());
+      }
+      SourceValue::String(Cow::Owned(content))
     }
   }
 
@@ -355,14 +358,14 @@ impl StreamChunks for ConcatSource {
 
 #[cfg(test)]
 mod tests {
-  use crate::{OriginalSource, RawBufferSource, RawSource, RawStringSource};
+  use crate::{OriginalSource, RawBufferSource, RawStringSource};
 
   use super::*;
 
   #[test]
   fn should_concat_two_sources() {
     let mut source = ConcatSource::new([
-      RawSource::from("Hello World\n".to_string()).boxed(),
+      RawStringSource::from("Hello World\n".to_string()).boxed(),
       OriginalSource::new(
         "console.log('test');\nconsole.log('test2');\n",
         "console.js",
@@ -374,7 +377,7 @@ mod tests {
     let expected_source =
       "Hello World\nconsole.log('test');\nconsole.log('test2');\nHello2\n";
     assert_eq!(source.size(), 62);
-    assert_eq!(source.source(), expected_source);
+    assert_eq!(source.source().into_string_lossy(), expected_source);
     assert_eq!(
       source.map(&MapOptions::new(false)).unwrap(),
       SourceMap::from_json(
@@ -424,7 +427,7 @@ mod tests {
     let expected_source =
       "Hello World\nconsole.log('test');\nconsole.log('test2');\nHello2\n";
     assert_eq!(source.size(), 62);
-    assert_eq!(source.source(), expected_source);
+    assert_eq!(source.source().into_string_lossy(), expected_source);
     assert_eq!(
       source.map(&MapOptions::new(false)).unwrap(),
       SourceMap::from_json(
@@ -474,7 +477,7 @@ mod tests {
     let expected_source =
       "Hello World\nconsole.log('test');\nconsole.log('test2');\nHello2\n";
     assert_eq!(source.size(), 62);
-    assert_eq!(source.source(), expected_source);
+    assert_eq!(source.source().into_string_lossy(), expected_source);
     assert_eq!(
       source.map(&MapOptions::new(false)).unwrap(),
       SourceMap::from_json(
@@ -512,18 +515,21 @@ mod tests {
   #[test]
   fn should_be_able_to_handle_strings_for_all_methods() {
     let mut source = ConcatSource::new([
-      RawSource::from("Hello World\n".to_string()).boxed(),
+      RawStringSource::from("Hello World\n".to_string()).boxed(),
       OriginalSource::new(
         "console.log('test');\nconsole.log('test2');\n",
         "console.js",
       )
       .boxed(),
     ]);
-    let inner_source =
-      ConcatSource::new([RawSource::from("("), "'string'".into(), ")".into()]);
-    source.add(RawSource::from("console"));
-    source.add(RawSource::from("."));
-    source.add(RawSource::from("log"));
+    let inner_source = ConcatSource::new([
+      RawStringSource::from("("),
+      "'string'".into(),
+      ")".into(),
+    ]);
+    source.add(RawStringSource::from("console"));
+    source.add(RawStringSource::from("."));
+    source.add(RawStringSource::from("log"));
     source.add(inner_source);
     let expected_source =
       "Hello World\nconsole.log('test');\nconsole.log('test2');\nconsole.log('string')";
@@ -538,7 +544,7 @@ mod tests {
     )
     .unwrap();
     assert_eq!(source.size(), 76);
-    assert_eq!(source.source(), expected_source);
+    assert_eq!(source.source().into_string_lossy(), expected_source);
     assert_eq!(source.buffer(), expected_source.as_bytes());
 
     let map = source.map(&MapOptions::new(false)).unwrap();
@@ -550,16 +556,19 @@ mod tests {
   #[test]
   fn should_return_null_as_map_when_only_generated_code_is_concatenated() {
     let source = ConcatSource::new([
-      RawSource::from("Hello World\n"),
-      RawSource::from("Hello World\n".to_string()),
-      RawSource::from(""),
+      RawStringSource::from("Hello World\n"),
+      RawStringSource::from("Hello World\n".to_string()),
+      RawStringSource::from(""),
     ]);
 
     let result_text = source.source();
     let result_map = source.map(&MapOptions::default());
     let result_list_map = source.map(&MapOptions::new(false));
 
-    assert_eq!(result_text, "Hello World\nHello World\n");
+    assert_eq!(
+      result_text.into_string_lossy(),
+      "Hello World\nHello World\n"
+    );
     assert!(result_map.is_none());
     assert!(result_list_map.is_none());
   }
@@ -568,13 +577,13 @@ mod tests {
   fn should_allow_to_concatenate_in_a_single_line() {
     let source = ConcatSource::new([
       OriginalSource::new("Hello", "hello.txt").boxed(),
-      RawSource::from(" ").boxed(),
+      RawStringSource::from(" ").boxed(),
       OriginalSource::new("World ", "world.txt").boxed(),
-      RawSource::from("is here\n").boxed(),
+      RawStringSource::from("is here\n").boxed(),
       OriginalSource::new("Hello\n", "hello.txt").boxed(),
-      RawSource::from(" \n").boxed(),
+      RawStringSource::from(" \n").boxed(),
       OriginalSource::new("World\n", "world.txt").boxed(),
-      RawSource::from("is here").boxed(),
+      RawStringSource::from("is here").boxed(),
     ]);
 
     assert_eq!(
@@ -591,7 +600,7 @@ mod tests {
       .unwrap(),
     );
     assert_eq!(
-      source.source(),
+      source.source().into_string_lossy(),
       "Hello World is here\nHello\n \nWorld\nis here",
     );
   }
@@ -599,28 +608,36 @@ mod tests {
   #[test]
   fn should_allow_to_concat_buffer_sources() {
     let source = ConcatSource::new([
-      RawSource::from("a"),
-      RawSource::from(Vec::from("b")),
-      RawSource::from("c"),
+      RawStringSource::from("a"),
+      RawStringSource::from("b"),
+      RawStringSource::from("c"),
     ]);
-    assert_eq!(source.source(), "abc");
+    assert_eq!(source.source().into_string_lossy(), "abc");
     assert!(source.map(&MapOptions::default()).is_none());
   }
 
   #[test]
   fn should_flatten_nested_concat_sources() {
-    let inner_concat =
-      ConcatSource::new([RawSource::from("Hello "), RawSource::from("World")]);
+    let inner_concat = ConcatSource::new([
+      RawStringSource::from("Hello "),
+      RawStringSource::from("World"),
+    ]);
 
     let outer_concat = ConcatSource::new([
       inner_concat.boxed(),
-      RawSource::from("!").boxed(),
-      ConcatSource::new([RawSource::from(" How"), RawSource::from(" are")])
-        .boxed(),
-      RawSource::from(" you?").boxed(),
+      RawStringSource::from("!").boxed(),
+      ConcatSource::new([
+        RawStringSource::from(" How"),
+        RawStringSource::from(" are"),
+      ])
+      .boxed(),
+      RawStringSource::from(" you?").boxed(),
     ]);
 
-    assert_eq!(outer_concat.source(), "Hello World! How are you?");
+    assert_eq!(
+      outer_concat.source().into_string_lossy(),
+      "Hello World! How are you?"
+    );
     // The key test: verify that nested ConcatSources are flattened
     // Should have 6 direct children instead of nested structure
     assert_eq!(outer_concat.children.len(), 6);

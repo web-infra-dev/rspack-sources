@@ -10,7 +10,7 @@ use crate::{
     SourceText, StreamChunks,
   },
   source::{Mapping, OriginalLocation},
-  MapOptions, Rope, Source, SourceMap,
+  MapOptions, Rope, Source, SourceMap, SourceValue,
 };
 
 /// Represents source code, it will create source map for the source code,
@@ -51,8 +51,8 @@ impl OriginalSource {
 }
 
 impl Source for OriginalSource {
-  fn source(&self) -> Cow<str> {
-    Cow::Borrowed(&self.value)
+  fn source(&self) -> SourceValue {
+    SourceValue::String(Cow::Borrowed(&self.value))
   }
 
   fn rope(&self) -> Rope<'_> {
@@ -247,7 +247,7 @@ mod tests {
     let result_map = source.map(&MapOptions::default()).unwrap();
     let result_list_map = source.map(&MapOptions::new(false)).unwrap();
 
-    assert_eq!(result_text, "Line1\n\nLine3\n");
+    assert_eq!(result_text.into_string_lossy(), "Line1\n\nLine3\n");
     assert_eq!(result_map.sources(), &["file.js".to_string()]);
     assert_eq!(result_list_map.sources(), ["file.js".to_string()]);
     assert_eq!(
@@ -269,7 +269,7 @@ mod tests {
     let result_map = source.map(&MapOptions::default());
     let result_list_map = source.map(&MapOptions::new(false));
 
-    assert_eq!(result_text, "");
+    assert_eq!(result_text.into_string_lossy(), "");
     assert!(result_map.is_none());
     assert!(result_list_map.is_none());
   }
@@ -300,7 +300,7 @@ mod tests {
   fn should_split_code_into_statements() {
     let input = "if (hello()) { world(); hi(); there(); } done();\nif (hello()) { world(); hi(); there(); } done();";
     let source = OriginalSource::new(input, "file.js");
-    assert_eq!(source.source(), input);
+    assert_eq!(source.source().into_string_lossy(), input);
     assert_eq!(
       source.map(&MapOptions::default()).unwrap().mappings(),
       "AAAA,eAAe,SAAS,MAAM,WAAW;AACzC,eAAe,SAAS,MAAM,WAAW",

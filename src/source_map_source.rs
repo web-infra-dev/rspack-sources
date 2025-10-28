@@ -8,7 +8,7 @@ use crate::{
     get_map, stream_chunks_of_combined_source_map, stream_chunks_of_source_map,
     StreamChunks,
   },
-  MapOptions, Rope, Source, SourceMap,
+  MapOptions, Rope, Source, SourceMap, SourceValue,
 };
 
 /// Options for [SourceMapSource::new].
@@ -88,8 +88,8 @@ impl SourceMapSource {
 }
 
 impl Source for SourceMapSource {
-  fn source(&self) -> Cow<str> {
-    Cow::Borrowed(&self.value)
+  fn source(&self) -> SourceValue {
+    SourceValue::String(Cow::Borrowed(&self.value))
   }
 
   fn rope(&self) -> Rope<'_> {
@@ -218,7 +218,7 @@ impl StreamChunks for SourceMapSource {
 #[cfg(test)]
 mod tests {
   use crate::{
-    CachedSource, ConcatSource, OriginalSource, RawSource, ReplaceSource,
+    CachedSource, ConcatSource, OriginalSource, RawStringSource, ReplaceSource,
     SourceExt,
   };
 
@@ -230,7 +230,7 @@ mod tests {
     let inner_source = ConcatSource::new([
       OriginalSource::new(inner_source_code, "hello-world.txt").boxed(),
       OriginalSource::new("Translate: ", "header.txt").boxed(),
-      RawSource::from("Other text").boxed(),
+      RawStringSource::from("Other text").boxed(),
     ]);
     let source_r_code =
       "Translated: Hallo Welt\nist ein test Text\nAnderer Text";
@@ -249,7 +249,9 @@ mod tests {
       value: source_r_code,
       name: "text",
       source_map: source_r_map.clone(),
-      original_source: Some(inner_source.source().to_string()),
+      original_source: Some(
+        inner_source.source().into_string_lossy().into_owned(),
+      ),
       inner_source_map: inner_source.map(&MapOptions::default()),
       remove_original_source: false,
     });
@@ -257,14 +259,16 @@ mod tests {
       value: source_r_code,
       name: "text",
       source_map: source_r_map,
-      original_source: Some(inner_source.source().to_string()),
+      original_source: Some(
+        inner_source.source().into_string_lossy().into_owned(),
+      ),
       inner_source_map: inner_source.map(&MapOptions::default()),
       remove_original_source: true,
     });
     let expected_content =
       "Translated: Hallo Welt\nist ein test Text\nAnderer Text";
-    assert_eq!(sms1.source(), expected_content);
-    assert_eq!(sms2.source(), expected_content);
+    assert_eq!(sms1.source().into_string_lossy(), expected_content);
+    assert_eq!(sms2.source().into_string_lossy(), expected_content);
     assert_eq!(
       sms1.map(&MapOptions::default()).unwrap(),
       SourceMap::from_json(
@@ -333,7 +337,10 @@ mod tests {
       r
     });
     let source = ConcatSource::new(sources);
-    assert_eq!(source.source(), "hi world\nhi world\nhi world\n");
+    assert_eq!(
+      source.source().into_string_lossy(),
+      "hi world\nhi world\nhi world\n"
+    );
     assert_eq!(
       source.map(&MapOptions::default()).unwrap(),
       SourceMap::from_json(
@@ -379,7 +386,7 @@ mod tests {
       source_map: map,
     });
     let source = ConcatSource::new([inner.clone(), inner]);
-    assert_eq!(source.source(), format!("{code}{code}"));
+    assert_eq!(source.source().into_string_lossy(), format!("{code}{code}"));
   }
 
   #[test]
@@ -457,7 +464,10 @@ mod tests {
       }};
     }
 
-    test_cached!(source, |s: &dyn Source| s.source().to_string());
+    test_cached!(source, |s: &dyn Source| s
+      .source()
+      .into_string_lossy()
+      .into_owned());
     test_cached!(source, |s: &dyn Source| s.map(&MapOptions::default()));
     test_cached!(source, |s: &dyn Source| s.map(&MapOptions {
       columns: false,
@@ -534,7 +544,10 @@ mod tests {
       ),
       remove_original_source: false,
     });
-    assert_eq!(source.source(), "Message: H W!");
+    assert_eq!(
+      source.source().into_string_lossy().into_owned(),
+      "Message: H W!"
+    );
     assert_eq!(source.size(), 13);
     assert_eq!(
       source.map(&MapOptions::default()).unwrap(),
@@ -612,9 +625,9 @@ mod tests {
       source_map: original.map(&MapOptions::new(false)).unwrap(),
     });
     let source = ConcatSource::new([
-      RawSource::from("\n").boxed(),
-      RawSource::from("\n").boxed(),
-      RawSource::from("\n").boxed(),
+      RawStringSource::from("\n").boxed(),
+      RawStringSource::from("\n").boxed(),
+      RawStringSource::from("\n").boxed(),
       source.boxed(),
     ]);
     let map = source.map(&MapOptions::new(false)).unwrap();
@@ -627,7 +640,7 @@ mod tests {
     let inner_source = ConcatSource::new([
       OriginalSource::new(inner_source_code, "hello-world.txt").boxed(),
       OriginalSource::new("Translate: ", "header.txt").boxed(),
-      RawSource::from("Other text").boxed(),
+      RawStringSource::from("Other text").boxed(),
     ]);
     let source_r_code =
       "Translated: Hallo Welt\nist ein test Text\nAnderer Text";
@@ -651,7 +664,9 @@ mod tests {
       value: source_r_code,
       name: "text",
       source_map: source_r_map.clone(),
-      original_source: Some(inner_source.source().to_string()),
+      original_source: Some(
+        inner_source.source().into_string_lossy().into_owned(),
+      ),
       inner_source_map,
       remove_original_source: false,
     });

@@ -6,15 +6,16 @@ use rspack_sources::stream_chunks::{
   stream_chunks_default, GeneratedInfo, OnChunk, OnName, OnSource, StreamChunks,
 };
 use rspack_sources::{
-  ConcatSource, MapOptions, RawSource, Rope, Source, SourceExt, SourceMap,
+  ConcatSource, MapOptions, RawStringSource, Rope, Source, SourceExt,
+  SourceMap, SourceValue,
 };
 
 #[derive(Debug, Eq)]
 struct CompatSource(&'static str, Option<SourceMap>);
 
 impl Source for CompatSource {
-  fn source(&self) -> Cow<str> {
-    Cow::Borrowed(self.0)
+  fn source(&self) -> SourceValue {
+    SourceValue::String(Cow::Borrowed(self.0))
   }
 
   fn rope(&self) -> Rope<'_> {
@@ -81,7 +82,7 @@ fn should_work_with_custom_compat_source() {
   const CONTENT: &str = "Line1\n\nLine3\n";
 
   let source = CompatSource(CONTENT, None);
-  assert_eq!(source.source(), CONTENT);
+  assert_eq!(source.source().into_string_lossy(), CONTENT);
   assert_eq!(source.size(), 42);
   assert_eq!(source.buffer(), CONTENT.as_bytes());
   assert_eq!(source.map(&MapOptions::default()), None);
@@ -101,7 +102,7 @@ fn should_generate_correct_source_map() {
   .unwrap();
 
   let result = ConcatSource::new([
-    RawSource::from("Line0\n").boxed(),
+    RawStringSource::from("Line0\n").boxed(),
     CompatSource("Line1\nLine2\nLine3\n", Some(source_map)).boxed(),
   ]);
 
@@ -120,6 +121,6 @@ fn should_generate_correct_source_map() {
   )
   .unwrap();
 
-  assert_eq!(source, expected_source);
+  assert_eq!(source.into_string_lossy(), expected_source);
   assert_eq!(map, expected_source_map)
 }

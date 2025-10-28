@@ -19,12 +19,12 @@ pub use cached_source::CachedSource;
 pub use concat_source::ConcatSource;
 pub use error::{Error, Result};
 pub use original_source::OriginalSource;
-pub use raw_source::{RawBufferSource, RawSource, RawStringSource};
+pub use raw_source::{RawBufferSource, RawStringSource};
 pub use replace_source::{ReplaceSource, ReplacementEnforce};
 pub use rope::Rope;
 pub use source::{
   BoxSource, MapOptions, Mapping, OriginalLocation, Source, SourceExt,
-  SourceMap,
+  SourceMap, SourceValue,
 };
 pub use source_map_source::{
   SourceMapSource, SourceMapSourceOptions, WithoutOriginalOptions,
