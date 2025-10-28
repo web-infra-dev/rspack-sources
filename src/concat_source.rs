@@ -156,16 +156,18 @@ impl ConcatSource {
 
 impl Source for ConcatSource {
   fn source(&self) -> SourceValue {
-    let children = self.optimized_children();
-    if children.len() == 1 {
-      children[0].source()
-    } else {
-      let mut content = String::new();
-      for child in self.optimized_children() {
-        content.push_str(child.source().into_string_lossy().as_ref());
-      }
-      SourceValue::String(Cow::Owned(content))
-    }
+    // let children = self.optimized_children();
+    // if children.len() == 1 {
+    //   children[0].source()
+    // } else {
+    //   let mut content = String::new();
+    //   for child in self.optimized_children() {
+    //     content.push_str(child.source().into_string_lossy().as_ref());
+    //   }
+    //   SourceValue::String(Cow::Owned(content))
+    // }
+    let rope = self.rope();
+    SourceValue::String(Cow::Owned(rope.to_string()))
   }
 
   fn rope(&self) -> Rope<'_> {
@@ -441,8 +443,8 @@ fn merge_raw_sources(
     }
     _ => {
       // Multiple sources - merge them
-      let len = raw_sources.iter().map(|s| s.size()).sum();
-      let mut merged_content = String::with_capacity(len);
+      let capacity = raw_sources.iter().map(|s| s.size()).sum();
+      let mut merged_content = String::with_capacity(capacity);
       for source in raw_sources.drain(..) {
         merged_content.push_str(source.source().into_string_lossy().as_ref());
       }
