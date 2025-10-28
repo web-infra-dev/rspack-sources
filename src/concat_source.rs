@@ -2,6 +2,7 @@ use std::{
   borrow::Cow,
   cell::RefCell,
   hash::{Hash, Hasher},
+  sync::{Mutex, OnceLock},
 };
 
 use rustc_hash::FxHashMap as HashMap;
@@ -10,7 +11,8 @@ use crate::{
   helpers::{get_map, GeneratedInfo, OnChunk, OnName, OnSource, StreamChunks},
   linear_map::LinearMap,
   source::{Mapping, OriginalLocation},
-  BoxSource, MapOptions, Rope, Source, SourceExt, SourceMap, SourceValue,
+  BoxSource, MapOptions, RawStringSource, Rope, Source, SourceExt, SourceMap,
+  SourceValue,
 };
 
 /// Concatenate multiple [Source]s to a single [Source].
@@ -55,9 +57,26 @@ use crate::{
 ///   .unwrap()
 /// );
 /// ```
-#[derive(Default, Clone)]
+#[derive(Default)]
 pub struct ConcatSource {
-  children: Vec<BoxSource>,
+  children: Mutex<Vec<BoxSource>>,
+  is_optimized: OnceLock<Vec<BoxSource>>,
+}
+
+impl Clone for ConcatSource {
+  fn clone(&self) -> Self {
+    Self {
+      children: Mutex::new(self.children.lock().unwrap().clone()),
+      is_optimized: match self.is_optimized.get() {
+        Some(children) => {
+          let once_lock = OnceLock::new();
+          once_lock.get_or_init(|| children.clone());
+          once_lock
+        }
+        None => OnceLock::default(),
+      },
+    }
+  }
 }
 
 impl std::fmt::Debug for ConcatSource {
@@ -66,7 +85,13 @@ impl std::fmt::Debug for ConcatSource {
     let indent_str = format!("{:indent$}", "", indent = indent);
 
     writeln!(f, "{indent_str}ConcatSource::new(vec![")?;
-    for child in self.children.iter() {
+
+    let original_children = self.children.lock().unwrap();
+    let children = match self.is_optimized.get() {
+      Some(optimized_children) => optimized_children,
+      None => original_children.as_ref(),
+    };
+    for child in children {
       writeln!(f, "{:indent$?},", child, indent = indent + 2)?;
     }
     write!(f, "{indent_str}]).boxed()")
@@ -87,19 +112,33 @@ impl ConcatSource {
     concat_source
   }
 
-  fn children(&self) -> &Vec<BoxSource> {
-    &self.children
+  fn optimized_children(&self) -> &[BoxSource] {
+    self.is_optimized.get_or_init(|| {
+      let mut children = self.children.lock().unwrap();
+      optimize(&mut children)
+    })
   }
 
   /// Add a [Source] to concat.
   pub fn add<S: Source + 'static>(&mut self, source: S) {
+    let children = &mut *self.children.lock().unwrap();
+
+    if let Some(optimized_children) = self.is_optimized.take() {
+      *children = optimized_children;
+    }
+
     // First check if it's already a BoxSource containing a ConcatSource
     if let Some(box_source) = source.as_any().downcast_ref::<BoxSource>() {
       if let Some(concat_source) =
         box_source.as_ref().as_any().downcast_ref::<ConcatSource>()
       {
         // Extend with existing children (cheap clone due to Arc)
-        self.children.extend(concat_source.children.iter().cloned());
+        let original_children = concat_source.children.lock().unwrap();
+        let other_children = match concat_source.is_optimized.get() {
+          Some(optimized_children) => optimized_children,
+          None => original_children.as_ref(),
+        };
+        children.extend(other_children.iter().cloned());
         return;
       }
     }
@@ -108,30 +147,27 @@ impl ConcatSource {
     if let Some(concat_source) = source.as_any().downcast_ref::<ConcatSource>()
     {
       // Extend with existing children (cheap clone due to Arc)
-      self.children.extend(concat_source.children.iter().cloned());
+      let original_children = concat_source.children.lock().unwrap();
+      let other_children = match concat_source.is_optimized.get() {
+        Some(optimized_children) => optimized_children,
+        None => original_children.as_ref(),
+      };
+      children.extend(other_children.iter().cloned());
     } else {
       // Regular source - box it and add to children
-      self.children.push(SourceExt::boxed(source));
+      children.push(source.boxed());
     }
   }
 }
 
 impl Source for ConcatSource {
   fn source(&self) -> SourceValue {
-    let children = self.children();
-    if children.len() == 1 {
-      children[0].source()
-    } else {
-      let mut content = String::new();
-      for child in self.children() {
-        content.push_str(child.source().into_string_lossy().as_ref());
-      }
-      SourceValue::String(Cow::Owned(content))
-    }
+    let rope = self.rope();
+    SourceValue::String(Cow::Owned(rope.to_string()))
   }
 
   fn rope(&self) -> Rope<'_> {
-    let children = self.children();
+    let children = self.optimized_children();
     if children.len() == 1 {
       children[0].rope()
     } else {
@@ -145,7 +181,7 @@ impl Source for ConcatSource {
   }
 
   fn buffer(&self) -> Cow<[u8]> {
-    let children = self.children();
+    let children = self.optimized_children();
     if children.len() == 1 {
       children[0].buffer()
     } else {
@@ -156,7 +192,11 @@ impl Source for ConcatSource {
   }
 
   fn size(&self) -> usize {
-    self.children().iter().map(|child| child.size()).sum()
+    self
+      .optimized_children()
+      .iter()
+      .map(|child| child.size())
+      .sum()
   }
 
   fn map(&self, options: &MapOptions) -> Option<SourceMap> {
@@ -164,7 +204,7 @@ impl Source for ConcatSource {
   }
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
-    for child in self.children() {
+    for child in self.optimized_children() {
       child.to_writer(writer)?;
     }
     Ok(())
@@ -174,7 +214,7 @@ impl Source for ConcatSource {
 impl Hash for ConcatSource {
   fn hash<H: Hasher>(&self, state: &mut H) {
     "ConcatSource".hash(state);
-    for child in self.children().iter() {
+    for child in self.optimized_children().iter() {
       child.hash(state);
     }
   }
@@ -182,7 +222,7 @@ impl Hash for ConcatSource {
 
 impl PartialEq for ConcatSource {
   fn eq(&self, other: &Self) -> bool {
-    self.children() == other.children()
+    self.optimized_children() == other.optimized_children()
   }
 }
 impl Eq for ConcatSource {}
@@ -195,9 +235,10 @@ impl StreamChunks for ConcatSource {
     on_source: OnSource<'_, 'a>,
     on_name: OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {
-    if self.children().len() == 1 {
-      return self.children[0]
-        .stream_chunks(options, on_chunk, on_source, on_name);
+    let children = self.optimized_children();
+
+    if children.len() == 1 {
+      return children[0].stream_chunks(options, on_chunk, on_source, on_name);
     }
     let mut current_line_offset = 0;
     let mut current_column_offset = 0;
@@ -210,7 +251,7 @@ impl StreamChunks for ConcatSource {
     let name_index_mapping: RefCell<LinearMap<u32>> =
       RefCell::new(LinearMap::default());
 
-    for item in self.children() {
+    for item in children {
       source_index_mapping.borrow_mut().clear();
       name_index_mapping.borrow_mut().clear();
       let mut last_mapping_line = 0;
@@ -352,6 +393,56 @@ impl StreamChunks for ConcatSource {
     GeneratedInfo {
       generated_line: current_line_offset + 1,
       generated_column: current_column_offset,
+    }
+  }
+}
+
+fn optimize(children: &mut Vec<BoxSource>) -> Vec<BoxSource> {
+  let original_children = std::mem::take(children);
+
+  if original_children.len() <= 1 {
+    return original_children; // Nothing to optimize
+  }
+
+  let mut new_children = Vec::new();
+  let mut current_raw_sources = Vec::new();
+
+  for child in original_children {
+    if child.as_ref().as_any().is::<RawStringSource>() {
+      current_raw_sources.push(child);
+    } else {
+      // Flush any pending raw sources before adding the non-raw source
+      merge_raw_sources(&mut current_raw_sources, &mut new_children);
+      new_children.push(child);
+    }
+  }
+
+  // Flush any remaining pending raw sources
+  merge_raw_sources(&mut current_raw_sources, &mut new_children);
+
+  new_children
+}
+
+/// Helper function to merge and flush pending raw sources.
+fn merge_raw_sources(
+  raw_sources: &mut Vec<BoxSource>,
+  new_children: &mut Vec<BoxSource>,
+) {
+  match raw_sources.len() {
+    0 => {} // Nothing to flush
+    1 => {
+      // Single source - move it directly
+      new_children.push(raw_sources.pop().unwrap());
+    }
+    _ => {
+      // Multiple sources - merge them
+      let capacity = raw_sources.iter().map(|s| s.size()).sum();
+      let mut merged_content = String::with_capacity(capacity);
+      for source in raw_sources.drain(..) {
+        merged_content.push_str(source.source().into_string_lossy().as_ref());
+      }
+      let merged_source = RawStringSource::from(merged_content);
+      new_children.push(merged_source.boxed());
     }
   }
 }
@@ -640,6 +731,79 @@ mod tests {
     );
     // The key test: verify that nested ConcatSources are flattened
     // Should have 6 direct children instead of nested structure
-    assert_eq!(outer_concat.children.len(), 6);
+    assert_eq!(outer_concat.optimized_children().len(), 1);
+  }
+
+  #[test]
+  fn test_self_equality_no_deadlock() {
+    let concat_source = ConcatSource::new([
+      RawStringSource::from("Hello "),
+      RawStringSource::from("World"),
+    ])
+    .boxed();
+    assert_eq!(concat_source.as_ref(), concat_source.as_ref());
+
+    concat_source.source();
+
+    assert_eq!(concat_source.as_ref(), concat_source.as_ref());
+  }
+
+  #[test]
+  fn test_debug_output() {
+    let inner_concat = ConcatSource::new([
+      RawStringSource::from("Hello "),
+      RawStringSource::from("World"),
+    ]);
+
+    let mut outer_concat = ConcatSource::new([
+      inner_concat.boxed(),
+      RawStringSource::from("!").boxed(),
+      ConcatSource::new([
+        RawStringSource::from(" How"),
+        RawStringSource::from(" are"),
+      ])
+      .boxed(),
+      RawStringSource::from(" you?\n").boxed(),
+    ]);
+
+    assert_eq!(
+      format!("{:?}", outer_concat),
+      r#"ConcatSource::new(vec![
+  RawStringSource::from_static("Hello ").boxed(),
+  RawStringSource::from_static("World").boxed(),
+  RawStringSource::from_static("!").boxed(),
+  RawStringSource::from_static(" How").boxed(),
+  RawStringSource::from_static(" are").boxed(),
+  RawStringSource::from_static(" you?\n").boxed(),
+]).boxed()"#
+    );
+
+    outer_concat.source();
+
+    assert_eq!(
+      format!("{:?}", outer_concat),
+      r#"ConcatSource::new(vec![
+  RawStringSource::from_static("Hello World! How are you?\n").boxed(),
+]).boxed()"#
+    );
+
+    outer_concat.add(RawStringSource::from("I'm fine."));
+
+    assert_eq!(
+      format!("{:?}", outer_concat),
+      r#"ConcatSource::new(vec![
+  RawStringSource::from_static("Hello World! How are you?\n").boxed(),
+  RawStringSource::from_static("I'm fine.").boxed(),
+]).boxed()"#
+    );
+
+    outer_concat.source();
+
+    assert_eq!(
+      format!("{:?}", outer_concat),
+      r#"ConcatSource::new(vec![
+  RawStringSource::from_static("Hello World! How are you?\nI'm fine.").boxed(),
+]).boxed()"#
+    );
   }
 }

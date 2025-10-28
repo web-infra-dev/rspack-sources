@@ -1247,7 +1247,7 @@ return <div>{data.foo}</div>
   }
 
   #[test]
-  fn debug() {
+  fn test_debug_output() {
     let mut source =
       ReplaceSource::new(OriginalSource::new("hello", "file.txt").boxed());
     source.replace(0, 0, "println!(\"", None);
