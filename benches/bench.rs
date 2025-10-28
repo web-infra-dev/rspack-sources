@@ -17,7 +17,9 @@ use rspack_sources::{
   SourceMap, SourceMapSource, SourceMapSourceOptions,
 };
 
-use bench_complex_replace_source::benchmark_complex_replace_source;
+use bench_complex_replace_source::{
+  benchmark_complex_replace_source_map, benchmark_complex_replace_source_source,
+};
 use bench_source_map::{
   benchmark_parse_source_map_from_json, benchmark_source_map_clone,
   benchmark_stringify_source_map_to_json,
@@ -152,8 +154,15 @@ fn bench_rspack_sources(criterion: &mut Criterion) {
 
   group.bench_function("cached_source_hash", benchmark_cached_source_hash);
 
-  group
-    .bench_function("complex_replace_source", benchmark_complex_replace_source);
+  group.bench_function(
+    "complex_replace_source_map",
+    benchmark_complex_replace_source_map,
+  );
+
+  group.bench_function(
+    "complex_replace_source_source",
+    benchmark_complex_replace_source_source,
+  );
 
   group.bench_function(
     "parse_source_map_from_json",
