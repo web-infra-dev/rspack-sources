@@ -242,6 +242,9 @@ pub trait SourceExt {
 
 impl<T: Source + 'static> SourceExt for T {
   fn boxed(self) -> BoxSource {
+    if let Some(source) = self.as_any().downcast_ref::<BoxSource>() {
+      return source.clone();
+    }
     Arc::new(self)
   }
 }

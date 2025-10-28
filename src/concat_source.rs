@@ -2,7 +2,7 @@ use std::{
   borrow::Cow,
   cell::RefCell,
   hash::{Hash, Hasher},
-  sync::OnceLock,
+  sync::{Mutex, OnceLock},
 };
 
 use rustc_hash::FxHashMap as HashMap;
@@ -59,14 +59,14 @@ use crate::{
 /// ```
 #[derive(Default)]
 pub struct ConcatSource {
-  children: Vec<BoxSource>,
+  children: Mutex<Vec<BoxSource>>,
   is_optimized: OnceLock<Vec<BoxSource>>,
 }
 
 impl Clone for ConcatSource {
   fn clone(&self) -> Self {
     Self {
-      children: self.children.clone(),
+      children: Mutex::new(self.children.lock().unwrap().clone()),
       is_optimized: match self.is_optimized.get() {
         Some(children) => {
           let once_lock = OnceLock::new();
@@ -85,7 +85,7 @@ impl std::fmt::Debug for ConcatSource {
     let indent_str = format!("{:indent$}", "", indent = indent);
 
     writeln!(f, "{indent_str}ConcatSource::new(vec![")?;
-    for child in &*self.children {
+    for child in &*self.children.lock().unwrap() {
       writeln!(f, "{:indent$?},", child, indent = indent + 2)?;
     }
     write!(f, "{indent_str}]).boxed()")
@@ -106,18 +106,19 @@ impl ConcatSource {
     concat_source
   }
 
-  fn optimized_children(&self) -> &Vec<BoxSource> {
+  fn optimized_children(&self) -> &[BoxSource] {
     self.is_optimized.get_or_init(|| {
-      let mut children = self.children.clone();
-      optimize(&mut children);
-      children
+      let mut children = self.children.lock().unwrap();
+      optimize(&mut children)
     })
   }
 
   /// Add a [Source] to concat.
   pub fn add<S: Source + 'static>(&mut self, source: S) {
+    let children = &mut *self.children.lock().unwrap();
+
     if let Some(optimized_children) = self.is_optimized.take() {
-      self.children = optimized_children;
+      *children = optimized_children;
     }
 
     // First check if it's already a BoxSource containing a ConcatSource
@@ -126,7 +127,12 @@ impl ConcatSource {
         box_source.as_ref().as_any().downcast_ref::<ConcatSource>()
       {
         // Extend with existing children (cheap clone due to Arc)
-        self.children.extend(concat_source.children.iter().cloned());
+        let original_children = concat_source.children.lock().unwrap();
+        let other_children = match concat_source.is_optimized.get() {
+          Some(optimized_children) => optimized_children,
+          None => original_children.as_ref(),
+        };
+        children.extend(other_children.iter().cloned());
         return;
       }
     }
@@ -135,10 +141,15 @@ impl ConcatSource {
     if let Some(concat_source) = source.as_any().downcast_ref::<ConcatSource>()
     {
       // Extend with existing children (cheap clone due to Arc)
-      self.children.extend(concat_source.children.iter().cloned());
+      let original_children = concat_source.children.lock().unwrap();
+      let other_children = match concat_source.is_optimized.get() {
+        Some(optimized_children) => optimized_children,
+        None => original_children.as_ref(),
+      };
+      children.extend(other_children.iter().cloned());
     } else {
       // Regular source - box it and add to children
-      self.children.push(SourceExt::boxed(source));
+      children.push(source.boxed());
     }
   }
 }
@@ -213,6 +224,9 @@ impl Hash for ConcatSource {
 
 impl PartialEq for ConcatSource {
   fn eq(&self, other: &Self) -> bool {
+    if std::ptr::eq(self, other) {
+      return true;
+    }
     self.optimized_children() == other.optimized_children()
   }
 }
@@ -229,8 +243,7 @@ impl StreamChunks for ConcatSource {
     let children = self.optimized_children();
 
     if children.len() == 1 {
-      return self.children[0]
-        .stream_chunks(options, on_chunk, on_source, on_name);
+      return children[0].stream_chunks(options, on_chunk, on_source, on_name);
     }
     let mut current_line_offset = 0;
     let mut current_column_offset = 0;
@@ -389,12 +402,13 @@ impl StreamChunks for ConcatSource {
   }
 }
 
-fn optimize(children: &mut Vec<BoxSource>) {
-  if children.len() <= 1 {
-    return; // Nothing to optimize
+fn optimize(children: &mut Vec<BoxSource>) -> Vec<BoxSource> {
+  let original_children = std::mem::take(children);
+
+  if original_children.len() <= 1 {
+    return original_children; // Nothing to optimize
   }
 
-  let original_children = std::mem::take(children);
   let mut new_children = Vec::new();
   let mut current_raw_sources = Vec::new();
 
@@ -411,7 +425,7 @@ fn optimize(children: &mut Vec<BoxSource>) {
   // Flush any remaining pending raw sources
   merge_raw_sources(&mut current_raw_sources, &mut new_children);
 
-  *children = new_children;
+  new_children
 }
 
 /// Helper function to merge and flush pending raw sources.
@@ -722,6 +736,6 @@ mod tests {
     );
     // The key test: verify that nested ConcatSources are flattened
     // Should have 6 direct children instead of nested structure
-    assert_eq!(outer_concat.children.len(), 6);
+    assert_eq!(outer_concat.optimized_children().len(), 1);
   }
 }
