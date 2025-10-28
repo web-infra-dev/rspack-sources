@@ -4,7 +4,7 @@ use std::{
   hash::{Hash, Hasher},
   sync::{
     atomic::{AtomicBool, Ordering},
-    Arc, Mutex,
+    Mutex,
   },
 };
 
@@ -18,7 +18,8 @@ use crate::{
   linear_map::LinearMap,
   rope::Rope,
   with_indices::WithIndices,
-  MapOptions, Mapping, OriginalLocation, Source, SourceMap,
+  BoxSource, MapOptions, Mapping, OriginalLocation, Source, SourceExt,
+  SourceMap,
 };
 
 /// Decorates a Source with replacements and insertions of source code,
@@ -40,8 +41,8 @@ use crate::{
 ///
 /// assert_eq!(source.source(), "start1\nstart2\nreplaced!\nend1\nend2");
 /// ```
-pub struct ReplaceSource<T> {
-  inner: Arc<T>,
+pub struct ReplaceSource {
+  inner: BoxSource,
   replacements: Vec<Replacement>,
   sorted_index: Mutex<Vec<usize>>,
   /// Whether `replacements` is sorted.
@@ -87,20 +88,15 @@ impl Replacement {
   }
 }
 
-impl<T> ReplaceSource<T> {
+impl ReplaceSource {
   /// Create a [ReplaceSource].
-  pub fn new(source: T) -> Self {
+  pub fn new<T: SourceExt>(source: T) -> Self {
     Self {
-      inner: Arc::new(source),
+      inner: source.boxed(),
       replacements: Vec::new(),
       sorted_index: Mutex::new(Vec::new()),
       is_sorted: AtomicBool::new(true),
     }
-  }
-
-  /// Get the original [Source].
-  pub fn original(&self) -> &T {
-    &self.inner
   }
 
   fn sort_replacement(&self) {
@@ -130,7 +126,7 @@ impl<T> ReplaceSource<T> {
   }
 }
 
-impl<T: Source> ReplaceSource<T> {
+impl ReplaceSource {
   /// Insert a content at start.
   pub fn insert(&mut self, start: u32, content: &str, name: Option<&str>) {
     self.replace(start, start, content, name)
@@ -185,7 +181,7 @@ impl<T: Source> ReplaceSource<T> {
   }
 }
 
-impl<T: Source + Hash + PartialEq + Eq + 'static> Source for ReplaceSource<T> {
+impl Source for ReplaceSource {
   fn source(&self) -> Cow<str> {
     let inner_source_code = self.inner.source();
 
@@ -278,7 +274,7 @@ impl<T: Source + Hash + PartialEq + Eq + 'static> Source for ReplaceSource<T> {
   }
 }
 
-impl<T: std::fmt::Debug> std::fmt::Debug for ReplaceSource<T> {
+impl std::fmt::Debug for ReplaceSource {
   fn fmt(
     &self,
     f: &mut std::fmt::Formatter<'_>,
@@ -340,7 +336,7 @@ fn check_content_at_position<'a>(
   }
 }
 
-impl<T: Source> StreamChunks for ReplaceSource<T> {
+impl StreamChunks for ReplaceSource {
   fn stream_chunks<'a>(
     &'a self,
     options: &crate::MapOptions,
@@ -758,7 +754,7 @@ impl<T: Source> StreamChunks for ReplaceSource<T> {
   }
 }
 
-impl<T: Source> Clone for ReplaceSource<T> {
+impl Clone for ReplaceSource {
   fn clone(&self) -> Self {
     Self {
       inner: self.inner.clone(),
@@ -769,7 +765,7 @@ impl<T: Source> Clone for ReplaceSource<T> {
   }
 }
 
-impl<T: Hash> Hash for ReplaceSource<T> {
+impl Hash for ReplaceSource {
   fn hash<H: Hasher>(&self, state: &mut H) {
     "ReplaceSource".hash(state);
     for repl in self.sorted_replacement() {
@@ -779,13 +775,14 @@ impl<T: Hash> Hash for ReplaceSource<T> {
   }
 }
 
-impl<T: PartialEq> PartialEq for ReplaceSource<T> {
+impl PartialEq for ReplaceSource {
   fn eq(&self, other: &Self) -> bool {
-    self.inner == other.inner && self.replacements == other.replacements
+    self.inner.as_ref() == other.inner.as_ref()
+      && self.replacements == other.replacements
   }
 }
 
-impl<T: Eq> Eq for ReplaceSource<T> {}
+impl Eq for ReplaceSource {}
 
 #[cfg(test)]
 mod tests {
