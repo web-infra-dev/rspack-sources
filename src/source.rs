@@ -209,7 +209,7 @@ pub struct SourceMap {
   #[serde(rename = "debugId", skip_serializing_if = "Option::is_none")]
   debug_id: Option<Arc<str>>,
   #[serde(rename = "ignoreList", skip_serializing_if = "Option::is_none")]
-  ignore_list: Option<Vec<u32>>,
+  ignore_list: Option<Arc<Vec<u32>>>,
 }
 
 impl std::fmt::Debug for SourceMap {
@@ -280,12 +280,12 @@ impl SourceMap {
 
   /// Get the ignoreList field in [SourceMap].
   pub fn ignore_list(&self) -> Option<&[u32]> {
-    self.ignore_list.as_deref()
+    self.ignore_list.as_deref().map(|v| &**v)
   }
 
   /// Set the ignoreList field in [SourceMap].
   pub fn set_ignore_list<T: Into<Vec<u32>>>(&mut self, ignore_list: Option<T>) {
-    self.ignore_list = ignore_list.map(Into::into);
+    self.ignore_list = ignore_list.map(|v| Arc::new(v.into()));
   }
 
   /// Get the decoded mappings in [SourceMap].
@@ -460,6 +460,7 @@ impl TryFrom<RawSourceMap> for SourceMap {
       .into();
     let source_root = raw.source_root.map(Into::into);
     let debug_id = raw.debug_id.map(Into::into);
+    let ignore_list = raw.ignore_list.map(Into::into);
 
     Ok(Self {
       version: 3,
@@ -470,7 +471,7 @@ impl TryFrom<RawSourceMap> for SourceMap {
       names,
       source_root,
       debug_id,
-      ignore_list: raw.ignore_list,
+      ignore_list,
     })
   }
 }
