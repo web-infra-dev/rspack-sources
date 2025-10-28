@@ -31,7 +31,7 @@ struct CachedData {
 /// ```
 /// use rspack_sources::{
 ///   BoxSource, CachedSource, ConcatSource, MapOptions, OriginalSource,
-///   RawSource, Source, SourceExt, SourceMap,
+///   RawStringSource, Source, SourceExt, SourceMap,
 /// };
 ///
 /// let mut concat = ConcatSource::new([
@@ -47,12 +47,12 @@ struct CachedData {
 /// let cached = CachedSource::new(concat);
 ///
 /// assert_eq!(
-///   cached.source(),
+///   cached.source().into_string_lossy(),
 ///   "Hello World\nconsole.log('test');\nconsole.log('test2');\nHello2\n"
 /// );
 /// // second time will be fast.
 /// assert_eq!(
-///   cached.source(),
+///   cached.source().into_string_lossy(),
 ///   "Hello World\nconsole.log('test');\nconsole.log('test2');\nHello2\n"
 /// );
 /// ```

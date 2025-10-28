@@ -39,7 +39,7 @@ use crate::{
 /// source.insert(888, "end1\n", None);
 /// source.replace(0, 999, "replaced!\n", Some("whole"));
 ///
-/// assert_eq!(source.source(), "start1\nstart2\nreplaced!\nend1\nend2");
+/// assert_eq!(source.source().into_string_lossy(), "start1\nstart2\nreplaced!\nend1\nend2");
 /// ```
 pub struct ReplaceSource {
   inner: BoxSource,

@@ -12,7 +12,7 @@ use crate::{
   MapOptions, Rope, Source, SourceMap, SourceValue,
 };
 
-/// A string variant of [RawSource].
+/// A string variant of [RawStringSource].
 ///
 /// - [webpack-sources docs](https://github.com/webpack/webpack-sources/#rawsource).
 ///
@@ -21,7 +21,7 @@ use crate::{
 ///
 /// let code = "some source code";
 /// let s = RawStringSource::from(code.to_string());
-/// assert_eq!(s.source(), code);
+/// assert_eq!(s.source().into_string_lossy(), code);
 /// assert_eq!(s.map(&MapOptions::default()), None);
 /// assert_eq!(s.size(), 16);
 /// ```
@@ -39,7 +39,7 @@ impl RawStringSource {
   ///
   /// let code = "some source code";
   /// let s = RawStringSource::from_static(code);
-  /// assert_eq!(s.source(), code);
+  /// assert_eq!(s.source().into_string_lossy(), code);
   /// ```
   pub fn from_static(s: &'static str) -> Self {
     Self(Cow::Borrowed(s))
@@ -124,7 +124,7 @@ impl StreamChunks for RawStringSource {
   }
 }
 
-/// A buffer variant of [RawSource].
+/// A buffer variant of [RawBufferSource].
 ///
 /// - [webpack-sources docs](https://github.com/webpack/webpack-sources/#rawsource).
 ///

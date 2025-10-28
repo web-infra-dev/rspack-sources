@@ -101,8 +101,8 @@ impl<'a> SourceValue<'a> {
   /// Returns `true` if `self` has a length of zero bytes.
   pub fn is_empty(&self) -> bool {
     match self {
-        SourceValue::String(cow) => cow.is_empty(),
-        SourceValue::Buffer(cow) => cow.is_empty(),
+      SourceValue::String(string) => string.is_empty(),
+      SourceValue::Buffer(buffer) => buffer.is_empty(),
     }
   }
 }

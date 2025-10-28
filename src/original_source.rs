@@ -24,7 +24,7 @@ use crate::{
 ///
 /// let input = "if (hello()) { world(); hi(); there(); } done();\nif (hello()) { world(); hi(); there(); } done();";
 /// let source = OriginalSource::new(input, "file.js");
-/// assert_eq!(source.source(), input);
+/// assert_eq!(source.source().into_string_lossy(), input);
 /// assert_eq!(
 ///   source.map(&MapOptions::default()).unwrap().mappings(),
 ///   "AAAA,eAAe,SAAS,MAAM,WAAW;AACzC,eAAe,SAAS,MAAM,WAAW",

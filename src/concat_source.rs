@@ -19,7 +19,7 @@ use crate::{
 ///
 /// ```
 /// use rspack_sources::{
-///   BoxSource, ConcatSource, MapOptions, OriginalSource, RawSource, Source,
+///   BoxSource, ConcatSource, MapOptions, OriginalSource, RawStringSource, Source,
 ///   SourceExt, SourceMap,
 /// };
 ///
@@ -35,7 +35,7 @@ use crate::{
 ///
 /// assert_eq!(source.size(), 62);
 /// assert_eq!(
-///   source.source(),
+///   source.source().into_string_lossy(),
 ///   "Hello World\nconsole.log('test');\nconsole.log('test2');\nHello2\n"
 /// );
 /// assert_eq!(
