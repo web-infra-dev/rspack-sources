@@ -774,7 +774,7 @@ mod tests {
   }
 
   #[test]
-  fn debug() {
+  fn test_debug_output() {
     let source = SourceMapSource::new(SourceMapSourceOptions {
       value: "hello world",
       name: "hello.txt",

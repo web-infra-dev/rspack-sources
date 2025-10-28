@@ -222,9 +222,6 @@ impl Hash for ConcatSource {
 
 impl PartialEq for ConcatSource {
   fn eq(&self, other: &Self) -> bool {
-    if std::ptr::eq(self, other) {
-      return true;
-    }
     self.optimized_children() == other.optimized_children()
   }
 }
@@ -738,13 +735,27 @@ mod tests {
   }
 
   #[test]
-  fn debug() {
+  fn test_self_equality_no_deadlock() {
+    let concat_source = ConcatSource::new([
+      RawStringSource::from("Hello "),
+      RawStringSource::from("World"),
+    ])
+    .boxed();
+    assert_eq!(concat_source.as_ref(), concat_source.as_ref());
+
+    concat_source.source();
+
+    assert_eq!(concat_source.as_ref(), concat_source.as_ref());
+  }
+
+  #[test]
+  fn test_debug_output() {
     let inner_concat = ConcatSource::new([
       RawStringSource::from("Hello "),
       RawStringSource::from("World"),
     ]);
 
-    let outer_concat = ConcatSource::new([
+    let mut outer_concat = ConcatSource::new([
       inner_concat.boxed(),
       RawStringSource::from("!").boxed(),
       ConcatSource::new([
@@ -752,7 +763,7 @@ mod tests {
         RawStringSource::from(" are"),
       ])
       .boxed(),
-      RawStringSource::from(" you?").boxed(),
+      RawStringSource::from(" you?\n").boxed(),
     ]);
 
     assert_eq!(
@@ -763,7 +774,7 @@ mod tests {
   RawStringSource::from_static("!").boxed(),
   RawStringSource::from_static(" How").boxed(),
   RawStringSource::from_static(" are").boxed(),
-  RawStringSource::from_static(" you?").boxed(),
+  RawStringSource::from_static(" you?\n").boxed(),
 ]).boxed()"#
     );
 
@@ -772,7 +783,26 @@ mod tests {
     assert_eq!(
       format!("{:?}", outer_concat),
       r#"ConcatSource::new(vec![
-  RawStringSource::from_static("Hello World! How are you?").boxed(),
+  RawStringSource::from_static("Hello World! How are you?\n").boxed(),
+]).boxed()"#
+    );
+
+    outer_concat.add(RawStringSource::from("I'm fine."));
+
+    assert_eq!(
+      format!("{:?}", outer_concat),
+      r#"ConcatSource::new(vec![
+  RawStringSource::from_static("Hello World! How are you?\n").boxed(),
+  RawStringSource::from_static("I'm fine.").boxed(),
+]).boxed()"#
+    );
+
+    outer_concat.source();
+
+    assert_eq!(
+      format!("{:?}", outer_concat),
+      r#"ConcatSource::new(vec![
+  RawStringSource::from_static("Hello World! How are you?\nI'm fine.").boxed(),
 ]).boxed()"#
     );
   }
