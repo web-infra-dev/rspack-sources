@@ -85,7 +85,13 @@ impl std::fmt::Debug for ConcatSource {
     let indent_str = format!("{:indent$}", "", indent = indent);
 
     writeln!(f, "{indent_str}ConcatSource::new(vec![")?;
-    for child in &*self.children.lock().unwrap() {
+
+    let original_children = self.children.lock().unwrap();
+    let children = match self.is_optimized.get() {
+      Some(optimized_children) => optimized_children,
+      None => original_children.as_ref(),
+    };
+    for child in children {
       writeln!(f, "{:indent$?},", child, indent = indent + 2)?;
     }
     write!(f, "{indent_str}]).boxed()")
@@ -156,16 +162,6 @@ impl ConcatSource {
 
 impl Source for ConcatSource {
   fn source(&self) -> SourceValue {
-    // let children = self.optimized_children();
-    // if children.len() == 1 {
-    //   children[0].source()
-    // } else {
-    //   let mut content = String::new();
-    //   for child in self.optimized_children() {
-    //     content.push_str(child.source().into_string_lossy().as_ref());
-    //   }
-    //   SourceValue::String(Cow::Owned(content))
-    // }
     let rope = self.rope();
     SourceValue::String(Cow::Owned(rope.to_string()))
   }
@@ -739,5 +735,45 @@ mod tests {
     // The key test: verify that nested ConcatSources are flattened
     // Should have 6 direct children instead of nested structure
     assert_eq!(outer_concat.optimized_children().len(), 1);
+  }
+
+  #[test]
+  fn debug() {
+    let inner_concat = ConcatSource::new([
+      RawStringSource::from("Hello "),
+      RawStringSource::from("World"),
+    ]);
+
+    let outer_concat = ConcatSource::new([
+      inner_concat.boxed(),
+      RawStringSource::from("!").boxed(),
+      ConcatSource::new([
+        RawStringSource::from(" How"),
+        RawStringSource::from(" are"),
+      ])
+      .boxed(),
+      RawStringSource::from(" you?").boxed(),
+    ]);
+
+    assert_eq!(
+      format!("{:?}", outer_concat),
+      r#"ConcatSource::new(vec![
+  RawStringSource::from_static("Hello ").boxed(),
+  RawStringSource::from_static("World").boxed(),
+  RawStringSource::from_static("!").boxed(),
+  RawStringSource::from_static(" How").boxed(),
+  RawStringSource::from_static(" are").boxed(),
+  RawStringSource::from_static(" you?").boxed(),
+]).boxed()"#
+    );
+
+    outer_concat.source();
+
+    assert_eq!(
+      format!("{:?}", outer_concat),
+      r#"ConcatSource::new(vec![
+  RawStringSource::from_static("Hello World! How are you?").boxed(),
+]).boxed()"#
+    );
   }
 }
