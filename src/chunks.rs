@@ -54,6 +54,7 @@ where
   ///
   /// This logic is consistent with webpack-sources to ensure continuous chunks.
   fn advance_to_next_mapping(&mut self) {
+    #[allow(clippy::while_let_on_iterator)]
     while let Some(mapping) = self.mappings.next() {
       if mapping.generated_line > self.current_generated_line
         || (mapping.generated_line == self.current_generated_line
@@ -74,6 +75,7 @@ where
 {
   type Item = (Rope<'text>, Mapping);
 
+  #[inline(always)]
   fn next(&mut self) -> Option<Self::Item> {
     while let Some((current_generated_index, char)) = self.char_indices.next() {
       // Check if current position matches a mapping
