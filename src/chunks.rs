@@ -88,9 +88,12 @@ where
         if mapping.generated_line == self.current_generated_line
           && mapping.generated_column == self.current_generated_column
         {
-          let chunk = self
-            .source
-            .byte_slice(self.tracking_generated_index..current_generated_index);
+          #[allow(unsafe_code)]
+          let chunk = unsafe {
+            self.source.byte_slice_unchecked(
+              self.tracking_generated_index..current_generated_index,
+            )
+          };
 
           let chunk_mapping = Mapping {
             generated_line: self.tracking_generated_line,
@@ -116,9 +119,12 @@ where
       }
 
       if char == '\n' {
-        let chunk = self.source.byte_slice(
-          self.tracking_generated_index..current_generated_index + 1,
-        );
+        #[allow(unsafe_code)]
+        let chunk = unsafe {
+          self.source.byte_slice_unchecked(
+            self.tracking_generated_index..current_generated_index + 1,
+          )
+        };
 
         let chunk_mapping = Mapping {
           generated_line: self.tracking_generated_line,
@@ -150,7 +156,12 @@ where
 
     let len = self.source.len();
     if self.tracking_generated_index < len {
-      let chunk = self.source.byte_slice(self.tracking_generated_index..len);
+      #[allow(unsafe_code)]
+      let chunk = unsafe {
+        self
+          .source
+          .byte_slice_unchecked(self.tracking_generated_index..len)
+      };
       let chunk_mapping = Mapping {
         generated_line: self.tracking_generated_line,
         generated_column: self.tracking_generated_column,
