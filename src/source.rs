@@ -255,27 +255,12 @@ impl<T: Source + 'static> SourceExt for T {
 }
 
 /// Options for [Source::map].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct MapOptions {
   /// Whether have columns info in generated [SourceMap] mappings.
   pub columns: bool,
   /// Whether the source will have changes, internal used for `ReplaceSource`, etc.
   pub(crate) final_source: bool,
-}
-
-impl PartialEq for MapOptions {
-  fn eq(&self, other: &Self) -> bool {
-    self.columns == other.columns && self.final_source == other.final_source
-  }
-}
-
-impl Eq for MapOptions {}
-
-impl Hash for MapOptions {
-  fn hash<H: Hasher>(&self, state: &mut H) {
-    self.columns.hash(state);
-    self.final_source.hash(state);
-  }
 }
 
 impl Default for MapOptions {

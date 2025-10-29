@@ -19,7 +19,7 @@ impl MemoryPool {
   /// Retrieves a reusable `Vec<usize>` from the pool with at least the requested capacity.
   pub fn pull_usize_vec(&self, requested_capacity: usize) -> Vec<usize> {
     if requested_capacity < MIN_POOL_CAPACITY
-      || self.usize_vec_pool.borrow().len() == 0
+      || self.usize_vec_pool.borrow().is_empty()
     {
       return Vec::with_capacity(requested_capacity);
     }
