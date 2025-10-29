@@ -135,7 +135,7 @@ impl<'a> Rope<'a> {
   }
 
   /// Returns an iterator over the characters and their byte positions.
-  pub fn char_indices(&self) -> CharIndices<'_> {
+  pub fn char_indices<'rope>(&'rope self) -> CharIndices<'rope, 'a> {
     match &self.repr {
       Repr::Light(s) => CharIndices {
         iter: CharIndicesEnum::Light {
@@ -729,23 +729,23 @@ impl<'a> Iterator for Lines<'_, 'a> {
   }
 }
 
-enum CharIndicesEnum<'a> {
+enum CharIndicesEnum<'rope, 'text> {
   Light {
-    iter: std::str::CharIndices<'a>,
+    iter: std::str::CharIndices<'text>,
   },
   Full {
-    chunks: &'a [(&'a str, usize)],
+    chunks: &'rope [(&'text str, usize)],
     chunk_index: usize,
     start_pos: usize,
-    iter: std::str::CharIndices<'a>,
+    iter: std::str::CharIndices<'text>,
   },
 }
 
-pub struct CharIndices<'a> {
-  iter: CharIndicesEnum<'a>,
+pub struct CharIndices<'rope, 'text> {
+  iter: CharIndicesEnum<'rope, 'text>,
 }
 
-impl Iterator for CharIndices<'_> {
+impl Iterator for CharIndices<'_, '_> {
   type Item = (usize, char);
 
   fn next(&mut self) -> Option<Self::Item> {

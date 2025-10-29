@@ -1,6 +1,7 @@
 //! Rusty [`webpack-sources`](https://github.com/webpack/webpack-sources) port.
 
 mod cached_source;
+mod chunks;
 mod concat_source;
 mod decoder;
 mod encoder;
