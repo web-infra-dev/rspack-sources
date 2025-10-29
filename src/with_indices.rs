@@ -1,25 +1,28 @@
-use std::{cell::OnceCell, marker::PhantomData, rc::Rc};
+use std::{cell::OnceCell, marker::PhantomData};
 
-use crate::{helpers::SourceText, work_context::{PooledVec, WorkContext}};
+use crate::{
+  helpers::SourceText,
+  work_context::{PooledUsizeVec, WorkContext},
+};
 
 #[derive(Debug)]
-pub struct WithIndices<'a, S>
+pub struct WithIndices<'context, 'text, S>
 where
-  S: SourceText<'a>,
+  S: SourceText<'text>,
 {
   /// line is a string reference
   pub line: S,
   /// the byte position of each `char` in `line` string slice .
-  pub indices_indexes: OnceCell<PooledVec>,
-  work_context: Rc<WorkContext>,
-  data: PhantomData<&'a S>,
+  pub indices_indexes: OnceCell<PooledUsizeVec<'context>>,
+  work_context: &'context WorkContext,
+  data: PhantomData<&'text S>,
 }
 
-impl<'a, S> WithIndices<'a, S>
+impl<'context, 'text, S> WithIndices<'context, 'text, S>
 where
-  S: SourceText<'a>,
+  S: SourceText<'text>,
 {
-  pub fn new(work_context: Rc<WorkContext>, line: S) -> Self {
+  pub fn new(work_context: &'context WorkContext, line: S) -> Self {
     Self {
       indices_indexes: OnceCell::new(),
       line,
@@ -34,11 +37,9 @@ where
       return S::default();
     }
 
-    let indices_indexes = &*self.indices_indexes.get_or_init(|| {
-      let mut vec = PooledVec::new(self.work_context.clone(), self.line.len());
-      for (i, _) in self.line.char_indices() {
-        vec.push(i);
-      }
+    let indices_indexes = self.indices_indexes.get_or_init(|| {
+      let mut vec = PooledUsizeVec::new(self.work_context, self.line.len());
+      vec.extend(self.line.char_indices().map(|(i, _)| i));
       vec
     });
 
@@ -59,15 +60,14 @@ where
 /// tests are just copy from `substring` crate
 #[cfg(test)]
 mod tests {
-  use std::rc::Rc;
-
-use crate::{work_context::WorkContext, Rope};
+  use crate::{work_context::WorkContext, Rope};
 
   use super::WithIndices;
   #[test]
   fn test_substring() {
     assert_eq!(
-      WithIndices::new(Rc::new(WorkContext::default()), Rope::from("foobar")).substring(0, 3),
+      WithIndices::new(&WorkContext::default(), Rope::from("foobar"))
+        .substring(0, 3),
       "foo"
     );
   }
@@ -75,26 +75,40 @@ use crate::{work_context::WorkContext, Rope};
   #[test]
   fn test_out_of_bounds() {
     assert_eq!(
-      WithIndices::new(Rc::new(WorkContext::default()), Rope::from("foobar")).substring(0, 10),
+      WithIndices::new(&WorkContext::default(), Rope::from("foobar"))
+        .substring(0, 10),
       "foobar"
     );
-    assert_eq!(WithIndices::new(Rc::new(WorkContext::default()), Rope::from("foobar")).substring(6, 10), "");
+    assert_eq!(
+      WithIndices::new(&WorkContext::default(), Rope::from("foobar"))
+        .substring(6, 10),
+      ""
+    );
   }
 
   #[test]
   fn test_start_less_than_end() {
-    assert_eq!(WithIndices::new(Rc::new(WorkContext::default()), Rope::from("foobar")).substring(3, 2), "");
+    assert_eq!(
+      WithIndices::new(&WorkContext::default(), Rope::from("foobar"))
+        .substring(3, 2),
+      ""
+    );
   }
 
   #[test]
   fn test_start_and_end_equal() {
-    assert_eq!(WithIndices::new(Rc::new(WorkContext::default()), Rope::from("foobar")).substring(3, 3), "");
+    assert_eq!(
+      WithIndices::new(&WorkContext::default(), Rope::from("foobar"))
+        .substring(3, 3),
+      ""
+    );
   }
 
   #[test]
   fn test_multiple_byte_characters() {
     assert_eq!(
-      WithIndices::new(Rc::new(WorkContext::default()), Rope::from("fõøbα®")).substring(2, 5),
+      WithIndices::new(&WorkContext::default(), Rope::from("fõøbα®"))
+        .substring(2, 5),
       "øbα"
     );
   }

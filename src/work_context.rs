@@ -1,5 +1,12 @@
-use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
+use std::{cell::RefCell, collections::BTreeMap};
 
+// Vector pooling minimum capacity threshold
+// Recommended threshold: 64
+// Reasons:
+// 1. Memory consideration: 64 * 8 bytes = 512 bytes, a reasonable memory block size
+// 2. Allocation cost: Allocations smaller than 512 bytes are usually fast, pooling benefits are limited
+// 3. Cache friendly: 512 bytes can typically utilize CPU cache well
+// 4. Empirical value: 64 is a proven balance point in real projects
 const MIN_POOL_CAPACITY: usize = 64;
 
 #[derive(Default, Debug)]
@@ -8,18 +15,16 @@ pub struct WorkContext {
 }
 
 impl WorkContext {
-  pub fn new() -> Self {
-    Self {
-      usize_vec_pool: RefCell::new(BTreeMap::new()),
-    }
-  }
-
   pub fn pull_usize_vec(&self, requested_capacity: usize) -> Vec<usize> {
-    if requested_capacity < MIN_POOL_CAPACITY {
+    if requested_capacity < MIN_POOL_CAPACITY
+      || self.usize_vec_pool.borrow().len() == 0
+    {
       return Vec::with_capacity(requested_capacity);
     }
     let mut usize_vec_pool = self.usize_vec_pool.borrow_mut();
-    if let Some((_, bucket)) = usize_vec_pool.range_mut(requested_capacity..).next() {
+    if let Some((_, bucket)) =
+      usize_vec_pool.range_mut(requested_capacity..).next()
+    {
       if let Some(mut v) = bucket.pop() {
         v.clear();
         return v;
@@ -40,13 +45,13 @@ impl WorkContext {
 }
 
 #[derive(Debug)]
-pub struct PooledVec {
+pub struct PooledUsizeVec<'a> {
   vec: Option<Vec<usize>>,
-  context: Rc<WorkContext>,
+  context: &'a WorkContext,
 }
 
-impl PooledVec {
-  pub fn new(context: Rc<WorkContext>, requested_capacity: usize) -> Self {
+impl<'a> PooledUsizeVec<'a> {
+  pub fn new(context: &'a WorkContext, requested_capacity: usize) -> Self {
     let vec = context.pull_usize_vec(requested_capacity);
     Self {
       vec: Some(vec),
@@ -63,7 +68,7 @@ impl PooledVec {
   }
 }
 
-impl Drop for PooledVec {
+impl Drop for PooledUsizeVec<'_> {
   fn drop(&mut self) {
     if let Some(vec) = self.vec.take() {
       self.context.return_usize_vec(vec);
@@ -71,7 +76,7 @@ impl Drop for PooledVec {
   }
 }
 
-impl std::ops::Deref for PooledVec {
+impl std::ops::Deref for PooledUsizeVec<'_> {
   type Target = Vec<usize>;
 
   fn deref(&self) -> &Self::Target {
@@ -79,7 +84,7 @@ impl std::ops::Deref for PooledVec {
   }
 }
 
-impl std::ops::DerefMut for PooledVec {
+impl std::ops::DerefMut for PooledUsizeVec<'_> {
   fn deref_mut(&mut self) -> &mut Self::Target {
     self.as_mut()
   }

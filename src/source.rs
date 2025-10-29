@@ -1,12 +1,21 @@
 use std::{
-  any::{Any, TypeId}, borrow::Cow, collections::BinaryHeap, convert::{TryFrom, TryInto}, fmt, hash::{Hash, Hasher}, rc::Rc, sync::Arc
+  any::{Any, TypeId},
+  borrow::Cow,
+  convert::{TryFrom, TryInto},
+  fmt,
+  hash::{Hash, Hasher},
+  rc::Rc,
+  sync::Arc,
 };
 
 use dyn_clone::DynClone;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-  helpers::{decode_mappings, StreamChunks}, rope::Rope, work_context::WorkContext, Result
+  helpers::{decode_mappings, StreamChunks},
+  rope::Rope,
+  work_context::WorkContext,
+  Result,
 };
 
 /// An alias for `Box<dyn Source>`.
@@ -272,7 +281,7 @@ impl Default for MapOptions {
     Self {
       columns: true,
       final_source: false,
-      work_context: Default::default()
+      work_context: Default::default(),
     }
   }
 }

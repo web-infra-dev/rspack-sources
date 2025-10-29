@@ -313,13 +313,13 @@ impl std::fmt::Debug for ReplaceSource {
   }
 }
 
-enum SourceContent<'a> {
-  Raw(Rope<'a>),
-  Lines(Vec<WithIndices<'a, Rope<'a>>>),
+enum SourceContent<'context, 'text> {
+  Raw(Rope<'text>),
+  Lines(Vec<WithIndices<'context, 'text, Rope<'text>>>),
 }
 
-fn check_content_at_position<'a>(
-  lines: &[WithIndices<'a, Rope<'a>>],
+fn check_content_at_position<'text>(
+  lines: &[WithIndices<'_, 'text, Rope<'text>>],
   line: u32,
   column: u32,
   expected: Rope, // FIXME: memory
@@ -391,7 +391,9 @@ impl StreamChunks for ReplaceSource {
           match source_content {
             SourceContent::Raw(source) => {
               let lines = split_into_lines(source)
-                .map(|line| WithIndices::new(options.work_context.clone(), line))
+                .map(|line| {
+                  WithIndices::new(options.work_context.as_ref(), line)
+                })
                 .collect::<Vec<_>>();
               let matched =
                 check_content_at_position(&lines, line, column, expected_chunk);
@@ -411,7 +413,7 @@ impl StreamChunks for ReplaceSource {
       &MapOptions {
         columns: options.columns,
         final_source: false,
-        work_context: options.work_context.clone()
+        work_context: options.work_context.clone(),
       },
       &mut |chunk, mut mapping| {
         // SAFETY: final_source is false in ReplaceSource

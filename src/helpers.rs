@@ -2,18 +2,26 @@ use std::{
   borrow::{BorrowMut, Cow},
   cell::{OnceCell, RefCell},
   marker::PhantomData,
-  ops::Range, rc::Rc,
+  ops::Range,
+  rc::Rc,
 };
 
 use rustc_hash::FxHashMap as HashMap;
 
 use crate::{
-  decoder::MappingsDecoder, encoder::create_encoder, linear_map::LinearMap, source::{Mapping, OriginalLocation}, with_indices::WithIndices, work_context::{self, WorkContext}, MapOptions, Rope, SourceMap
+  decoder::MappingsDecoder,
+  encoder::create_encoder,
+  linear_map::LinearMap,
+  source::{Mapping, OriginalLocation},
+  with_indices::WithIndices,
+  work_context::WorkContext,
+  MapOptions, Rope, SourceMap,
 };
 
 // Adding this type because sourceContentLine not happy
-type InnerSourceContentLine<'a, 'b> =
-  RefCell<LinearMap<OnceCell<Option<Vec<WithIndices<'a, Rope<'b>>>>>>>;
+type InnerSourceContentLine<'context, 'text> = RefCell<
+  LinearMap<OnceCell<Option<Vec<WithIndices<'context, 'text, Rope<'text>>>>>>,
+>;
 
 pub fn get_map<'a, S: StreamChunks>(
   stream: &'a S,
@@ -320,9 +328,14 @@ where
     MapOptions {
       columns: true,
       final_source: false,
-      work_context
+      work_context,
     } => stream_chunks_of_source_map_full(
-      work_context.clone(), source, source_map, on_chunk, on_source, on_name,
+      work_context.clone(),
+      source,
+      source_map,
+      on_chunk,
+      on_source,
+      on_name,
     ),
     MapOptions {
       columns: false,
@@ -424,7 +437,9 @@ where
   S: SourceText<'a> + 'a,
 {
   let lines = split_into_lines(&source);
-  let line_with_indices_list = lines.map(|line| WithIndices::new(work_context.clone(), line)).collect::<Vec<_>>();
+  let line_with_indices_list = lines
+    .map(|line| WithIndices::new(work_context.as_ref(), line))
+    .collect::<Vec<_>>();
 
   if line_with_indices_list.is_empty() {
     return GeneratedInfo {
@@ -832,7 +847,9 @@ where
                     match inner_source_contents.get(&inner_source_index) {
                       Some(Some(source_content)) => Some(
                         split_into_lines(source_content)
-                          .map(|line| WithIndices::new(work_context.clone(), line))
+                          .map(|line| {
+                            WithIndices::new(work_context.as_ref(), line)
+                          })
                           .collect(),
                       ),
                       _ => None,
@@ -932,7 +949,9 @@ where
                     match inner_source_contents.get(&inner_source_index) {
                       Some(Some(source_content)) => Some(
                         split_into_lines(source_content)
-                          .map(|line| WithIndices::new(work_context.clone(), line))
+                          .map(|line| {
+                            WithIndices::new(work_context.as_ref(), line)
+                          })
                           .collect(),
                       ),
                       _ => None,
