@@ -169,13 +169,18 @@ impl StreamChunks for BoxSource {
   fn stream_chunks<'a>(
     &'a self,
     options: &MapOptions,
+    work_context: &'a WorkContext,
     on_chunk: crate::helpers::OnChunk<'_, 'a>,
     on_source: crate::helpers::OnSource<'_, 'a>,
     on_name: crate::helpers::OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {
-    self
-      .as_ref()
-      .stream_chunks(options, on_chunk, on_source, on_name)
+    self.as_ref().stream_chunks(
+      options,
+      work_context,
+      on_chunk,
+      on_source,
+      on_name,
+    )
   }
 }
 
@@ -258,7 +263,6 @@ pub struct MapOptions {
   pub columns: bool,
   /// Whether the source will have changes, internal used for `ReplaceSource`, etc.
   pub(crate) final_source: bool,
-  pub(crate) work_context: Rc<WorkContext>,
 }
 
 impl PartialEq for MapOptions {
@@ -281,7 +285,6 @@ impl Default for MapOptions {
     Self {
       columns: true,
       final_source: false,
-      work_context: Default::default(),
     }
   }
 }

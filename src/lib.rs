@@ -30,6 +30,7 @@ pub use source::{
 pub use source_map_source::{
   SourceMapSource, SourceMapSourceOptions, WithoutOriginalOptions,
 };
+pub use work_context::WorkContext;
 
 /// Reexport `StreamChunks` related types.
 pub mod stream_chunks {

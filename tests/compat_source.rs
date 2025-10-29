@@ -7,7 +7,7 @@ use rspack_sources::stream_chunks::{
 };
 use rspack_sources::{
   ConcatSource, MapOptions, RawStringSource, Rope, Source, SourceExt,
-  SourceMap, SourceValue,
+  SourceMap, SourceValue, WorkContext,
 };
 
 #[derive(Debug, Eq)]
@@ -43,11 +43,13 @@ impl StreamChunks for CompatSource {
   fn stream_chunks<'a>(
     &'a self,
     options: &MapOptions,
+    work_context: &'a WorkContext,
     on_chunk: OnChunk<'_, 'a>,
     on_source: OnSource<'_, 'a>,
     on_name: OnName<'_, 'a>,
   ) -> GeneratedInfo {
     stream_chunks_default(
+      work_context,
       self.0,
       self.1.as_ref(),
       options,

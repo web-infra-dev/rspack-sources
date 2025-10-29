@@ -19,7 +19,7 @@ use crate::{
   rope::Rope,
   with_indices::WithIndices,
   BoxSource, MapOptions, Mapping, OriginalLocation, Source, SourceExt,
-  SourceMap, SourceValue,
+  SourceMap, SourceValue, WorkContext,
 };
 
 /// Decorates a Source with replacements and insertions of source code,
@@ -263,7 +263,7 @@ impl Source for ReplaceSource {
     if replacements.is_empty() {
       return self.inner.map(options);
     }
-    get_map(self, options)
+    get_map(&WorkContext::default(), self, options)
   }
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
@@ -337,6 +337,7 @@ impl StreamChunks for ReplaceSource {
   fn stream_chunks<'a>(
     &'a self,
     options: &crate::MapOptions,
+    work_context: &'a WorkContext,
     on_chunk: crate::helpers::OnChunk<'_, 'a>,
     on_source: crate::helpers::OnSource<'_, 'a>,
     on_name: crate::helpers::OnName<'_, 'a>,
@@ -391,9 +392,7 @@ impl StreamChunks for ReplaceSource {
           match source_content {
             SourceContent::Raw(source) => {
               let lines = split_into_lines(source)
-                .map(|line| {
-                  WithIndices::new(options.work_context.as_ref(), line)
-                })
+                .map(|line| WithIndices::new(work_context, line))
                 .collect::<Vec<_>>();
               let matched =
                 check_content_at_position(&lines, line, column, expected_chunk);
@@ -413,8 +412,8 @@ impl StreamChunks for ReplaceSource {
       &MapOptions {
         columns: options.columns,
         final_source: false,
-        work_context: options.work_context.clone(),
       },
+      work_context,
       &mut |chunk, mut mapping| {
         // SAFETY: final_source is false in ReplaceSource
         let chunk = chunk.unwrap();
