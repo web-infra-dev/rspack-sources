@@ -53,20 +53,18 @@ where
   /// processing position to ensure chunks remain continuous and non-overlapping.
   ///
   /// This logic is consistent with webpack-sources to ensure continuous chunks.
-  fn next_mapping(&mut self) -> Option<Mapping> {
-    loop {
-      match self.mappings.next() {
-        Some(next_mapping) => {
-          if next_mapping.generated_line > self.current_generated_line
-            || (next_mapping.generated_line == self.current_generated_line
-              && next_mapping.generated_column > self.current_generated_column)
-          {
-            break Some(next_mapping);
-          }
-        }
-        None => break None,
+  fn advance_to_next_mapping(&mut self) {
+    while let Some(mapping) = self.mappings.next() {
+      if mapping.generated_line > self.current_generated_line
+        || (mapping.generated_line == self.current_generated_line
+          && mapping.generated_column >= self.current_generated_column)
+      {
+        self.current_mapping = Some(mapping);
+        return;
       }
+      // Skip outdated mapping - continue loop
     }
+    self.current_mapping = None;
   }
 }
 
@@ -77,14 +75,9 @@ where
   type Item = (Rope<'text>, Mapping);
 
   fn next(&mut self) -> Option<Self::Item> {
-    loop {
-      let Some((current_generated_index, char)) = self.char_indices.next()
-      else {
-        break;
-      };
-
+    while let Some((current_generated_index, char)) = self.char_indices.next() {
       // Check if current position matches a mapping
-      if let Some(mapping) = self.current_mapping.take() {
+      if let Some(mapping) = self.current_mapping.as_ref() {
         if mapping.generated_line == self.current_generated_line
           && mapping.generated_column == self.current_generated_column
         {
@@ -105,16 +98,14 @@ where
           self.tracking_generated_index = current_generated_index;
           self.tracking_generated_line = self.current_generated_line;
           self.tracking_generated_column = self.current_generated_column;
-          self.tracking_mapping_original = mapping.original;
+          self.tracking_mapping_original = mapping.original.clone();
 
-          self.current_mapping = self.next_mapping();
+          self.advance_to_next_mapping();
 
           if !chunk.is_empty() {
             self.current_generated_column += char.len_utf16() as u32;
             return Some((chunk, chunk_mapping));
           }
-        } else {
-          self.current_mapping = Some(mapping);
         }
       }
 
@@ -144,7 +135,7 @@ where
         // This ensures mappings from previous lines don't interfere with current processing
         if let Some(mapping) = self.current_mapping.as_ref() {
           if mapping.generated_line < self.current_generated_line {
-            self.current_mapping = self.next_mapping();
+            self.advance_to_next_mapping();
           }
         }
 
@@ -154,6 +145,7 @@ where
       }
     }
 
+    // Emit final chunk if any content remains
     let len = self.source.len();
     if self.tracking_generated_index < len {
       #[allow(unsafe_code)]
