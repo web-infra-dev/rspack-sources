@@ -67,6 +67,16 @@ where
     }
     self.current_mapping = None;
   }
+
+  /// Skip mappings that have "backtracked" (are located before the current
+  /// processing position). This avoids emitting overlapping/retrograde mappings.
+  fn skip_backtracked_mappings(&mut self) {
+    if let Some(mapping) = self.current_mapping.as_ref() {
+      if mapping.generated_line < self.current_generated_line {
+        self.advance_to_next_mapping();
+      }
+    }
+  }
 }
 
 impl<'text, Mappings> Iterator for Chunks<'_, 'text, Mappings>
@@ -105,7 +115,19 @@ where
           self.advance_to_next_mapping();
 
           if !chunk.is_empty() {
-            self.current_generated_column += char.len_utf16() as u32;
+            if char == '\n' {
+              // Advance to next line
+              self.tracking_generated_index = current_generated_index + 1;
+              self.tracking_generated_line += 1;
+              self.tracking_generated_column = 0;
+
+              self.current_generated_line += 1;
+              self.current_generated_column = 0;
+
+              self.skip_backtracked_mappings();
+            } else {
+              self.current_generated_column += char.len_utf16() as u32;
+            }
             return Some((chunk, chunk_mapping));
           }
         }
@@ -133,13 +155,7 @@ where
         self.current_generated_line += 1;
         self.current_generated_column = 0;
 
-        // Skip outdated mappings after line advance
-        // This ensures mappings from previous lines don't interfere with current processing
-        if let Some(mapping) = self.current_mapping.as_ref() {
-          if mapping.generated_line < self.current_generated_line {
-            self.advance_to_next_mapping();
-          }
-        }
+        self.skip_backtracked_mappings();
 
         return Some((chunk, chunk_mapping));
       } else {
@@ -247,7 +263,7 @@ function StaticPage(_ref) {
     assert_eq!(generated_info, GeneratedInfo { generated_line: 12, generated_column: 1 });
   }
 
-    #[test]
+  #[test]
   fn test_swc_jsx_transformation() {
     let source = r#"export default function StaticPage(param) {
     var data = param.data;
@@ -255,7 +271,7 @@ function StaticPage(_ref) {
 }
 
 "#
-      .into();
+    .into();
     let mut generated_info = GeneratedInfo {
       generated_line: 1,
       generated_column: 0,
@@ -292,6 +308,9 @@ function StaticPage(_ref) {
 
   #[test]
   fn test_swc_jsx_minification() {
+    // export default function StaticPage({ data }) {
+    //   return <div>{data.foo}</div>
+    // }
     let source = r#"export default function e(e){var t=e.data;return React.createElement("div",null,t.foo)}
 "#
       .into();
