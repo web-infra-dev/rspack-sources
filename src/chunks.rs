@@ -77,6 +77,15 @@ where
       }
     }
   }
+
+  fn advance_to_next_line(&mut self, tracking_generated_index: usize) {
+    self.tracking_generated_index = tracking_generated_index;
+    self.tracking_generated_line += 1;
+    self.tracking_generated_column = 0;
+    self.current_generated_line += 1;
+    self.current_generated_column = 0;
+    self.skip_backtracked_mappings();
+  }
 }
 
 impl<'text, Mappings> Iterator for Chunks<'_, 'text, Mappings>
@@ -85,7 +94,6 @@ where
 {
   type Item = (Rope<'text>, Mapping);
 
-  #[inline(always)]
   fn next(&mut self) -> Option<Self::Item> {
     while let Some((current_generated_index, char)) = self.char_indices.next() {
       // Check if current position matches a mapping
@@ -116,15 +124,7 @@ where
 
           if !chunk.is_empty() {
             if char == '\n' {
-              // Advance to next line
-              self.tracking_generated_index = current_generated_index + 1;
-              self.tracking_generated_line += 1;
-              self.tracking_generated_column = 0;
-
-              self.current_generated_line += 1;
-              self.current_generated_column = 0;
-
-              self.skip_backtracked_mappings();
+              self.advance_to_next_line(current_generated_index + 1);
             } else {
               self.current_generated_column += char.len_utf16() as u32;
             }
@@ -147,15 +147,7 @@ where
           original: self.tracking_mapping_original.take(),
         };
 
-        // Advance to next line
-        self.tracking_generated_index = current_generated_index + 1;
-        self.tracking_generated_line += 1;
-        self.tracking_generated_column = 0;
-
-        self.current_generated_line += 1;
-        self.current_generated_column = 0;
-
-        self.skip_backtracked_mappings();
+        self.advance_to_next_line(current_generated_index + 1);
 
         return Some((chunk, chunk_mapping));
       } else {
