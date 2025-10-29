@@ -9,12 +9,14 @@ use std::{cell::RefCell, collections::BTreeMap};
 // 4. Empirical value: 64 is a proven balance point in real projects
 const MIN_POOL_CAPACITY: usize = 64;
 
+/// A memory pool for reusing `Vec<usize>` allocations to reduce memory allocation overhead.
 #[derive(Default, Debug)]
-pub struct WorkContext {
+pub struct MemoryPool {
   usize_vec_pool: RefCell<BTreeMap<usize, Vec<Vec<usize>>>>,
 }
 
-impl WorkContext {
+impl MemoryPool {
+  /// Retrieves a reusable `Vec<usize>` from the pool with at least the requested capacity.
   pub fn pull_usize_vec(&self, requested_capacity: usize) -> Vec<usize> {
     if requested_capacity < MIN_POOL_CAPACITY
       || self.usize_vec_pool.borrow().len() == 0
@@ -33,6 +35,7 @@ impl WorkContext {
     Vec::with_capacity(requested_capacity)
   }
 
+  /// Returns a `Vec<usize>` to the pool for future reuse.
   pub fn return_usize_vec(&self, vec: Vec<usize>) {
     if vec.capacity() < MIN_POOL_CAPACITY {
       return;
@@ -47,11 +50,11 @@ impl WorkContext {
 #[derive(Debug)]
 pub struct PooledUsizeVec<'a> {
   vec: Option<Vec<usize>>,
-  context: &'a WorkContext,
+  context: &'a MemoryPool,
 }
 
 impl<'a> PooledUsizeVec<'a> {
-  pub fn new(context: &'a WorkContext, requested_capacity: usize) -> Self {
+  pub fn new(context: &'a MemoryPool, requested_capacity: usize) -> Self {
     let vec = context.pull_usize_vec(requested_capacity);
     Self {
       vec: Some(vec),

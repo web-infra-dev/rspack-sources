@@ -10,7 +10,7 @@ use crate::{
     SourceText, StreamChunks,
   },
   source::{Mapping, OriginalLocation},
-  work_context, MapOptions, Rope, Source, SourceMap, SourceValue, WorkContext,
+  MapOptions, MemoryPool, Rope, Source, SourceMap, SourceValue,
 };
 
 /// Represents source code, it will create source map for the source code,
@@ -68,7 +68,7 @@ impl Source for OriginalSource {
   }
 
   fn map(&self, options: &MapOptions) -> Option<SourceMap> {
-    get_map(&WorkContext::default(), self, options)
+    get_map(&MemoryPool::default(), self, options)
   }
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
@@ -108,8 +108,8 @@ impl std::fmt::Debug for OriginalSource {
 impl StreamChunks for OriginalSource {
   fn stream_chunks<'a>(
     &'a self,
+    _: &'a MemoryPool,
     options: &MapOptions,
-    work_context: &'a WorkContext,
     on_chunk: OnChunk<'_, 'a>,
     on_source: OnSource<'_, 'a>,
     _on_name: OnName,

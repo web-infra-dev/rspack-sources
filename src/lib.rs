@@ -7,6 +7,7 @@ mod encoder;
 mod error;
 mod helpers;
 mod linear_map;
+mod memory_pool;
 mod original_source;
 mod raw_source;
 mod replace_source;
@@ -14,11 +15,11 @@ mod rope;
 mod source;
 mod source_map_source;
 mod with_indices;
-mod work_context;
 
 pub use cached_source::CachedSource;
 pub use concat_source::ConcatSource;
 pub use error::{Error, Result};
+pub use memory_pool::MemoryPool;
 pub use original_source::OriginalSource;
 pub use raw_source::{RawBufferSource, RawStringSource};
 pub use replace_source::{ReplaceSource, ReplacementEnforce};
@@ -30,7 +31,6 @@ pub use source::{
 pub use source_map_source::{
   SourceMapSource, SourceMapSourceOptions, WithoutOriginalOptions,
 };
-pub use work_context::WorkContext;
 
 /// Reexport `StreamChunks` related types.
 pub mod stream_chunks {

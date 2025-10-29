@@ -6,8 +6,8 @@ use rspack_sources::stream_chunks::{
   stream_chunks_default, GeneratedInfo, OnChunk, OnName, OnSource, StreamChunks,
 };
 use rspack_sources::{
-  ConcatSource, MapOptions, RawStringSource, Rope, Source, SourceExt,
-  SourceMap, SourceValue, WorkContext,
+  ConcatSource, MapOptions, MemoryPool, RawStringSource, Rope, Source,
+  SourceExt, SourceMap, SourceValue,
 };
 
 #[derive(Debug, Eq)]
@@ -42,14 +42,14 @@ impl Source for CompatSource {
 impl StreamChunks for CompatSource {
   fn stream_chunks<'a>(
     &'a self,
+    memory_pool: &'a MemoryPool,
     options: &MapOptions,
-    work_context: &'a WorkContext,
     on_chunk: OnChunk<'_, 'a>,
     on_source: OnSource<'_, 'a>,
     on_name: OnName<'_, 'a>,
   ) -> GeneratedInfo {
     stream_chunks_default(
-      work_context,
+      memory_pool,
       self.0,
       self.1.as_ref(),
       options,

@@ -9,7 +9,7 @@ use crate::{
     get_generated_source_info, stream_chunks_of_raw_source, OnChunk, OnName,
     OnSource, StreamChunks,
   },
-  MapOptions, Rope, Source, SourceMap, SourceValue, WorkContext,
+  MapOptions, MemoryPool, Rope, Source, SourceMap, SourceValue,
 };
 
 /// A string variant of [RawStringSource].
@@ -109,8 +109,8 @@ impl Hash for RawStringSource {
 impl StreamChunks for RawStringSource {
   fn stream_chunks<'a>(
     &'a self,
+    _: &'a MemoryPool,
     options: &MapOptions,
-    work_context: &'a WorkContext,
     on_chunk: OnChunk<'_, 'a>,
     on_source: OnSource<'_, 'a>,
     on_name: OnName<'_, 'a>,
@@ -243,8 +243,8 @@ impl Hash for RawBufferSource {
 impl StreamChunks for RawBufferSource {
   fn stream_chunks<'a>(
     &'a self,
+    _: &'a MemoryPool,
     options: &MapOptions,
-    work_context: &'a WorkContext,
     on_chunk: OnChunk<'_, 'a>,
     on_source: OnSource<'_, 'a>,
     on_name: OnName<'_, 'a>,

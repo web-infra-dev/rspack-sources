@@ -8,7 +8,7 @@ use crate::{
     get_map, stream_chunks_of_combined_source_map, stream_chunks_of_source_map,
     StreamChunks,
   },
-  work_context::{self, WorkContext},
+  memory_pool::MemoryPool,
   MapOptions, Rope, Source, SourceMap, SourceValue,
 };
 
@@ -109,7 +109,7 @@ impl Source for SourceMapSource {
     if self.inner_source_map.is_none() {
       return Some(self.source_map.clone());
     }
-    get_map(&WorkContext::default(), self, options)
+    get_map(&MemoryPool::default(), self, options)
   }
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
@@ -185,15 +185,15 @@ impl std::fmt::Debug for SourceMapSource {
 impl StreamChunks for SourceMapSource {
   fn stream_chunks<'a>(
     &'a self,
+    memory_pool: &'a MemoryPool,
     options: &MapOptions,
-    work_context: &'a WorkContext,
     on_chunk: crate::helpers::OnChunk<'_, 'a>,
     on_source: crate::helpers::OnSource<'_, 'a>,
     on_name: crate::helpers::OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {
     if let Some(inner_source_map) = &self.inner_source_map {
       stream_chunks_of_combined_source_map(
-        work_context,
+        memory_pool,
         &*self.value,
         &self.source_map,
         &self.name,
@@ -207,7 +207,7 @@ impl StreamChunks for SourceMapSource {
       )
     } else {
       stream_chunks_of_source_map(
-        work_context,
+        memory_pool,
         self.value.as_str(),
         &self.source_map,
         on_chunk,

@@ -1,9 +1,6 @@
 use std::{cell::OnceCell, marker::PhantomData};
 
-use crate::{
-  helpers::SourceText,
-  work_context::{PooledUsizeVec, WorkContext},
-};
+use crate::{helpers::SourceText, memory_pool::PooledUsizeVec, MemoryPool};
 
 #[derive(Debug)]
 pub struct WithIndices<'context, 'text, S>
@@ -14,7 +11,7 @@ where
   pub line: S,
   /// the byte position of each `char` in `line` string slice .
   pub indices_indexes: OnceCell<PooledUsizeVec<'context>>,
-  work_context: &'context WorkContext,
+  memory_pool: &'context MemoryPool,
   data: PhantomData<&'text S>,
 }
 
@@ -22,11 +19,11 @@ impl<'context, 'text, S> WithIndices<'context, 'text, S>
 where
   S: SourceText<'text>,
 {
-  pub fn new(work_context: &'context WorkContext, line: S) -> Self {
+  pub fn new(memory_pool: &'context MemoryPool, line: S) -> Self {
     Self {
       indices_indexes: OnceCell::new(),
       line,
-      work_context,
+      memory_pool,
       data: PhantomData,
     }
   }
@@ -38,7 +35,7 @@ where
     }
 
     let indices_indexes = self.indices_indexes.get_or_init(|| {
-      let mut vec = PooledUsizeVec::new(self.work_context, self.line.len());
+      let mut vec = PooledUsizeVec::new(self.memory_pool, self.line.len());
       vec.extend(self.line.char_indices().map(|(i, _)| i));
       vec
     });
@@ -60,13 +57,13 @@ where
 /// tests are just copy from `substring` crate
 #[cfg(test)]
 mod tests {
-  use crate::{work_context::WorkContext, Rope};
+  use crate::{MemoryPool, Rope};
 
   use super::WithIndices;
   #[test]
   fn test_substring() {
     assert_eq!(
-      WithIndices::new(&WorkContext::default(), Rope::from("foobar"))
+      WithIndices::new(&MemoryPool::default(), Rope::from("foobar"))
         .substring(0, 3),
       "foo"
     );
@@ -75,12 +72,12 @@ mod tests {
   #[test]
   fn test_out_of_bounds() {
     assert_eq!(
-      WithIndices::new(&WorkContext::default(), Rope::from("foobar"))
+      WithIndices::new(&MemoryPool::default(), Rope::from("foobar"))
         .substring(0, 10),
       "foobar"
     );
     assert_eq!(
-      WithIndices::new(&WorkContext::default(), Rope::from("foobar"))
+      WithIndices::new(&MemoryPool::default(), Rope::from("foobar"))
         .substring(6, 10),
       ""
     );
@@ -89,7 +86,7 @@ mod tests {
   #[test]
   fn test_start_less_than_end() {
     assert_eq!(
-      WithIndices::new(&WorkContext::default(), Rope::from("foobar"))
+      WithIndices::new(&MemoryPool::default(), Rope::from("foobar"))
         .substring(3, 2),
       ""
     );
@@ -98,7 +95,7 @@ mod tests {
   #[test]
   fn test_start_and_end_equal() {
     assert_eq!(
-      WithIndices::new(&WorkContext::default(), Rope::from("foobar"))
+      WithIndices::new(&MemoryPool::default(), Rope::from("foobar"))
         .substring(3, 3),
       ""
     );
@@ -107,7 +104,7 @@ mod tests {
   #[test]
   fn test_multiple_byte_characters() {
     assert_eq!(
-      WithIndices::new(&WorkContext::default(), Rope::from("fõøbα®"))
+      WithIndices::new(&MemoryPool::default(), Rope::from("fõøbα®"))
         .substring(2, 5),
       "øbα"
     );
