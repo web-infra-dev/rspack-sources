@@ -244,5 +244,47 @@ function StaticPage(_ref) {
         ("}".into(), Mapping { generated_line: 12, generated_column: 0, original: Some(OriginalLocation { source_index: 0, original_line: 3, original_column: 0, name_index: None }) })
       ]
     );
+    assert_eq!(generated_info, GeneratedInfo { generated_line: 12, generated_column: 1 });
+  }
+
+    #[test]
+  fn test_babel_swx_transformation() {
+    let source = r#"export default function StaticPage(param) {
+    var data = param.data;
+    return /*#__PURE__*/ React.createElement("div", null, data.foo);
+}
+
+"#
+      .into();
+    let mut generated_info = GeneratedInfo {
+      generated_line: 1,
+      generated_column: 0,
+    };
+    let chunks =
+      Chunks::new(&source, MappingsDecoder::new("AAAA,eAAe,SAASA,WAAW,KAAQ;QAAR,AAAEC,OAAF,MAAEA;IACnC,qBAAO,oBAACC,aAAKD,KAAKE,GAAG;AACvB"), &mut generated_info)
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+      chunks,
+      [
+        ("export default ".into(), Mapping { generated_line: 1, generated_column: 0, original: Some(OriginalLocation { source_index: 0, original_line: 1, original_column: 0, name_index: None }) }),
+        ("function ".into(), Mapping { generated_line: 1, generated_column: 15, original: Some(OriginalLocation { source_index: 0, original_line: 1, original_column: 15, name_index: None }) }),
+        ("StaticPage(".into(), Mapping { generated_line: 1, generated_column: 24, original: Some(OriginalLocation { source_index: 0, original_line: 1, original_column: 24, name_index: Some(0) }) }),
+        ("param".into(), Mapping { generated_line: 1, generated_column: 35, original: Some(OriginalLocation { source_index: 0, original_line: 1, original_column: 35, name_index: None }) }),
+        (") {\n".into(), Mapping { generated_line: 1, generated_column: 40, original: Some(OriginalLocation { source_index: 0, original_line: 1, original_column: 43, name_index: None }) }),
+        ("    var ".into(), Mapping { generated_line: 2, generated_column: 0, original: None }),
+        ("data = param.data;\n".into(), Mapping { generated_line: 2, generated_column: 8, original: Some(OriginalLocation { source_index: 0, original_line: 1, original_column: 35, name_index: None }) }),
+        ("    ".into(), Mapping { generated_line: 3, generated_column: 0, original: None }),
+        ("return /*#__PURE__*/ ".into(), Mapping { generated_line: 3, generated_column: 4, original: Some(OriginalLocation { source_index: 0, original_line: 2, original_column: 2, name_index: None }) }),
+        ("React.createElement(".into(), Mapping { generated_line: 3, generated_column: 25, original: Some(OriginalLocation { source_index: 0, original_line: 2, original_column: 9, name_index: None }) }),
+        ("\"div\", null, ".into(), Mapping { generated_line: 3, generated_column: 45, original: Some(OriginalLocation { source_index: 0, original_line: 2, original_column: 10, name_index: Some(2) }) }),
+        ("data.".into(), Mapping { generated_line: 3, generated_column: 58, original: Some(OriginalLocation { source_index: 0, original_line: 2, original_column: 15, name_index: Some(1) }) }),
+        ("foo".into(), Mapping { generated_line: 3, generated_column: 63, original: Some(OriginalLocation { source_index: 0, original_line: 2, original_column: 20, name_index: Some(3) }) }),
+        (");\n".into(), Mapping { generated_line: 3, generated_column: 66, original: Some(OriginalLocation { source_index: 0, original_line: 2, original_column: 23, name_index: None }) }),
+        ("}\n".into(), Mapping { generated_line: 4, generated_column: 0, original: Some(OriginalLocation { source_index: 0, original_line: 3, original_column: 0, name_index: None }) }),
+        ("\n".into(), Mapping { generated_line: 5, generated_column: 0, original: None })
+      ]
+    );
+    assert_eq!(generated_info, GeneratedInfo { generated_line: 6, generated_column: 0 });
   }
 }
