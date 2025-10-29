@@ -1,19 +1,12 @@
 use std::{
-  any::{Any, TypeId},
-  borrow::Cow,
-  convert::{TryFrom, TryInto},
-  fmt,
-  hash::{Hash, Hasher},
-  sync::Arc,
+  any::{Any, TypeId}, borrow::Cow, collections::BinaryHeap, convert::{TryFrom, TryInto}, fmt, hash::{Hash, Hasher}, rc::Rc, sync::Arc
 };
 
 use dyn_clone::DynClone;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-  helpers::{decode_mappings, StreamChunks},
-  rope::Rope,
-  Result,
+  helpers::{decode_mappings, StreamChunks}, rope::Rope, work_context::WorkContext, Result
 };
 
 /// An alias for `Box<dyn Source>`.
@@ -250,12 +243,28 @@ impl<T: Source + 'static> SourceExt for T {
 }
 
 /// Options for [Source::map].
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone)]
 pub struct MapOptions {
   /// Whether have columns info in generated [SourceMap] mappings.
   pub columns: bool,
   /// Whether the source will have changes, internal used for `ReplaceSource`, etc.
   pub(crate) final_source: bool,
+  pub(crate) work_context: Rc<WorkContext>,
+}
+
+impl PartialEq for MapOptions {
+  fn eq(&self, other: &Self) -> bool {
+    self.columns == other.columns && self.final_source == other.final_source
+  }
+}
+
+impl Eq for MapOptions {}
+
+impl Hash for MapOptions {
+  fn hash<H: Hasher>(&self, state: &mut H) {
+    self.columns.hash(state);
+    self.final_source.hash(state);
+  }
 }
 
 impl Default for MapOptions {
@@ -263,6 +272,7 @@ impl Default for MapOptions {
     Self {
       columns: true,
       final_source: false,
+      work_context: Default::default()
     }
   }
 }

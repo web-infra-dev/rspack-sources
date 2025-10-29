@@ -301,10 +301,7 @@ mod tests {
 
   #[test]
   fn should_produce_correct_output_for_cached_raw_source() {
-    let map_options = MapOptions {
-      columns: true,
-      final_source: true,
-    };
+    let map_options = MapOptions::new(true);
 
     let source = RawStringSource::from("Test\nTest\nTest\n");
     let mut on_chunk_count = 0;

@@ -391,7 +391,7 @@ impl StreamChunks for ReplaceSource {
           match source_content {
             SourceContent::Raw(source) => {
               let lines = split_into_lines(source)
-                .map(WithIndices::new)
+                .map(|line| WithIndices::new(options.work_context.clone(), line))
                 .collect::<Vec<_>>();
               let matched =
                 check_content_at_position(&lines, line, column, expected_chunk);
@@ -411,6 +411,7 @@ impl StreamChunks for ReplaceSource {
       &MapOptions {
         columns: options.columns,
         final_source: false,
+        work_context: options.work_context.clone()
       },
       &mut |chunk, mut mapping| {
         // SAFETY: final_source is false in ReplaceSource

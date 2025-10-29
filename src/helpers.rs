@@ -2,18 +2,13 @@ use std::{
   borrow::{BorrowMut, Cow},
   cell::{OnceCell, RefCell},
   marker::PhantomData,
-  ops::Range,
+  ops::Range, rc::Rc,
 };
 
 use rustc_hash::FxHashMap as HashMap;
 
 use crate::{
-  decoder::MappingsDecoder,
-  encoder::create_encoder,
-  linear_map::LinearMap,
-  source::{Mapping, OriginalLocation},
-  with_indices::WithIndices,
-  MapOptions, Rope, SourceMap,
+  decoder::MappingsDecoder, encoder::create_encoder, linear_map::LinearMap, source::{Mapping, OriginalLocation}, with_indices::WithIndices, work_context::{self, WorkContext}, MapOptions, Rope, SourceMap
 };
 
 // Adding this type because sourceContentLine not happy
@@ -33,6 +28,7 @@ pub fn get_map<'a, S: StreamChunks>(
     &MapOptions {
       columns: options.columns,
       final_source: true,
+      work_context: options.work_context.clone(),
     },
     // on_chunk
     &mut |_, mapping| {
@@ -317,24 +313,28 @@ where
     MapOptions {
       columns: true,
       final_source: true,
+      ..
     } => stream_chunks_of_source_map_final(
       source, source_map, on_chunk, on_source, on_name,
     ),
     MapOptions {
       columns: true,
       final_source: false,
+      work_context
     } => stream_chunks_of_source_map_full(
-      source, source_map, on_chunk, on_source, on_name,
+      work_context.clone(), source, source_map, on_chunk, on_source, on_name,
     ),
     MapOptions {
       columns: false,
       final_source: true,
+      ..
     } => stream_chunks_of_source_map_lines_final(
       source, source_map, on_chunk, on_source, on_name,
     ),
     MapOptions {
       columns: false,
       final_source: false,
+      ..
     } => stream_chunks_of_source_map_lines_full(
       source, source_map, on_chunk, on_source, on_name,
     ),
@@ -413,6 +413,7 @@ where
 }
 
 fn stream_chunks_of_source_map_full<'a, S>(
+  work_context: Rc<WorkContext>,
   source: S,
   source_map: &'a SourceMap,
   on_chunk: OnChunk<'_, 'a>,
@@ -423,7 +424,7 @@ where
   S: SourceText<'a> + 'a,
 {
   let lines = split_into_lines(&source);
-  let line_with_indices_list = lines.map(WithIndices::new).collect::<Vec<_>>();
+  let line_with_indices_list = lines.map(|line| WithIndices::new(work_context.clone(), line)).collect::<Vec<_>>();
 
   if line_with_indices_list.is_empty() {
     return GeneratedInfo {
@@ -710,6 +711,7 @@ type InnerSourceIndexValueMapping<'a> =
 
 #[allow(clippy::too_many_arguments)]
 pub fn stream_chunks_of_combined_source_map<'a, S>(
+  work_context: Rc<WorkContext>,
   source: S,
   source_map: &'a SourceMap,
   inner_source_name: &'a str,
@@ -830,7 +832,7 @@ where
                     match inner_source_contents.get(&inner_source_index) {
                       Some(Some(source_content)) => Some(
                         split_into_lines(source_content)
-                          .map(WithIndices::new)
+                          .map(|line| WithIndices::new(work_context.clone(), line))
                           .collect(),
                       ),
                       _ => None,
@@ -930,7 +932,7 @@ where
                     match inner_source_contents.get(&inner_source_index) {
                       Some(Some(source_content)) => Some(
                         split_into_lines(source_content)
-                          .map(WithIndices::new)
+                          .map(|line| WithIndices::new(work_context.clone(), line))
                           .collect(),
                       ),
                       _ => None,
@@ -1167,6 +1169,7 @@ where
           &MapOptions {
             columns: options.columns,
             final_source: false,
+            work_context: options.work_context.clone(),
           },
         );
       } else {

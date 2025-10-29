@@ -191,6 +191,7 @@ impl StreamChunks for SourceMapSource {
   ) -> crate::helpers::GeneratedInfo {
     if let Some(inner_source_map) = &self.inner_source_map {
       stream_chunks_of_combined_source_map(
+        options.work_context.clone(),
         &*self.value,
         &self.source_map,
         &self.name,
@@ -469,10 +470,7 @@ mod tests {
       .into_string_lossy()
       .into_owned());
     test_cached!(source, |s: &dyn Source| s.map(&MapOptions::default()));
-    test_cached!(source, |s: &dyn Source| s.map(&MapOptions {
-      columns: false,
-      final_source: true
-    }));
+    test_cached!(source, |s: &dyn Source| s.map(&MapOptions::new(false)));
   }
 
   #[test]
