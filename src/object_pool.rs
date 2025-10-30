@@ -142,45 +142,11 @@ thread_local! {
   pub static USIZE_VEC_POOL: OnceCell<ObjectPool<Vec<usize>>> = OnceCell::default();
 }
 
-pub static IN_USING_OBJECT_POOL: AtomicBool = AtomicBool::new(false);
-
-/// Executes a function with object pooling enabled for the current thread.
-///
-/// This function temporarily enables a thread-local object pool for `Vec<usize>` allocations,
-/// executes the provided closure, and then cleans up the pool to prevent memory leaks.
-pub fn using_object_pool<F, R>(f: F) -> R
-where
-  F: FnOnce() -> R,
-{
-  IN_USING_OBJECT_POOL.store(true, std::sync::atomic::Ordering::Relaxed);
-  // Initialize the thread-local pool if needed
-  USIZE_VEC_POOL.with(|once_cell| {
-    once_cell.get_or_init(ObjectPool::default);
-  });
-
-  let result = f();
-
-  IN_USING_OBJECT_POOL.store(false, std::sync::atomic::Ordering::Relaxed);
+/// Cleans up the object pool when not in pooling mode to prevent memory retention.
+pub fn cleanup_object_pool() {
   USIZE_VEC_POOL.with(|once_cell| {
     if let Some(pool) = once_cell.get() {
       pool.clear();
     }
   });
-
-  result
-}
-
-/// Cleans up the object pool when not in pooling mode to prevent memory retention.
-///
-/// This function is called automatically after map operations complete to ensure
-/// that memory is not retained unnecessarily outside of pooling contexts.
-pub fn cleanup_idle_object_pool() {
-  // Only clear if we're not in an explicit pooling context
-  if !IN_USING_OBJECT_POOL.load(std::sync::atomic::Ordering::Relaxed) {
-    USIZE_VEC_POOL.with(|once_cell| {
-      if let Some(pool) = once_cell.get() {
-        pool.clear();
-      }
-    });
-  }
 }

@@ -9,8 +9,7 @@ pub use criterion::*;
 pub use codspeed_criterion_compat::*;
 
 use rspack_sources::{
-  using_object_pool, BoxSource, MapOptions, OriginalSource, ReplaceSource,
-  SourceExt,
+  BoxSource, MapOptions, OriginalSource, ReplaceSource, SourceExt,
 };
 
 static LARGE_REPLACE_SOURCE: LazyLock<BoxSource> = LazyLock::new(|| {
@@ -36726,21 +36725,6 @@ pub fn benchmark_complex_replace_source_map(b: &mut Bencher) {
 
   b.iter(|| {
     black_box(source.map(&MapOptions::default()));
-  });
-}
-
-pub fn benchmark_complex_replace_source_map_in_using_object_pool(
-  b: &mut Bencher,
-) {
-  let source = LARGE_REPLACE_SOURCE.clone();
-
-  using_object_pool(|| {
-    // Warm up object pool
-    black_box(source.map(&MapOptions::default()));
-
-    b.iter(|| {
-      black_box(source.map(&MapOptions::default()));
-    });
   });
 }
 

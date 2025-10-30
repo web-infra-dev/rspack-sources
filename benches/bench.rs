@@ -18,7 +18,8 @@ use rspack_sources::{
 };
 
 use bench_complex_replace_source::{
-  benchmark_complex_replace_source_map, benchmark_complex_replace_source_source,
+  benchmark_complex_replace_source_map, benchmark_complex_replace_source_size,
+  benchmark_complex_replace_source_source,
 };
 use bench_source_map::{
   benchmark_parse_source_map_from_json, benchmark_source_map_clone,
@@ -28,14 +29,6 @@ use bench_source_map::{
 use benchmark_repetitive_react_components::{
   benchmark_repetitive_react_components_map,
   benchmark_repetitive_react_components_source,
-};
-
-use crate::{
-  bench_complex_replace_source::{
-    benchmark_complex_replace_source_map_in_using_object_pool,
-    benchmark_complex_replace_source_size,
-  },
-  benchmark_repetitive_react_components::benchmark_repetitive_react_components_map_in_using_object_pool,
 };
 
 const HELLOWORLD_JS: &str = include_str!(concat!(
@@ -168,11 +161,6 @@ fn bench_rspack_sources(criterion: &mut Criterion) {
   );
 
   group.bench_function(
-    "complex_replace_source_map_in_using_object_pool",
-    benchmark_complex_replace_source_map_in_using_object_pool,
-  );
-
-  group.bench_function(
     "complex_replace_source_source",
     benchmark_complex_replace_source_source,
   );
@@ -197,11 +185,6 @@ fn bench_rspack_sources(criterion: &mut Criterion) {
   group.bench_function(
     "repetitive_react_components_map",
     benchmark_repetitive_react_components_map,
-  );
-
-  group.bench_function(
-    "repetitive_react_components_map_in_using_object_pool",
-    benchmark_repetitive_react_components_map_in_using_object_pool,
   );
 
   group.bench_function(
