@@ -2,13 +2,8 @@ use std::{
   borrow::Cow,
   cell::RefCell,
   hash::{Hash, Hasher},
-  sync::{
-    atomic::{AtomicBool, Ordering},
-    Mutex,
-  },
 };
 
-use itertools::Itertools;
 use rustc_hash::FxHashMap as HashMap;
 
 use crate::{
@@ -44,9 +39,6 @@ use crate::{
 pub struct ReplaceSource {
   inner: BoxSource,
   replacements: Vec<Replacement>,
-  sorted_index: Mutex<Vec<usize>>,
-  /// Whether `replacements` is sorted.
-  is_sorted: AtomicBool,
 }
 
 /// Enforce replacement order when two replacement start and end are both equal
@@ -68,23 +60,23 @@ struct Replacement {
   content: String,
   name: Option<String>,
   enforce: ReplacementEnforce,
+  insertion_order: u32,
 }
 
-impl Replacement {
-  pub fn new(
-    start: u32,
-    end: u32,
-    content: String,
-    name: Option<String>,
-    enforce: ReplacementEnforce,
-  ) -> Self {
-    Self {
-      start,
-      end,
-      content,
-      name,
-      enforce,
-    }
+impl Ord for Replacement {
+  fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+    (self.start, self.end, self.enforce, self.insertion_order).cmp(&(
+      other.start,
+      other.end,
+      other.enforce,
+      other.insertion_order,
+    ))
+  }
+}
+
+impl PartialOrd for Replacement {
+  fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+    Some(self.cmp(other))
   }
 }
 
@@ -94,35 +86,7 @@ impl ReplaceSource {
     Self {
       inner: source.boxed(),
       replacements: Vec::new(),
-      sorted_index: Mutex::new(Vec::new()),
-      is_sorted: AtomicBool::new(true),
     }
-  }
-
-  fn sort_replacement(&self) {
-    if self.is_sorted.load(Ordering::SeqCst) {
-      return;
-    }
-    let sorted_index = self
-      .replacements
-      .iter()
-      .enumerate()
-      .sorted_by(|(_, a), (_, b)| {
-        (a.start, a.end, a.enforce).cmp(&(b.start, b.end, b.enforce))
-      })
-      .map(|replacement| replacement.0)
-      .collect::<Vec<_>>();
-    *self.sorted_index.lock().unwrap() = sorted_index;
-    self.is_sorted.store(true, Ordering::SeqCst)
-  }
-
-  fn sorted_replacement(&self) -> Vec<&Replacement> {
-    self.sort_replacement();
-    let sorted_index = self.sorted_index.lock().unwrap();
-    sorted_index
-      .iter()
-      .map(|idx| &self.replacements[*idx])
-      .collect()
   }
 }
 
@@ -151,14 +115,13 @@ impl ReplaceSource {
     content: &str,
     name: Option<&str>,
   ) {
-    self.replacements.push(Replacement::new(
+    self.replace_with_enforce(
       start,
       end,
-      content.into(),
-      name.map(|s| s.into()),
+      content,
+      name,
       ReplacementEnforce::Normal,
-    ));
-    self.is_sorted.store(false, Ordering::SeqCst);
+    );
   }
 
   /// Create a replacement with content at `[start, end)`, with ReplacementEnforce.
@@ -170,14 +133,30 @@ impl ReplaceSource {
     name: Option<&str>,
     enforce: ReplacementEnforce,
   ) {
-    self.replacements.push(Replacement::new(
+    let replacement = Replacement {
       start,
       end,
-      content.into(),
-      name.map(|s| s.into()),
+      content: content.into(),
+      name: name.map(|s| s.into()),
       enforce,
-    ));
-    self.is_sorted.store(false, Ordering::SeqCst);
+      insertion_order: self.replacements.len() as u32,
+    };
+
+    if let Some(last) = self.replacements.last() {
+      let cmp = replacement.cmp(last);
+      if cmp == std::cmp::Ordering::Greater || cmp == std::cmp::Ordering::Equal
+      {
+        self.replacements.push(replacement);
+      } else {
+        let insert_at = self
+          .replacements
+          .binary_search_by(|other| other.cmp(&replacement))
+          .unwrap_or_else(|e| e);
+        self.replacements.insert(insert_at, replacement);
+      }
+    } else {
+      self.replacements.push(replacement);
+    }
   }
 }
 
@@ -187,18 +166,13 @@ impl Source for ReplaceSource {
 
     // mut_string_push_str is faster that vec join
     // concatenate strings benchmark, see https://github.com/hoodie/concatenation_benchmarks-rs
-    let replacements = self.sorted_replacement();
-    if replacements.is_empty() {
+    if self.replacements.is_empty() {
       return SourceValue::String(inner_source_code);
     }
-    let max_len = replacements
-      .iter()
-      .map(|replacement| replacement.content.len())
-      .sum::<usize>()
-      + inner_source_code.len();
-    let mut source_code = String::with_capacity(max_len);
+    let capacity = self.size();
+    let mut source_code = String::with_capacity(capacity);
     let mut inner_pos = 0;
-    for replacement in replacements.iter() {
+    for replacement in &self.replacements {
       if inner_pos < replacement.start {
         let end_pos = (replacement.start as usize).min(inner_source_code.len());
         source_code.push_str(&inner_source_code[inner_pos as usize..end_pos]);
@@ -223,13 +197,12 @@ impl Source for ReplaceSource {
 
     // mut_string_push_str is faster that vec join
     // concatenate strings benchmark, see https://github.com/hoodie/concatenation_benchmarks-rs
-    let replacements = self.sorted_replacement();
-    if replacements.is_empty() {
+    if self.replacements.is_empty() {
       return inner_source_code;
     }
     let mut source_code = Rope::new();
     let mut inner_pos = 0;
-    for replacement in replacements.iter() {
+    for replacement in self.replacements.iter() {
       if inner_pos < replacement.start {
         let end_pos = (replacement.start as usize).min(inner_source_code.len());
         let slice = inner_source_code.byte_slice(inner_pos as usize..end_pos);
@@ -256,9 +229,8 @@ impl Source for ReplaceSource {
 
   fn size(&self) -> usize {
     let inner_source_size = self.inner.size();
-    let replacements = self.sorted_replacement();
 
-    if replacements.is_empty() {
+    if self.replacements.is_empty() {
       return inner_source_size;
     }
 
@@ -266,7 +238,7 @@ impl Source for ReplaceSource {
     let mut size = inner_source_size;
     let mut inner_pos = 0u32;
 
-    for replacement in replacements.iter() {
+    for replacement in self.replacements.iter() {
       // Add original content before replacement
       if inner_pos < replacement.start {
         // This content is already counted in inner_source_size, so no change needed
@@ -316,7 +288,7 @@ impl std::fmt::Debug for ReplaceSource {
     writeln!(f, "{indent_str}  let mut source = ReplaceSource::new(")?;
     writeln!(f, "{:indent$?}", &self.inner, indent = indent + 4)?;
     writeln!(f, "{indent_str}  );")?;
-    for repl in self.sorted_replacement() {
+    for repl in self.replacements.iter() {
       match repl.enforce {
         ReplacementEnforce::Pre => {
           writeln!(
@@ -375,7 +347,7 @@ impl StreamChunks for ReplaceSource {
     on_name: crate::helpers::OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {
     let on_name = RefCell::new(on_name);
-    let repls = &self.sorted_replacement();
+    let repls = &self.replacements;
     let mut pos: u32 = 0;
     let mut i: usize = 0;
     let mut replacement_end: Option<u32> = None;
@@ -546,9 +518,7 @@ impl StreamChunks for ReplaceSource {
           // Insert replacement content split into chunks by lines
           #[allow(unsafe_code)]
           // SAFETY: The safety of this operation relies on the fact that the `ReplaceSource` type will not delete the `replacements` during its entire lifetime.
-          let repl = unsafe {
-            std::mem::transmute::<&Replacement, &'a Replacement>(repls[i])
-          };
+          let repl = &repls[i];
 
           let lines =
             split_into_lines(&repl.content.as_str()).collect::<Vec<_>>();
@@ -789,8 +759,6 @@ impl Clone for ReplaceSource {
     Self {
       inner: self.inner.clone(),
       replacements: self.replacements.clone(),
-      sorted_index: Mutex::new(self.sorted_index.lock().unwrap().clone()),
-      is_sorted: AtomicBool::new(self.is_sorted.load(Ordering::SeqCst)),
     }
   }
 }
@@ -798,7 +766,7 @@ impl Clone for ReplaceSource {
 impl Hash for ReplaceSource {
   fn hash<H: Hasher>(&self, state: &mut H) {
     "ReplaceSource".hash(state);
-    for repl in self.sorted_replacement() {
+    for repl in &self.replacements {
       repl.hash(state);
     }
     self.inner.hash(state);
@@ -1217,7 +1185,7 @@ return <div>{data.foo}</div>
     assert_eq!(source.map(&MapOptions::default()), None);
     let mut hasher = twox_hash::XxHash64::default();
     source.hash(&mut hasher);
-    assert_eq!(format!("{:x}", hasher.finish()), "899cecd4bd020d47");
+    assert_eq!(format!("{:x}", hasher.finish()), "15e48cdf294935ab");
   }
 
   #[test]
