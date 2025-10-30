@@ -36735,6 +36735,9 @@ pub fn benchmark_complex_replace_source_map_in_using_object_pool(
   let source = LARGE_REPLACE_SOURCE.clone();
 
   using_object_pool(|| {
+    // Warm up object pool
+    black_box(source.map(&MapOptions::default()));
+
     b.iter(|| {
       black_box(source.map(&MapOptions::default()));
     });

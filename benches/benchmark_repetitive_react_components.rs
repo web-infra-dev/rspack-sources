@@ -3515,6 +3515,9 @@ pub fn benchmark_repetitive_react_components_map_in_using_object_pool(
   let source = REPETITIVE_1K_REACT_COMPONENTS_SOURCE.clone();
 
   using_object_pool(|| {
+    // Warm up object pool
+    black_box(source.map(&MapOptions::default()));
+
     b.iter(|| {
       black_box(source.map(&MapOptions::default()));
     });
