@@ -30,6 +30,8 @@ use benchmark_repetitive_react_components::{
   benchmark_repetitive_react_components_source,
 };
 
+use crate::bench_complex_replace_source::benchmark_complex_replace_source_size;
+
 const HELLOWORLD_JS: &str = include_str!(concat!(
   env!("CARGO_MANIFEST_DIR"),
   "/benches/fixtures/transpile-minify/files/helloworld.js"
@@ -162,6 +164,11 @@ fn bench_rspack_sources(criterion: &mut Criterion) {
   group.bench_function(
     "complex_replace_source_source",
     benchmark_complex_replace_source_source,
+  );
+
+  group.bench_function(
+    "complex_replace_source_size",
+    benchmark_complex_replace_source_size,
   );
 
   group.bench_function(

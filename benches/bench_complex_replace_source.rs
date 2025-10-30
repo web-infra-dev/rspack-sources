@@ -36738,3 +36738,11 @@ pub fn benchmark_complex_replace_source_source(b: &mut Bencher) {
     black_box(source.source());
   });
 }
+
+pub fn benchmark_complex_replace_source_size(b: &mut Bencher) {
+  let source = LARGE_REPLACE_SOURCE.clone();
+
+  b.iter(|| {
+    black_box(source.size());
+  });
+}
