@@ -1,6 +1,9 @@
 use std::{cell::OnceCell, marker::PhantomData};
 
-use crate::helpers::SourceText;
+use crate::{
+  helpers::SourceText,
+  object_pool::{Pooled, USIZE_VEC_POOL},
+};
 
 #[derive(Debug)]
 pub struct WithIndices<'text, S>
@@ -10,7 +13,7 @@ where
   /// line is a string reference
   pub line: S,
   /// the byte position of each `char` in `line` string slice .
-  pub indices_indexes: OnceCell<PooledUsizeVec<'context>>,
+  pub char_byte_indices: OnceCell<Pooled<Vec<usize>>>,
   data: PhantomData<&'text S>,
 }
 
@@ -20,7 +23,7 @@ where
 {
   pub fn new(line: S) -> Self {
     Self {
-      indices_indexes: OnceCell::new(),
+      char_byte_indices: OnceCell::new(),
       line,
       data: PhantomData,
     }
@@ -32,15 +35,17 @@ where
       return S::default();
     }
 
-    let indices_indexes = self.indices_indexes.get_or_init(|| {
-      let mut vec = PooledUsizeVec::new(self.line.len());
+    let char_byte_indices = self.char_byte_indices.get_or_init(|| {
+      let mut vec = USIZE_VEC_POOL.with(|pool| {
+        Pooled::new(pool.borrow().as_ref().cloned(), self.line.len())
+      });
       vec.extend(self.line.char_indices().map(|(i, _)| i));
       vec
     });
 
     let str_len = self.line.len();
-    let start = *indices_indexes.get(start_index).unwrap_or(&str_len);
-    let end = *indices_indexes.get(end_index).unwrap_or(&str_len);
+    let start = *char_byte_indices.get(start_index).unwrap_or(&str_len);
+    let end = *char_byte_indices.get(end_index).unwrap_or(&str_len);
 
     #[allow(unsafe_code)]
     unsafe {

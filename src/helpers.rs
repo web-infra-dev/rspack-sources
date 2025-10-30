@@ -833,7 +833,7 @@ where
                     match inner_source_contents.get(&inner_source_index) {
                       Some(Some(source_content)) => Some(
                         split_into_lines(source_content)
-                          .map(|line| WithIndices::new(line))
+                          .map(WithIndices::new)
                           .collect(),
                       ),
                       _ => None,
@@ -933,7 +933,7 @@ where
                     match inner_source_contents.get(&inner_source_index) {
                       Some(Some(source_content)) => Some(
                         split_into_lines(source_content)
-                          .map(|line| WithIndices::new(line))
+                          .map(WithIndices::new)
                           .collect(),
                       ),
                       _ => None,

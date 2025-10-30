@@ -391,7 +391,7 @@ impl StreamChunks for ReplaceSource {
           match source_content {
             SourceContent::Raw(source) => {
               let lines = split_into_lines(source)
-                .map(|line| WithIndices::new(line))
+                .map(WithIndices::new)
                 .collect::<Vec<_>>();
               let matched =
                 check_content_at_position(&lines, line, column, expected_chunk);
