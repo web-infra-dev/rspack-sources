@@ -60,16 +60,16 @@ struct Replacement {
   content: String,
   name: Option<String>,
   enforce: ReplacementEnforce,
-  index: u32,
+  insertion_order: u32,
 }
 
 impl Ord for Replacement {
   fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-    (self.start, self.end, self.enforce, self.index).cmp(&(
+    (self.start, self.end, self.enforce, self.insertion_order).cmp(&(
       other.start,
       other.end,
       other.enforce,
-      other.index,
+      other.insertion_order,
     ))
   }
 }
@@ -139,7 +139,7 @@ impl ReplaceSource {
       content: content.into(),
       name: name.map(|s| s.into()),
       enforce,
-      index: self.replacements.len() as u32,
+      insertion_order: self.replacements.len() as u32,
     };
 
     if let Some(last) = self.replacements.last() {
@@ -148,12 +148,10 @@ impl ReplaceSource {
       {
         self.replacements.push(replacement);
       } else {
-        let insert_at = match self
+        let insert_at = self
           .replacements
           .binary_search_by(|other| other.cmp(&replacement))
-        {
-          Ok(insert_at) | Err(insert_at) => insert_at,
-        };
+          .unwrap_or_else(|e| e);
         self.replacements.insert(insert_at, replacement);
       }
     } else {
