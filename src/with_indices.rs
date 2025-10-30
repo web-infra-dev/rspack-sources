@@ -1,9 +1,9 @@
 use std::{cell::OnceCell, marker::PhantomData};
 
-use crate::{helpers::SourceText, memory_pool::PooledUsizeVec, MemoryPool};
+use crate::helpers::SourceText;
 
 #[derive(Debug)]
-pub struct WithIndices<'context, 'text, S>
+pub struct WithIndices<'text, S>
 where
   S: SourceText<'text>,
 {
@@ -11,19 +11,17 @@ where
   pub line: S,
   /// the byte position of each `char` in `line` string slice .
   pub indices_indexes: OnceCell<PooledUsizeVec<'context>>,
-  memory_pool: &'context MemoryPool,
   data: PhantomData<&'text S>,
 }
 
-impl<'context, 'text, S> WithIndices<'context, 'text, S>
+impl<'text, S> WithIndices<'text, S>
 where
   S: SourceText<'text>,
 {
-  pub fn new(memory_pool: &'context MemoryPool, line: S) -> Self {
+  pub fn new(line: S) -> Self {
     Self {
       indices_indexes: OnceCell::new(),
       line,
-      memory_pool,
       data: PhantomData,
     }
   }
@@ -35,7 +33,7 @@ where
     }
 
     let indices_indexes = self.indices_indexes.get_or_init(|| {
-      let mut vec = PooledUsizeVec::new(self.memory_pool, self.line.len());
+      let mut vec = PooledUsizeVec::new(self.line.len());
       vec.extend(self.line.char_indices().map(|(i, _)| i));
       vec
     });
@@ -57,14 +55,13 @@ where
 /// tests are just copy from `substring` crate
 #[cfg(test)]
 mod tests {
-  use crate::{MemoryPool, Rope};
+  use crate::Rope;
 
   use super::WithIndices;
   #[test]
   fn test_substring() {
     assert_eq!(
-      WithIndices::new(&MemoryPool::default(), Rope::from("foobar"))
-        .substring(0, 3),
+      WithIndices::new(Rope::from("foobar")).substring(0, 3),
       "foo"
     );
   }
@@ -72,40 +69,26 @@ mod tests {
   #[test]
   fn test_out_of_bounds() {
     assert_eq!(
-      WithIndices::new(&MemoryPool::default(), Rope::from("foobar"))
-        .substring(0, 10),
+      WithIndices::new(Rope::from("foobar")).substring(0, 10),
       "foobar"
     );
-    assert_eq!(
-      WithIndices::new(&MemoryPool::default(), Rope::from("foobar"))
-        .substring(6, 10),
-      ""
-    );
+    assert_eq!(WithIndices::new(Rope::from("foobar")).substring(6, 10), "");
   }
 
   #[test]
   fn test_start_less_than_end() {
-    assert_eq!(
-      WithIndices::new(&MemoryPool::default(), Rope::from("foobar"))
-        .substring(3, 2),
-      ""
-    );
+    assert_eq!(WithIndices::new(Rope::from("foobar")).substring(3, 2), "");
   }
 
   #[test]
   fn test_start_and_end_equal() {
-    assert_eq!(
-      WithIndices::new(&MemoryPool::default(), Rope::from("foobar"))
-        .substring(3, 3),
-      ""
-    );
+    assert_eq!(WithIndices::new(Rope::from("foobar")).substring(3, 3), "");
   }
 
   #[test]
   fn test_multiple_byte_characters() {
     assert_eq!(
-      WithIndices::new(&MemoryPool::default(), Rope::from("fõøbα®"))
-        .substring(2, 5),
+      WithIndices::new(Rope::from("fõøbα®")).substring(2, 5),
       "øbα"
     );
   }

@@ -13,16 +13,14 @@ use crate::{
   linear_map::LinearMap,
   source::{Mapping, OriginalLocation},
   with_indices::WithIndices,
-  MapOptions, MemoryPool, Rope, SourceMap,
+  MapOptions, Rope, SourceMap,
 };
 
 // Adding this type because sourceContentLine not happy
-type InnerSourceContentLine<'context, 'text> = RefCell<
-  LinearMap<OnceCell<Option<Vec<WithIndices<'context, 'text, Rope<'text>>>>>>,
->;
+type InnerSourceContentLine<'text> =
+  RefCell<LinearMap<OnceCell<Option<Vec<WithIndices<'text, Rope<'text>>>>>>>;
 
 pub fn get_map<'a, S: StreamChunks>(
-  memory_pool: &'a MemoryPool,
   stream: &'a S,
   options: &'a MapOptions,
 ) -> Option<SourceMap> {
@@ -32,7 +30,6 @@ pub fn get_map<'a, S: StreamChunks>(
   let mut names: Vec<String> = Vec::new();
 
   stream.stream_chunks(
-    memory_pool,
     &MapOptions {
       columns: options.columns,
       final_source: true,
@@ -74,7 +71,6 @@ pub trait StreamChunks {
   /// [StreamChunks] abstraction
   fn stream_chunks<'a>(
     &'a self,
-    memory_pool: &'a MemoryPool,
     options: &MapOptions,
     on_chunk: OnChunk<'_, 'a>,
     on_source: OnSource<'_, 'a>,
@@ -94,7 +90,6 @@ pub type OnName<'a, 'b> = &'a mut dyn FnMut(u32, Cow<'b, str>);
 
 /// Default stream chunks behavior impl, see [webpack-sources streamChunks](https://github.com/webpack/webpack-sources/blob/9f98066311d53a153fdc7c633422a1d086528027/lib/helpers/streamChunks.js#L15-L35).
 pub fn stream_chunks_default<'a, S>(
-  memory_pool: &'a MemoryPool,
   source: S,
   source_map: Option<&'a SourceMap>,
   options: &MapOptions,
@@ -107,13 +102,7 @@ where
 {
   if let Some(map) = source_map {
     stream_chunks_of_source_map(
-      memory_pool,
-      source,
-      map,
-      on_chunk,
-      on_source,
-      on_name,
-      options,
+      source, map, on_chunk, on_source, on_name, options,
     )
   } else {
     stream_chunks_of_raw_source(source, options, on_chunk, on_source, on_name)
@@ -314,7 +303,6 @@ where
 }
 
 pub fn stream_chunks_of_source_map<'a, S>(
-  memory_pool: &'a MemoryPool,
   source: S,
   source_map: &'a SourceMap,
   on_chunk: OnChunk<'_, 'a>,
@@ -336,12 +324,7 @@ where
       columns: true,
       final_source: false,
     } => stream_chunks_of_source_map_full(
-      memory_pool,
-      source,
-      source_map,
-      on_chunk,
-      on_source,
-      on_name,
+      source, source_map, on_chunk, on_source, on_name,
     ),
     MapOptions {
       columns: false,
@@ -432,7 +415,6 @@ where
 }
 
 fn stream_chunks_of_source_map_full<'a, S>(
-  memory_pool: &'a MemoryPool,
   source: S,
   source_map: &'a SourceMap,
   on_chunk: OnChunk<'_, 'a>,
@@ -443,9 +425,8 @@ where
   S: SourceText<'a> + 'a,
 {
   let lines = split_into_lines(&source);
-  let line_with_indices_list = lines
-    .map(|line| WithIndices::new(memory_pool, line))
-    .collect::<Vec<_>>();
+  let line_with_indices_list =
+    lines.map(|line| WithIndices::new(line)).collect::<Vec<_>>();
 
   if line_with_indices_list.is_empty() {
     return GeneratedInfo {
@@ -732,7 +713,6 @@ type InnerSourceIndexValueMapping<'a> =
 
 #[allow(clippy::too_many_arguments)]
 pub fn stream_chunks_of_combined_source_map<'a, S>(
-  memory_pool: &'a MemoryPool,
   source: S,
   source_map: &'a SourceMap,
   inner_source_name: &'a str,
@@ -798,7 +778,6 @@ where
   };
 
   stream_chunks_of_source_map(
-    memory_pool,
     source.clone(),
     source_map,
     &mut |chunk, mapping| {
@@ -854,7 +833,7 @@ where
                     match inner_source_contents.get(&inner_source_index) {
                       Some(Some(source_content)) => Some(
                         split_into_lines(source_content)
-                          .map(|line| WithIndices::new(memory_pool, line))
+                          .map(|line| WithIndices::new(line))
                           .collect(),
                       ),
                       _ => None,
@@ -954,7 +933,7 @@ where
                     match inner_source_contents.get(&inner_source_index) {
                       Some(Some(source_content)) => Some(
                         split_into_lines(source_content)
-                          .map(|line| WithIndices::new(memory_pool, line))
+                          .map(|line| WithIndices::new(line))
                           .collect(),
                       ),
                       _ => None,
@@ -1119,7 +1098,6 @@ where
         }
         source_index_mapping.borrow_mut().insert(i, -2);
         stream_chunks_of_source_map(
-          memory_pool,
           source_content.unwrap(),
           inner_source_map,
           &mut |chunk, mapping| {
@@ -1217,7 +1195,6 @@ where
 }
 
 pub fn stream_and_get_source_and_map<'a, S: StreamChunks>(
-  memory_pool: &'a MemoryPool,
   input_source: &'a S,
   options: &MapOptions,
   on_chunk: OnChunk<'_, 'a>,
@@ -1230,7 +1207,6 @@ pub fn stream_and_get_source_and_map<'a, S: StreamChunks>(
   let mut names: Vec<String> = Vec::new();
 
   let generated_info = input_source.stream_chunks(
-    memory_pool,
     options,
     &mut |chunk, mapping| {
       mappings_encoder.encode(&mapping);

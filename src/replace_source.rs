@@ -18,8 +18,8 @@ use crate::{
   linear_map::LinearMap,
   rope::Rope,
   with_indices::WithIndices,
-  BoxSource, MapOptions, Mapping, MemoryPool, OriginalLocation, Source,
-  SourceExt, SourceMap, SourceValue,
+  BoxSource, MapOptions, Mapping, OriginalLocation, Source, SourceExt,
+  SourceMap, SourceValue,
 };
 
 /// Decorates a Source with replacements and insertions of source code,
@@ -263,7 +263,7 @@ impl Source for ReplaceSource {
     if replacements.is_empty() {
       return self.inner.map(options);
     }
-    get_map(&MemoryPool::default(), self, options)
+    get_map(self, options)
   }
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
@@ -313,13 +313,13 @@ impl std::fmt::Debug for ReplaceSource {
   }
 }
 
-enum SourceContent<'context, 'text> {
+enum SourceContent<'text> {
   Raw(Rope<'text>),
-  Lines(Vec<WithIndices<'context, 'text, Rope<'text>>>),
+  Lines(Vec<WithIndices<'text, Rope<'text>>>),
 }
 
 fn check_content_at_position<'text>(
-  lines: &[WithIndices<'_, 'text, Rope<'text>>],
+  lines: &[WithIndices<'text, Rope<'text>>],
   line: u32,
   column: u32,
   expected: Rope, // FIXME: memory
@@ -336,7 +336,6 @@ fn check_content_at_position<'text>(
 impl StreamChunks for ReplaceSource {
   fn stream_chunks<'a>(
     &'a self,
-    memory_pool: &'a MemoryPool,
     options: &crate::MapOptions,
     on_chunk: crate::helpers::OnChunk<'_, 'a>,
     on_source: crate::helpers::OnSource<'_, 'a>,
@@ -392,7 +391,7 @@ impl StreamChunks for ReplaceSource {
           match source_content {
             SourceContent::Raw(source) => {
               let lines = split_into_lines(source)
-                .map(|line| WithIndices::new(memory_pool, line))
+                .map(|line| WithIndices::new(line))
                 .collect::<Vec<_>>();
               let matched =
                 check_content_at_position(&lines, line, column, expected_chunk);
@@ -409,7 +408,6 @@ impl StreamChunks for ReplaceSource {
       };
 
     let result = self.inner.stream_chunks(
-      memory_pool,
       &MapOptions {
         columns: options.columns,
         final_source: false,

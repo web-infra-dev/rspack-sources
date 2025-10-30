@@ -11,8 +11,8 @@ use crate::{
   helpers::{get_map, GeneratedInfo, OnChunk, OnName, OnSource, StreamChunks},
   linear_map::LinearMap,
   source::{Mapping, OriginalLocation},
-  BoxSource, MapOptions, MemoryPool, RawStringSource, Rope, Source, SourceExt,
-  SourceMap, SourceValue,
+  BoxSource, MapOptions, RawStringSource, Rope, Source, SourceExt, SourceMap,
+  SourceValue,
 };
 
 /// Concatenate multiple [Source]s to a single [Source].
@@ -200,7 +200,7 @@ impl Source for ConcatSource {
   }
 
   fn map(&self, options: &MapOptions) -> Option<SourceMap> {
-    get_map(&MemoryPool::default(), self, options)
+    get_map(self, options)
   }
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
@@ -230,7 +230,6 @@ impl Eq for ConcatSource {}
 impl StreamChunks for ConcatSource {
   fn stream_chunks<'a>(
     &'a self,
-    memory_pool: &'a MemoryPool,
     options: &MapOptions,
     on_chunk: OnChunk<'_, 'a>,
     on_source: OnSource<'_, 'a>,
@@ -239,13 +238,7 @@ impl StreamChunks for ConcatSource {
     let children = self.optimized_children();
 
     if children.len() == 1 {
-      return children[0].stream_chunks(
-        memory_pool,
-        options,
-        on_chunk,
-        on_source,
-        on_name,
-      );
+      return children[0].stream_chunks(options, on_chunk, on_source, on_name);
     }
     let mut current_line_offset = 0;
     let mut current_column_offset = 0;
@@ -266,7 +259,6 @@ impl StreamChunks for ConcatSource {
         generated_line,
         generated_column,
       } = item.stream_chunks(
-        memory_pool,
         options,
         &mut |chunk, mapping| {
           let line = mapping.generated_line + current_line_offset;

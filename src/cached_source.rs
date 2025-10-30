@@ -13,7 +13,7 @@ use crate::{
   },
   rope::Rope,
   source::SourceValue,
-  BoxSource, MapOptions, MemoryPool, Source, SourceExt, SourceMap,
+  BoxSource, MapOptions, Source, SourceExt, SourceMap,
 };
 
 #[derive(Default)]
@@ -122,7 +122,6 @@ impl Source for CachedSource {
 impl StreamChunks for CachedSource {
   fn stream_chunks<'a>(
     &'a self,
-    memory_pool: &'a MemoryPool,
     options: &MapOptions,
     on_chunk: crate::helpers::OnChunk<'_, 'a>,
     on_source: crate::helpers::OnSource<'_, 'a>,
@@ -138,13 +137,7 @@ impl StreamChunks for CachedSource {
         let source = self.rope();
         if let Some(map) = map {
           stream_chunks_of_source_map(
-            memory_pool,
-            source,
-            map,
-            on_chunk,
-            on_source,
-            on_name,
-            options,
+            source, map, on_chunk, on_source, on_name, options,
           )
         } else {
           stream_chunks_of_raw_source(
@@ -154,7 +147,6 @@ impl StreamChunks for CachedSource {
       }
       None => {
         let (generated_info, map) = stream_and_get_source_and_map(
-          memory_pool,
           &self.inner,
           options,
           on_chunk,
@@ -316,7 +308,6 @@ mod tests {
     let mut on_source_count = 0;
     let mut on_name_count = 0;
     let generated_info = source.stream_chunks(
-      &MemoryPool::default(),
       &map_options,
       &mut |_chunk, _mapping| {
         on_chunk_count += 1;
@@ -331,7 +322,6 @@ mod tests {
 
     let cached_source = CachedSource::new(source);
     cached_source.stream_chunks(
-      &MemoryPool::default(),
       &map_options,
       &mut |_chunk, _mapping| {},
       &mut |_source_index, _source, _source_content| {},
@@ -342,7 +332,6 @@ mod tests {
     let mut cached_on_source_count = 0;
     let mut cached_on_name_count = 0;
     let cached_generated_info = cached_source.stream_chunks(
-      &MemoryPool::default(),
       &map_options,
       &mut |_chunk, _mapping| {
         cached_on_chunk_count += 1;

@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
   helpers::{decode_mappings, StreamChunks},
   rope::Rope,
-  MemoryPool, Result,
+  Result,
 };
 
 /// An alias for `Box<dyn Source>`.
@@ -166,19 +166,14 @@ dyn_clone::clone_trait_object!(Source);
 impl StreamChunks for BoxSource {
   fn stream_chunks<'a>(
     &'a self,
-    memory_pool: &'a MemoryPool,
     options: &MapOptions,
     on_chunk: crate::helpers::OnChunk<'_, 'a>,
     on_source: crate::helpers::OnSource<'_, 'a>,
     on_name: crate::helpers::OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {
-    self.as_ref().stream_chunks(
-      memory_pool,
-      options,
-      on_chunk,
-      on_source,
-      on_name,
-    )
+    self
+      .as_ref()
+      .stream_chunks(options, on_chunk, on_source, on_name)
   }
 }
 

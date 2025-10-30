@@ -1,4 +1,6 @@
-use std::{cell::RefCell, collections::BTreeMap};
+use std::{
+  cell::RefCell, collections::BTreeMap, rc::Rc, sync::atomic::AtomicBool,
+};
 
 // Vector pooling minimum capacity threshold
 // Recommended threshold: 64
@@ -9,19 +11,39 @@ use std::{cell::RefCell, collections::BTreeMap};
 // 4. Empirical value: 64 is a proven balance point in real projects
 const MIN_POOL_CAPACITY: usize = 64;
 
-/// A memory pool for reusing `Vec<usize>` allocations to reduce memory allocation overhead.
-#[derive(Default, Debug)]
-pub struct MemoryPool {
-  usize_vec_pool: RefCell<BTreeMap<usize, Vec<Vec<usize>>>>,
+trait Poolable {
+  fn with_capacity(capacity: usize) -> Self;
+  fn capacity(&self) -> usize;
+  fn clear(&mut self);
 }
 
-impl MemoryPool {
-  /// Retrieves a reusable `Vec<usize>` from the pool with at least the requested capacity.
-  pub fn pull_usize_vec(&self, requested_capacity: usize) -> Vec<usize> {
+impl<T> Poolable for Vec<T> {
+  fn with_capacity(capacity: usize) -> Self {
+    Vec::with_capacity(capacity)
+  }
+
+  fn capacity(&self) -> usize {
+    self.capacity()
+  }
+
+  fn clear(&mut self) {
+    self.clear();
+  }
+}
+
+/// A memory pool for reusing `T` allocations to reduce memory allocation overhead.
+#[derive(Default, Debug)]
+pub struct ObjectPool<T> {
+  usize_vec_pool: RefCell<BTreeMap<usize, Vec<T>>>,
+}
+
+impl<T: Poolable> ObjectPool<T> {
+  /// Retrieves a reusable `T` from the pool with at least the requested capacity.
+  pub fn pull(&self, requested_capacity: usize) -> T {
     if requested_capacity < MIN_POOL_CAPACITY
       || self.usize_vec_pool.borrow().is_empty()
     {
-      return Vec::with_capacity(requested_capacity);
+      return T::with_capacity(requested_capacity);
     }
     let mut usize_vec_pool = self.usize_vec_pool.borrow_mut();
     if let Some((_, bucket)) =
@@ -32,63 +54,75 @@ impl MemoryPool {
         return v;
       }
     }
-    Vec::with_capacity(requested_capacity)
+    T::with_capacity(requested_capacity)
   }
 
-  /// Returns a `Vec<usize>` to the pool for future reuse.
-  pub fn return_usize_vec(&self, vec: Vec<usize>) {
-    if vec.capacity() < MIN_POOL_CAPACITY {
+  /// Returns a `T` to the pool for future reuse.
+  pub fn ret(&self, object: T) {
+    if object.capacity() < MIN_POOL_CAPACITY {
       return;
     }
     let mut usize_vec_pool = self.usize_vec_pool.borrow_mut();
-    let cap = vec.capacity();
+    let cap = object.capacity();
     let bucket = usize_vec_pool.entry(cap).or_default();
-    bucket.push(vec);
+    bucket.push(object);
   }
 }
 
 #[derive(Debug)]
-pub struct PooledUsizeVec<'a> {
-  vec: Option<Vec<usize>>,
-  context: &'a MemoryPool,
+pub struct Pooled<T: Poolable> {
+  object: Option<T>,
+  pool: Rc<ObjectPool<T>>,
 }
 
-impl<'a> PooledUsizeVec<'a> {
-  pub fn new(context: &'a MemoryPool, requested_capacity: usize) -> Self {
-    let vec = context.pull_usize_vec(requested_capacity);
+impl<T: Poolable> Pooled<T> {
+  fn new(pool: Rc<ObjectPool<T>>, requested_capacity: usize) -> Self {
+    let object = pool.pull(requested_capacity);
     Self {
-      vec: Some(vec),
-      context,
+      object: Some(object),
+      pool,
     }
   }
 
-  pub fn as_mut(&mut self) -> &mut Vec<usize> {
-    self.vec.as_mut().unwrap()
+  pub fn as_mut(&mut self) -> &mut T {
+    self.object.as_mut().unwrap()
   }
 
-  pub fn as_ref(&self) -> &Vec<usize> {
-    self.vec.as_ref().unwrap()
+  pub fn as_ref(&self) -> &T {
+    self.object.as_ref().unwrap()
   }
 }
 
-impl Drop for PooledUsizeVec<'_> {
+impl<T: Poolable> Drop for Pooled<T> {
   fn drop(&mut self) {
-    if let Some(vec) = self.vec.take() {
-      self.context.return_usize_vec(vec);
+    if let Some(object) = self.object.take() {
+      self.pool.ret(object);
     }
   }
 }
 
-impl std::ops::Deref for PooledUsizeVec<'_> {
-  type Target = Vec<usize>;
+impl<T: Poolable> std::ops::Deref for Pooled<T> {
+  type Target = T;
 
   fn deref(&self) -> &Self::Target {
     self.as_ref()
   }
 }
 
-impl std::ops::DerefMut for PooledUsizeVec<'_> {
+impl<T: Poolable> std::ops::DerefMut for Pooled<T> {
   fn deref_mut(&mut self) -> &mut Self::Target {
     self.as_mut()
   }
+}
+
+pub(crate) const USING_OBJECT_POOL: AtomicBool = AtomicBool::new(false);
+
+pub fn using_object_pool<F, R>(f: F) -> R
+where
+  F: FnOnce() -> R,
+{
+  USING_OBJECT_POOL.store(true, std::sync::atomic::Ordering::SeqCst);
+  let result = f();
+  USING_OBJECT_POOL.store(false, std::sync::atomic::Ordering::SeqCst);
+  result
 }

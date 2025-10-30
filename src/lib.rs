@@ -19,7 +19,6 @@ mod with_indices;
 pub use cached_source::CachedSource;
 pub use concat_source::ConcatSource;
 pub use error::{Error, Result};
-pub use memory_pool::MemoryPool;
 pub use original_source::OriginalSource;
 pub use raw_source::{RawBufferSource, RawStringSource};
 pub use replace_source::{ReplaceSource, ReplacementEnforce};

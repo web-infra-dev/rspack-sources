@@ -8,7 +8,6 @@ use crate::{
     get_map, stream_chunks_of_combined_source_map, stream_chunks_of_source_map,
     StreamChunks,
   },
-  memory_pool::MemoryPool,
   MapOptions, Rope, Source, SourceMap, SourceValue,
 };
 
@@ -109,7 +108,7 @@ impl Source for SourceMapSource {
     if self.inner_source_map.is_none() {
       return Some(self.source_map.clone());
     }
-    get_map(&MemoryPool::default(), self, options)
+    get_map(self, options)
   }
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
@@ -185,7 +184,6 @@ impl std::fmt::Debug for SourceMapSource {
 impl StreamChunks for SourceMapSource {
   fn stream_chunks<'a>(
     &'a self,
-    memory_pool: &'a MemoryPool,
     options: &MapOptions,
     on_chunk: crate::helpers::OnChunk<'_, 'a>,
     on_source: crate::helpers::OnSource<'_, 'a>,
@@ -193,7 +191,6 @@ impl StreamChunks for SourceMapSource {
   ) -> crate::helpers::GeneratedInfo {
     if let Some(inner_source_map) = &self.inner_source_map {
       stream_chunks_of_combined_source_map(
-        memory_pool,
         &*self.value,
         &self.source_map,
         &self.name,
@@ -207,7 +204,6 @@ impl StreamChunks for SourceMapSource {
       )
     } else {
       stream_chunks_of_source_map(
-        memory_pool,
         self.value.as_str(),
         &self.source_map,
         on_chunk,
