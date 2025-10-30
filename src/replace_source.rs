@@ -255,7 +255,40 @@ impl Source for ReplaceSource {
   }
 
   fn size(&self) -> usize {
-    self.source().as_bytes().len()
+    let inner_source_size = self.inner.size();
+    let replacements = self.sorted_replacement();
+
+    if replacements.is_empty() {
+      return inner_source_size;
+    }
+
+    // Simulate the replacement process to calculate accurate size
+    let mut size = inner_source_size;
+    let mut inner_pos = 0u32;
+
+    for replacement in replacements.iter() {
+      // Add original content before replacement
+      if inner_pos < replacement.start {
+        // This content is already counted in inner_source_size, so no change needed
+      }
+
+      // Handle the replacement itself
+      let original_length = replacement
+        .end
+        .saturating_sub(replacement.start.max(inner_pos))
+        as usize;
+      let replacement_length = replacement.content.len();
+
+      // Subtract original content length and add replacement content length
+      size = size
+        .saturating_sub(original_length)
+        .saturating_add(replacement_length);
+
+      // Move position forward, handling overlaps
+      inner_pos = inner_pos.max(replacement.end);
+    }
+
+    size
   }
 
   fn map(&self, options: &crate::MapOptions) -> Option<SourceMap> {
@@ -1266,5 +1299,97 @@ return <div>{data.foo}</div>
   source.boxed()
 }"#
     );
+  }
+
+  #[test]
+  fn size_matches_generated_content_len() {
+    let mut source = ReplaceSource::new(
+      RawStringSource::from_static("import { jsx as _jsx, jsxs as _jsxs } from \"react/jsx-runtime\";\nimport React from 'react';\nimport Component__0 from './d0/f0.jsx';\n// import Component__1 from './d0/f1.jsx'\n// import Component__2 from './d0/f2.jsx'\n// import Component__3 from './d0/f3.jsx'\n// import Component__4 from './d0/f4.jsx'\n// import Component__5 from './d0/f5.jsx'\n// import Component__6 from './d0/f6.jsx'\n// import Component__7 from './d0/f7.jsx'\n// import Component__8 from './d0/f8.jsx'\nfunction Navbar(param) {\n    var show = param.show;\n    return /*#__PURE__*/ _jsxs(\"div\", {\n        children: [\n            /*#__PURE__*/ _jsx(Component__0, {}),\n            /*#__PURE__*/ _jsx(Component__1, {}),\n            /*#__PURE__*/ _jsx(Component__2, {}),\n            /*#__PURE__*/ _jsx(Component__3, {}),\n            /*#__PURE__*/ _jsx(Component__4, {}),\n            /*#__PURE__*/ _jsx(Component__5, {}),\n            /*#__PURE__*/ _jsx(Component__6, {}),\n            /*#__PURE__*/ _jsx(Component__7, {}),\n            /*#__PURE__*/ _jsx(Component__8, {})\n        ]\n    });\n}\nexport default Navbar;\n").boxed()
+    );
+    source.replace(0, 63, "", None);
+    source.replace(64, 90, "", None);
+    source.replace(91, 130, "", None);
+    source.replace(
+      544,
+      549,
+      "(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsxs)",
+      None,
+    );
+    source.replace(
+      605,
+      609,
+      "(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)",
+      None,
+    );
+    source.replace(
+      610,
+      622,
+      "_d0_f0_jsx__WEBPACK_IMPORTED_MODULE_2__[\"default\"]",
+      None,
+    );
+    source.replace(
+      655,
+      659,
+      "(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)",
+      None,
+    );
+    source.replace(
+      705,
+      709,
+      "(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)",
+      None,
+    );
+    source.replace(
+      755,
+      759,
+      "(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)",
+      None,
+    );
+    source.replace(
+      805,
+      809,
+      "(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)",
+      None,
+    );
+    source.replace(
+      855,
+      859,
+      "(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)",
+      None,
+    );
+    source.replace(
+      905,
+      909,
+      "(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)",
+      None,
+    );
+    source.replace(
+      955,
+      959,
+      "(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)",
+      None,
+    );
+    source.replace(
+      1005,
+      1009,
+      "(0,react_jsx_runtime__WEBPACK_IMPORTED_MODULE_0__.jsx)",
+      None,
+    );
+    source.replace(
+      1048,
+      1063,
+      "/* ESM default export */ const __WEBPACK_DEFAULT_EXPORT__ = (",
+      None,
+    );
+    source.replace(1048, 1063, "", None);
+    source.replace_with_enforce(
+      1069,
+      1070,
+      ");",
+      None,
+      ReplacementEnforce::Post,
+    );
+
+    assert_eq!(source.size(), source.source().into_string_lossy().len());
   }
 }
