@@ -334,14 +334,12 @@ where
     MapOptions {
       columns: false,
       final_source: true,
-      ..
     } => stream_chunks_of_source_map_lines_final(
       source, source_map, on_chunk, on_source, on_name,
     ),
     MapOptions {
       columns: false,
       final_source: false,
-      ..
     } => stream_chunks_of_source_map_lines_full(
       source, source_map, on_chunk, on_source, on_name,
     ),
@@ -430,8 +428,7 @@ where
   S: SourceText<'a> + 'a,
 {
   let lines = split_into_lines(&source);
-  let line_with_indices_list =
-    lines.map(|line| WithIndices::new(line)).collect::<Vec<_>>();
+  let line_with_indices_list = lines.map(WithIndices::new).collect::<Vec<_>>();
 
   if line_with_indices_list.is_empty() {
     return GeneratedInfo {
