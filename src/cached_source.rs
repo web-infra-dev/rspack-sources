@@ -19,6 +19,7 @@ use crate::{
 #[derive(Default)]
 struct CachedData {
   hash: OnceLock<u64>,
+  size: OnceLock<usize>,
   line_only_map: OnceLock<Option<SourceMap>>,
   columns_map: OnceLock<Option<SourceMap>>,
 }
@@ -95,7 +96,7 @@ impl Source for CachedSource {
   }
 
   fn size(&self) -> usize {
-    self.inner.size()
+    *self.cache.size.get_or_init(|| self.inner.size())
   }
 
   fn map(&self, options: &MapOptions) -> Option<SourceMap> {
