@@ -3504,6 +3504,16 @@ static REPETITIVE_1K_REACT_COMPONENTS_SOURCE: LazyLock<BoxSource> =
 pub fn benchmark_repetitive_react_components_map(b: &mut Bencher) {
   let source = REPETITIVE_1K_REACT_COMPONENTS_SOURCE.clone();
 
+  b.iter(|| {
+    black_box(source.map(&MapOptions::default()));
+  });
+}
+
+pub fn benchmark_repetitive_react_components_map_in_using_object_pool(
+  b: &mut Bencher,
+) {
+  let source = REPETITIVE_1K_REACT_COMPONENTS_SOURCE.clone();
+
   using_object_pool(|| {
     b.iter(|| {
       black_box(source.map(&MapOptions::default()));

@@ -1,4 +1,9 @@
-use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
+use std::{
+  cell::{OnceCell, RefCell},
+  collections::BTreeMap,
+  rc::Rc,
+  sync::atomic::AtomicBool,
+};
 
 // Vector pooling minimum capacity threshold
 // Recommended threshold: 64
@@ -71,6 +76,10 @@ impl<T: Poolable> ObjectPool<T> {
     let bucket = objects.entry(cap).or_default();
     bucket.push(object);
   }
+
+  pub fn clear(&self) {
+    self.objects.borrow_mut().clear();
+  }
 }
 
 /// A smart pointer that holds a pooled object and automatically returns it to the pool when dropped.
@@ -130,8 +139,10 @@ impl<T: Poolable> std::ops::DerefMut for Pooled<T> {
 }
 
 thread_local! {
-  pub static USIZE_VEC_POOL: RefCell<Option<ObjectPool<Vec<usize>>>> = RefCell::default();
+  pub static USIZE_VEC_POOL: OnceCell<ObjectPool<Vec<usize>>> = OnceCell::default();
 }
+
+pub static IN_USING_OBJECT_POOL: AtomicBool = AtomicBool::new(false);
 
 /// Executes a function with object pooling enabled for the current thread.
 ///
@@ -141,21 +152,35 @@ pub fn using_object_pool<F, R>(f: F) -> R
 where
   F: FnOnce() -> R,
 {
+  IN_USING_OBJECT_POOL.store(true, std::sync::atomic::Ordering::Relaxed);
   // Initialize the thread-local pool if needed
-  USIZE_VEC_POOL.with(|pool| {
-    let mut pool_ref = pool.borrow_mut();
-    if pool_ref.is_none() {
-      *pool_ref = Some(ObjectPool::default());
-    }
+  USIZE_VEC_POOL.with(|once_cell| {
+    once_cell.get_or_init(ObjectPool::default);
   });
 
   let result = f();
 
-  // Clean up the pool to prevent memory retention
-  // This ensures no memory is held between different pooling sessions
-  USIZE_VEC_POOL.with(|pool| {
-    pool.borrow_mut().take();
+  IN_USING_OBJECT_POOL.store(false, std::sync::atomic::Ordering::Relaxed);
+  USIZE_VEC_POOL.with(|once_cell| {
+    if let Some(pool) = once_cell.get() {
+      pool.clear();
+    }
   });
 
   result
+}
+
+/// Cleans up the object pool when not in pooling mode to prevent memory retention.
+///
+/// This function is called automatically after map operations complete to ensure
+/// that memory is not retained unnecessarily outside of pooling contexts.
+pub fn cleanup_idle_object_pool() {
+  // Only clear if we're not in an explicit pooling context
+  if !IN_USING_OBJECT_POOL.load(std::sync::atomic::Ordering::Relaxed) {
+    USIZE_VEC_POOL.with(|once_cell| {
+      if let Some(pool) = once_cell.get() {
+        pool.clear();
+      }
+    });
+  }
 }

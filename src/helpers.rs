@@ -11,6 +11,7 @@ use crate::{
   decoder::MappingsDecoder,
   encoder::create_encoder,
   linear_map::LinearMap,
+  object_pool::cleanup_idle_object_pool,
   source::{Mapping, OriginalLocation},
   with_indices::WithIndices,
   MapOptions, Rope, SourceMap,
@@ -62,8 +63,12 @@ pub fn get_map<'a, S: StreamChunks>(
     },
   );
   let mappings = mappings_encoder.drain();
-  (!mappings.is_empty())
-    .then(|| SourceMap::new(mappings, sources, sources_content, names))
+  let source_map = (!mappings.is_empty())
+    .then(|| SourceMap::new(mappings, sources, sources_content, names));
+
+  cleanup_idle_object_pool();
+
+  source_map
 }
 
 /// [StreamChunks] abstraction, see [webpack-sources source.streamChunks](https://github.com/webpack/webpack-sources/blob/9f98066311d53a153fdc7c633422a1d086528027/lib/helpers/streamChunks.js#L13).

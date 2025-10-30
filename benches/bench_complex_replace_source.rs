@@ -36724,6 +36724,16 @@ static LARGE_REPLACE_SOURCE: LazyLock<BoxSource> = LazyLock::new(|| {
 pub fn benchmark_complex_replace_source_map(b: &mut Bencher) {
   let source = LARGE_REPLACE_SOURCE.clone();
 
+  b.iter(|| {
+    black_box(source.map(&MapOptions::default()));
+  });
+}
+
+pub fn benchmark_complex_replace_source_map_in_using_object_pool(
+  b: &mut Bencher,
+) {
+  let source = LARGE_REPLACE_SOURCE.clone();
+
   using_object_pool(|| {
     b.iter(|| {
       black_box(source.map(&MapOptions::default()));
