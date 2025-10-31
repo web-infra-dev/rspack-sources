@@ -193,6 +193,11 @@ pub fn pull_usize_vec(requested_capacity: usize) -> Pooled<Vec<usize>> {
 ///
 /// # Example
 /// ```
+/// use rspack_sources::{BoxSource, MapOptions, with_object_pool_scope};
+/// use rayon::prelude::*;
+///
+/// let sources: Vec<BoxSource> = vec![/* ... */];
+///
 /// with_object_pool_scope(|| {
 ///   sources.into_par_iter()
 ///     .map(|source| source.map(&MapOptions::default()))
