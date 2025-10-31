@@ -2,7 +2,7 @@ use std::{cell::OnceCell, marker::PhantomData};
 
 use crate::{
   helpers::SourceText,
-  object_pool::{ObjectPool, Pooled, USIZE_VEC_POOL},
+  object_pool::{pull_usize_vec, Pooled},
 };
 
 #[derive(Debug)]
@@ -36,10 +36,7 @@ where
     }
 
     let char_byte_indices = self.char_byte_indices.get_or_init(|| {
-      let mut vec = USIZE_VEC_POOL.with(|once_cell| {
-        let pool = once_cell.get_or_init(ObjectPool::default);
-        Pooled::new(Some(pool.clone()), self.line.len())
-      });
+      let mut vec = pull_usize_vec(self.line.len());
       vec.extend(self.line.char_indices().map(|(i, _)| i));
       vec
     });

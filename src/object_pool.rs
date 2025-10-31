@@ -1,8 +1,12 @@
 use std::{
-  cell::{OnceCell, RefCell},
+  cell::RefCell,
   collections::BTreeMap,
   rc::Rc,
+  sync::{Arc, LazyLock},
+  thread::ThreadId,
 };
+
+use dashmap::DashMap;
 
 // Vector pooling minimum capacity threshold
 // Recommended threshold: 64
@@ -38,6 +42,13 @@ impl<T> Poolable for Vec<T> {
 pub struct ObjectPool<T> {
   objects: Rc<RefCell<BTreeMap<usize, Vec<T>>>>,
 }
+
+// SAFETY: Each ObjectPool is only used within a single thread in rspack-sources,
+// which is guaranteed by THREAD_ISOLATED_MAP. Therefore, it is safe to implement Send and Sync.
+#[allow(unsafe_code)]
+unsafe impl<T> Send for ObjectPool<T> {}
+#[allow(unsafe_code)]
+unsafe impl<T> Sync for ObjectPool<T> {}
 
 impl<T> Clone for ObjectPool<T> {
   fn clone(&self) -> Self {
@@ -137,15 +148,20 @@ impl<T: Poolable> std::ops::DerefMut for Pooled<T> {
   }
 }
 
-thread_local! {
-  pub static USIZE_VEC_POOL: OnceCell<ObjectPool<Vec<usize>>> = OnceCell::default();
-}
+pub static THREAD_ISOLATED_MAP: LazyLock<
+  Arc<DashMap<ThreadId, ObjectPool<Vec<usize>>>>,
+> = LazyLock::new(|| Arc::new(DashMap::new()));
 
 /// Cleans up the object pool when not in pooling mode to prevent memory retention.
-pub fn cleanup_object_pool() {
-  USIZE_VEC_POOL.with(|once_cell| {
-    if let Some(pool) = once_cell.get() {
-      pool.clear();
-    }
-  });
+pub fn clear_current_thread_object_pool() {
+  let thread_id = std::thread::current().id();
+  if let Some(thread_isolated_map) = THREAD_ISOLATED_MAP.get(&thread_id) {
+    thread_isolated_map.value().clear();
+  }
+}
+
+pub fn pull_usize_vec(requested_capacity: usize) -> Pooled<Vec<usize>> {
+  let thread_id = std::thread::current().id();
+  let pool = THREAD_ISOLATED_MAP.entry(thread_id).or_default();
+  Pooled::new(Some(pool.clone()), requested_capacity)
 }

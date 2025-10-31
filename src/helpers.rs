@@ -11,7 +11,7 @@ use crate::{
   decoder::MappingsDecoder,
   encoder::create_encoder,
   linear_map::LinearMap,
-  object_pool::cleanup_object_pool,
+  object_pool::clear_current_thread_object_pool,
   source::{Mapping, OriginalLocation},
   with_indices::WithIndices,
   MapOptions, Rope, SourceMap,
@@ -66,7 +66,7 @@ pub fn get_map<'a, S: StreamChunks>(
   let source_map = (!mappings.is_empty())
     .then(|| SourceMap::new(mappings, sources, sources_content, names));
 
-  cleanup_object_pool();
+  clear_current_thread_object_pool();
 
   source_map
 }
