@@ -9,9 +9,9 @@ pub use criterion::*;
 pub use codspeed_criterion_compat::*;
 
 use rspack_sources::{
-  BoxSource, ConcatSource, MapOptions, OriginalSource, RawStringSource,
-  ReplaceSource, ReplacementEnforce, Source, SourceExt, SourceMap,
-  SourceMapSource, SourceMapSourceOptions,
+  with_object_pool_scope, BoxSource, ConcatSource, MapOptions, OriginalSource,
+  RawStringSource, ReplaceSource, ReplacementEnforce, Source, SourceExt,
+  SourceMap, SourceMapSource, SourceMapSourceOptions,
 };
 
 static REPETITIVE_1K_REACT_COMPONENTS_SOURCE: LazyLock<BoxSource> =
@@ -3515,4 +3515,19 @@ pub fn benchmark_repetitive_react_components_source(b: &mut Bencher) {
   b.iter(|| {
     black_box(source.source());
   });
+}
+
+pub fn benchmark_repetitive_react_components_map_with_object_pool_scope(
+  b: &mut Bencher,
+) {
+  let source = REPETITIVE_1K_REACT_COMPONENTS_SOURCE.clone();
+
+  with_object_pool_scope(|| {
+    // Warm up the object pool
+    black_box(source.map(&MapOptions::default()));
+
+    b.iter(|| {
+      black_box(source.map(&MapOptions::default()));
+    });
+  })
 }
