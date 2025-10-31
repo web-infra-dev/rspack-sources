@@ -2,7 +2,7 @@ use std::{
   cell::RefCell,
   collections::BTreeMap,
   rc::Rc,
-  sync::{Arc, LazyLock},
+  sync::{atomic::AtomicBool, Arc, LazyLock},
   thread::ThreadId,
 };
 
@@ -148,20 +148,72 @@ impl<T: Poolable> std::ops::DerefMut for Pooled<T> {
   }
 }
 
-pub static THREAD_ISOLATED_MAP: LazyLock<
-  Arc<DashMap<ThreadId, ObjectPool<Vec<usize>>>>,
-> = LazyLock::new(|| Arc::new(DashMap::new()));
+type ThreadIsolatedMap = Arc<DashMap<ThreadId, (bool, ObjectPool<Vec<usize>>)>>;
 
-/// Cleans up the object pool when not in pooling mode to prevent memory retention.
-pub fn clear_current_thread_object_pool() {
+pub static THREAD_ISOLATED_MAP: LazyLock<ThreadIsolatedMap> =
+  LazyLock::new(|| Arc::new(DashMap::new()));
+
+pub static IN_OBJECT_POOL_SCOPE: AtomicBool = AtomicBool::new(false);
+
+pub fn with_current_thread_object_pool_scope<F, R>(f: F) -> R
+where
+  F: FnOnce() -> R,
+{
   let thread_id = std::thread::current().id();
-  if let Some(thread_isolated_map) = THREAD_ISOLATED_MAP.get(&thread_id) {
-    thread_isolated_map.value().clear();
+  {
+    THREAD_ISOLATED_MAP
+      .entry(thread_id)
+      .or_default()
+      .value_mut()
+      .0 = true;
   }
+
+  let result = f();
+  {
+    if let Some(mut isolation) = THREAD_ISOLATED_MAP.get_mut(&thread_id) {
+      isolation.0 = false;
+      if !IN_OBJECT_POOL_SCOPE.load(std::sync::atomic::Ordering::Relaxed) {
+        isolation.1.clear();
+      }
+    }
+  }
+  result
 }
 
 pub fn pull_usize_vec(requested_capacity: usize) -> Pooled<Vec<usize>> {
   let thread_id = std::thread::current().id();
-  let pool = THREAD_ISOLATED_MAP.entry(thread_id).or_default();
-  Pooled::new(Some(pool.clone()), requested_capacity)
+  let ref_multi = THREAD_ISOLATED_MAP.entry(thread_id).or_default();
+  Pooled::new(Some(ref_multi.1.clone()), requested_capacity)
+}
+
+/// Extends the lifetime of the object pool to the end of the provided closure,
+/// instead of just the end of `source.map()`. This is primarily designed for
+/// integration with parallel frameworks like rayon, ensuring the object pool
+/// remains available throughout parallel tasks.
+///
+/// # Example
+/// ```
+/// with_object_pool_scope(|| {
+///   sources.into_par_iter()
+///     .map(|source| source.map(&MapOptions::default()))
+///     .collect::<Vec<_>>()
+/// });
+/// ```
+pub fn with_object_pool_scope<F, R>(f: F) -> R
+where
+  F: FnOnce() -> R,
+{
+  IN_OBJECT_POOL_SCOPE.store(true, std::sync::atomic::Ordering::SeqCst);
+
+  let result = f();
+
+  for ref_multi in THREAD_ISOLATED_MAP.iter() {
+    if !ref_multi.value().0 {
+      ref_multi.value().1.clear();
+    }
+  }
+
+  IN_OBJECT_POOL_SCOPE.store(false, std::sync::atomic::Ordering::SeqCst);
+
+  result
 }

@@ -41,3 +41,5 @@ pub mod stream_chunks {
 }
 
 pub use helpers::{decode_mappings, encode_mappings};
+
+pub use object_pool::with_object_pool_scope;
