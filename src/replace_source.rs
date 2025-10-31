@@ -2,6 +2,7 @@ use std::{
   borrow::Cow,
   cell::RefCell,
   hash::{Hash, Hasher},
+  sync::Arc,
 };
 
 use rustc_hash::FxHashMap as HashMap;
@@ -12,7 +13,7 @@ use crate::{
   },
   linear_map::LinearMap,
   rope::Rope,
-  with_indices::WithIndices,
+  source_content_lines::SourceContentLines,
   BoxSource, MapOptions, Mapping, OriginalLocation, Source, SourceExt,
   SourceMap, SourceValue,
 };
@@ -318,21 +319,22 @@ impl std::fmt::Debug for ReplaceSource {
   }
 }
 
-enum SourceContent<'a> {
-  Raw(Rope<'a>),
-  Lines(Vec<WithIndices<'a, Rope<'a>>>),
+enum SourceContent {
+  Raw(Arc<str>),
+  Lines(SourceContentLines),
 }
 
-fn check_content_at_position<'a>(
-  lines: &[WithIndices<'a, Rope<'a>>],
+fn check_content_at_position(
+  lines: &SourceContentLines,
   line: u32,
   column: u32,
-  expected: Rope, // FIXME: memory
+  expected: &Rope,
 ) -> bool {
   if let Some(line) = lines.get(line as usize - 1) {
     line
       .substring(column as usize, usize::MAX)
-      .starts_with(&expected)
+      .into_rope()
+      .starts_with(expected)
   } else {
     false
   }
@@ -389,15 +391,13 @@ impl StreamChunks for ReplaceSource {
     // In this case, we can't split this mapping.
     // webpack-sources also have this function, refer https://github.com/webpack/webpack-sources/blob/main/lib/ReplaceSource.js#L158
     let check_original_content =
-      |source_index: u32, line: u32, column: u32, expected_chunk: Rope| {
+      |source_index: u32, line: u32, column: u32, expected_chunk: &Rope| {
         if let Some(Some(source_content)) =
           source_content_lines.borrow_mut().get_mut(&source_index)
         {
           match source_content {
             SourceContent::Raw(source) => {
-              let lines = split_into_lines(source)
-                .map(WithIndices::new)
-                .collect::<Vec<_>>();
+              let lines = SourceContentLines::from(source.clone());
               let matched =
                 check_content_at_position(&lines, line, column, expected_chunk);
               *source_content = SourceContent::Lines(lines);
@@ -451,7 +451,7 @@ impl StreamChunks for ReplaceSource {
               original.source_index,
               original.original_line,
               original.original_column,
-              chunk.byte_slice(0..chunk_pos as usize),
+              &chunk.byte_slice(0..chunk_pos as usize),
             )
           }) {
             original.original_column += chunk_pos;
@@ -508,7 +508,7 @@ impl StreamChunks for ReplaceSource {
                   original.source_index,
                   original.original_line,
                   original.original_column,
-                  chunk_slice.clone(),
+                  &chunk_slice,
                 )
               })
             {
@@ -628,7 +628,7 @@ impl StreamChunks for ReplaceSource {
                   original.source_index,
                   original.original_line,
                   original.original_column,
-                  chunk.byte_slice(
+                  &chunk.byte_slice(
                     chunk_pos as usize..(chunk_pos + offset as u32) as usize,
                   ),
                 )
@@ -683,9 +683,8 @@ impl StreamChunks for ReplaceSource {
       },
       &mut |source_index, source, source_content| {
         let mut source_content_lines = source_content_lines.borrow_mut();
-        let lines = source_content.map(|source_content| {
-          SourceContent::Raw(source_content.as_ref().into())
-        });
+        let lines = source_content
+          .map(|source_content| SourceContent::Raw(source_content.clone()));
         source_content_lines.insert(source_index, lines);
         on_source(source_index, source, source_content);
       },

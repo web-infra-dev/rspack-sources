@@ -13,6 +13,7 @@ use crate::{
   encoder::create_encoder,
   linear_map::LinearMap,
   source::{Mapping, OriginalLocation},
+  source_content_lines::SourceContentLines,
   with_indices::WithIndices,
   MapOptions, Rope, SourceMap,
 };
@@ -704,40 +705,6 @@ struct SourceMapLineData<'a> {
 type InnerSourceIndexValueMapping<'a> =
   LinearMap<(Cow<'a, str>, Option<&'a Arc<str>>)>;
 
-type Owner = Arc<str>;
-
-type BorrowedValue<'a> = Vec<WithIndices<'a, &'a str>>;
-
-self_cell::self_cell!(
-  struct SourceContentLines {
-    owner: Owner,
-    #[covariant]
-    dependent: BorrowedValue,
-  }
-);
-
-impl SourceContentLines {
-  pub fn get(&self, line: usize) -> Option<&WithIndices<'_, &str>> {
-    self.borrow_dependent().get(line)
-  }
-}
-
-impl From<Arc<str>> for SourceContentLines {
-  fn from(value: Arc<str>) -> Self {
-    SourceContentLines::new(value, |owner| {
-      split_into_lines(&owner.as_ref())
-        .map(WithIndices::new)
-        .collect::<Vec<_>>()
-    })
-  }
-}
-
-impl From<&Arc<str>> for SourceContentLines {
-  fn from(value: &Arc<str>) -> Self {
-    Self::from(value.clone())
-  }
-}
-
 #[allow(clippy::too_many_arguments)]
 pub fn stream_chunks_of_combined_source_map<'a, S>(
   source: S,
@@ -860,7 +827,7 @@ where
                     let inner_source_contents = inner_source_contents.borrow();
                     match inner_source_contents.get(&inner_source_index) {
                       Some(Some(source_content)) => {
-                        Some(SourceContentLines::from(source_content))
+                        Some(SourceContentLines::from(source_content.clone()))
                       }
                       _ => None,
                     }
@@ -959,7 +926,7 @@ where
                     let inner_source_contents = inner_source_contents.borrow();
                     match inner_source_contents.get(&inner_source_index) {
                       Some(Some(source_content)) => {
-                        Some(SourceContentLines::from(source_content))
+                        Some(SourceContentLines::from(source_content.clone()))
                       }
                       _ => None,
                     }
@@ -978,7 +945,7 @@ where
                     let end = start + name.len();
                     i.substring(start, end)
                   });
-                if Rope::from(&name) == original_name {
+                if name == original_name {
                   let mut name_index_mapping = name_index_mapping.borrow_mut();
                   final_name_index =
                     name_index_mapping.get(&name_index).copied().unwrap_or(-2);
