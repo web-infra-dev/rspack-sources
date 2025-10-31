@@ -2,7 +2,6 @@ use std::{
   cell::{OnceCell, RefCell},
   collections::BTreeMap,
   rc::Rc,
-  sync::atomic::AtomicBool,
 };
 
 // Vector pooling minimum capacity threshold
