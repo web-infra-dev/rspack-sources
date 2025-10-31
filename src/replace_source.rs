@@ -683,7 +683,9 @@ impl StreamChunks for ReplaceSource {
       },
       &mut |source_index, source, source_content| {
         let mut source_content_lines = source_content_lines.borrow_mut();
-        let lines = source_content.clone().map(SourceContent::Raw);
+        let lines = source_content.map(|source_content| {
+          SourceContent::Raw(source_content.as_ref().into())
+        });
         source_content_lines.insert(source_index, lines);
         on_source(source_index, source, source_content);
       },
@@ -1101,7 +1103,7 @@ function StaticPage(_ref) {
     assert_eq!(source_map.get_name(1).unwrap(), "data");
     assert_eq!(source_map.get_name(2).unwrap(), "foo");
     assert_eq!(
-      source_map.get_source_content(0).unwrap(),
+      source_map.get_source_content(0).unwrap().as_ref(),
       r#"export default function StaticPage({ data }) {
 return <div>{data.foo}</div>
 }

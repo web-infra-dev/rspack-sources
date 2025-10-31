@@ -277,7 +277,7 @@ impl MapOptions {
   }
 }
 
-fn is_all_empty(val: &Arc<[String]>) -> bool {
+fn is_all_empty(val: &[Arc<str>]) -> bool {
   if val.is_empty() {
     return true;
   }
@@ -292,7 +292,7 @@ pub struct SourceMap {
   file: Option<Arc<str>>,
   sources: Arc<[String]>,
   #[serde(rename = "sourcesContent", skip_serializing_if = "is_all_empty")]
-  sources_content: Arc<[String]>,
+  sources_content: Arc<[Arc<str>]>,
   names: Arc<[String]>,
   mappings: Arc<str>,
   #[serde(rename = "sourceRoot", skip_serializing_if = "Option::is_none")]
@@ -343,7 +343,7 @@ impl SourceMap {
   where
     Mappings: Into<Arc<str>>,
     Sources: Into<Arc<[String]>>,
-    SourcesContent: Into<Arc<[String]>>,
+    SourcesContent: Into<Vec<Arc<str>>>,
     Names: Into<Arc<[String]>>,
   {
     Self {
@@ -351,7 +351,7 @@ impl SourceMap {
       file: None,
       mappings: mappings.into(),
       sources: sources.into(),
-      sources_content: sources_content.into(),
+      sources_content: Arc::from(sources_content.into()),
       names: names.into(),
       source_root: None,
       debug_id: None,
@@ -405,21 +405,21 @@ impl SourceMap {
   }
 
   /// Get the sourcesContent field in [SourceMap].
-  pub fn sources_content(&self) -> &[String] {
+  pub fn sources_content(&self) -> &[Arc<str>] {
     &self.sources_content
   }
 
   /// Set the sourcesContent field in [SourceMap].
-  pub fn set_sources_content<T: Into<Arc<[String]>>>(
+  pub fn set_sources_content<T: Into<Vec<Arc<str>>>>(
     &mut self,
     sources_content: T,
   ) {
-    self.sources_content = sources_content.into();
+    self.sources_content = Arc::from(sources_content.into());
   }
 
   /// Get the source content by index from sourcesContent field in [SourceMap].
-  pub fn get_source_content(&self, index: usize) -> Option<&str> {
-    self.sources_content.get(index).map(|s| s.as_ref())
+  pub fn get_source_content(&self, index: usize) -> Option<&Arc<str>> {
+    self.sources_content.get(index)
   }
 
   /// Get the names field in [SourceMap].
@@ -539,7 +539,7 @@ impl TryFrom<RawSourceMap> for SourceMap {
       .sources_content
       .unwrap_or_default()
       .into_iter()
-      .map(Option::unwrap_or_default)
+      .map(|source_content| Arc::from(source_content.unwrap_or_default()))
       .collect::<Vec<_>>()
       .into();
     let names = raw

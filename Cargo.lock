@@ -473,6 +473,7 @@ dependencies = [
  "memchr",
  "regex",
  "rustc-hash",
+ "self_cell",
  "serde",
  "serde_json",
  "simd-json",
@@ -513,6 +514,12 @@ checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
 dependencies = [
  "winapi-util",
 ]
+
+[[package]]
+name = "self_cell"
+version = "1.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "16c2f82143577edb4921b71ede051dac62ca3c16084e918bf7b40c96ae10eb33"
 
 [[package]]
 name = "serde"
