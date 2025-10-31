@@ -3,6 +3,7 @@ use std::{
   cell::{OnceCell, RefCell},
   marker::PhantomData,
   ops::Range,
+  sync::Arc,
 };
 
 use rustc_hash::FxHashMap as HashMap;
@@ -12,13 +13,10 @@ use crate::{
   encoder::create_encoder,
   linear_map::LinearMap,
   source::{Mapping, OriginalLocation},
+  source_content_lines::SourceContentLines,
   with_indices::WithIndices,
   MapOptions, Rope, SourceMap,
 };
-
-// Adding this type because sourceContentLine not happy
-type InnerSourceContentLine<'a, 'b> =
-  RefCell<LinearMap<OnceCell<Option<Vec<WithIndices<'a, Rope<'b>>>>>>>;
 
 pub fn get_map<'a, S: StreamChunks>(
   stream: &'a S,
@@ -26,7 +24,7 @@ pub fn get_map<'a, S: StreamChunks>(
 ) -> Option<SourceMap> {
   let mut mappings_encoder = create_encoder(options.columns);
   let mut sources: Vec<String> = Vec::new();
-  let mut sources_content: Vec<String> = Vec::new();
+  let mut sources_content: Vec<Arc<str>> = Vec::new();
   let mut names: Vec<String> = Vec::new();
 
   stream.stream_chunks(
@@ -47,9 +45,9 @@ pub fn get_map<'a, S: StreamChunks>(
       sources[source_index] = source.to_string();
       if let Some(source_content) = source_content {
         if sources_content.len() <= source_index {
-          sources_content.resize(source_index + 1, "".to_string());
+          sources_content.resize(source_index + 1, "".into());
         }
-        sources_content[source_index] = source_content.to_string();
+        sources_content[source_index] = source_content.clone();
       }
     },
     // on_name
@@ -82,8 +80,9 @@ pub trait StreamChunks {
 pub type OnChunk<'a, 'b> = &'a mut dyn FnMut(Option<Rope<'b>>, Mapping);
 
 /// [OnSource] abstraction, see [webpack-sources onSource](https://github.com/webpack/webpack-sources/blob/9f98066311d53a153fdc7c633422a1d086528027/lib/helpers/streamChunks.js#L13).
+///
 pub type OnSource<'a, 'b> =
-  &'a mut dyn FnMut(u32, Cow<'b, str>, Option<Rope<'b>>);
+  &'a mut dyn FnMut(u32, Cow<'b, str>, Option<&'b Arc<str>>);
 
 /// [OnName] abstraction, see [webpack-sources onName](https://github.com/webpack/webpack-sources/blob/9f98066311d53a153fdc7c633422a1d086528027/lib/helpers/streamChunks.js#L13).
 pub type OnName<'a, 'b> = &'a mut dyn FnMut(u32, Cow<'b, str>);
@@ -194,8 +193,6 @@ where
     data: PhantomData,
   }
 }
-
-const EMPTY_ROPE: Rope = Rope::new();
 
 /// Split the string with a needle, each string will contain the needle.
 ///
@@ -371,7 +368,7 @@ where
     on_source(
       i as u32,
       get_source(source_map, source),
-      source_map.get_source_content(i).map(Rope::from),
+      source_map.get_source_content(i),
     )
   }
   for (i, name) in source_map.names().iter().enumerate() {
@@ -435,7 +432,7 @@ where
     on_source(
       i as u32,
       get_source(source_map, source),
-      source_map.get_source_content(i).map(Rope::from),
+      source_map.get_source_content(i),
     )
   }
   for (i, name) in source_map.names().iter().enumerate() {
@@ -585,7 +582,7 @@ where
     on_source(
       i as u32,
       get_source(source_map, source),
-      source_map.get_source_content(i).map(Rope::from),
+      source_map.get_source_content(i),
     )
   }
   let final_line = if result.generated_column == 0 {
@@ -633,7 +630,7 @@ where
     on_source(
       i as u32,
       get_source(source_map, source),
-      source_map.get_source_content(i).map(Rope::from),
+      source_map.get_source_content(i),
     )
   }
   let mut current_generated_line = 1;
@@ -706,14 +703,14 @@ struct SourceMapLineData<'a> {
 }
 
 type InnerSourceIndexValueMapping<'a> =
-  LinearMap<(Cow<'a, str>, Option<Rope<'a>>)>;
+  LinearMap<(Cow<'a, str>, Option<&'a Arc<str>>)>;
 
 #[allow(clippy::too_many_arguments)]
 pub fn stream_chunks_of_combined_source_map<'a, S>(
   source: S,
   source_map: &'a SourceMap,
   inner_source_name: &'a str,
-  inner_source: Option<Rope<'a>>,
+  inner_source: Option<&'a Arc<str>>,
   inner_source_map: &'a SourceMap,
   remove_inner_source: bool,
   on_chunk: OnChunk<'_, 'a>,
@@ -725,7 +722,7 @@ where
   S: SourceText<'a> + 'a,
 {
   let on_source = RefCell::new(on_source);
-  let inner_source: RefCell<Option<Rope<'a>>> = RefCell::new(inner_source);
+  let inner_source: RefCell<Option<&Arc<str>>> = RefCell::new(inner_source);
   let source_mapping: RefCell<HashMap<Cow<str>, u32>> =
     RefCell::new(HashMap::default());
   let mut name_mapping: HashMap<Cow<str>, u32> = HashMap::default();
@@ -740,10 +737,11 @@ where
     RefCell::new(LinearMap::default());
   let inner_source_index_value_mapping: RefCell<InnerSourceIndexValueMapping> =
     RefCell::new(LinearMap::default());
-  let inner_source_contents: RefCell<LinearMap<Option<Rope<'a>>>> =
+  let inner_source_contents: RefCell<LinearMap<Option<Arc<str>>>> =
     RefCell::new(LinearMap::default());
-  let inner_source_content_lines: InnerSourceContentLine =
-    RefCell::new(LinearMap::default());
+  let inner_source_content_lines: RefCell<
+    LinearMap<OnceCell<Option<SourceContentLines>>>,
+  > = RefCell::new(LinearMap::default());
   let inner_name_index_mapping: RefCell<LinearMap<i64>> =
     RefCell::new(LinearMap::default());
   let inner_name_index_value_mapping: RefCell<LinearMap<Cow<str>>> =
@@ -828,11 +826,9 @@ where
                   Some(once_cell) => once_cell.get_or_init(|| {
                     let inner_source_contents = inner_source_contents.borrow();
                     match inner_source_contents.get(&inner_source_index) {
-                      Some(Some(source_content)) => Some(
-                        split_into_lines(source_content)
-                          .map(WithIndices::new)
-                          .collect(),
-                      ),
+                      Some(Some(source_content)) => {
+                        Some(SourceContentLines::from(source_content.clone()))
+                      }
                       _ => None,
                     }
                   }),
@@ -848,8 +844,9 @@ where
                   });
                 if let Some(original_chunk) = original_chunk {
                   if original_chunk.len() <= inner_chunk.len()
-                    && inner_chunk.get_byte_slice(..original_chunk.len())
-                      == Some(original_chunk)
+                    && inner_chunk
+                      .get_byte_slice(..original_chunk.len())
+                      .is_some_and(|slice| slice == original_chunk)
                   {
                     inner_original_column += location_in_chunk;
                     inner_name_index = -1;
@@ -928,11 +925,9 @@ where
                   Some(once_cell) => once_cell.get_or_init(|| {
                     let inner_source_contents = inner_source_contents.borrow();
                     match inner_source_contents.get(&inner_source_index) {
-                      Some(Some(source_content)) => Some(
-                        split_into_lines(source_content)
-                          .map(WithIndices::new)
-                          .collect(),
-                      ),
+                      Some(Some(source_content)) => {
+                        Some(SourceContentLines::from(source_content.clone()))
+                      }
                       _ => None,
                     }
                   }),
@@ -945,12 +940,12 @@ where
                   name_index_value_mapping.get(&name_index).cloned().unwrap();
                 let original_name = original_source_lines
                   .get(inner_original_line as usize - 1)
-                  .map_or(EMPTY_ROPE, |i| {
+                  .map_or("", |i| {
                     let start = inner_original_column as usize;
                     let end = start + name.len();
                     i.substring(start, end)
                   });
-                if Rope::from(&name) == original_name {
+                if name == original_name {
                   let mut name_index_mapping = name_index_mapping.borrow_mut();
                   final_name_index =
                     name_index_mapping.get(&name_index).copied().unwrap_or(-2);
@@ -1015,7 +1010,7 @@ where
               on_source.borrow_mut()(
                 len,
                 Cow::Borrowed(inner_source_name),
-                inner_source.borrow().clone(),
+                *inner_source.borrow(),
               );
               global_index = Some(len);
             }
@@ -1089,13 +1084,13 @@ where
         *inner_source_index.borrow_mut() = i as i64;
         let mut inner_source = inner_source.borrow_mut();
         if let Some(inner_source) = inner_source.as_ref() {
-          source_content = Some(inner_source.clone());
+          source_content = Some(inner_source);
         } else {
-          *inner_source = source_content.clone();
+          *inner_source = source_content;
         }
         source_index_mapping.borrow_mut().insert(i, -2);
         stream_chunks_of_source_map(
-          source_content.unwrap(),
+          source_content.unwrap().as_ref(),
           inner_source_map,
           &mut |chunk, mapping| {
             let mut inner_source_map_line_data =
@@ -1151,7 +1146,7 @@ where
           &mut |i, source, source_content| {
             inner_source_contents
               .borrow_mut()
-              .insert(i, source_content.clone());
+              .insert(i, source_content.cloned());
             inner_source_content_lines
               .borrow_mut()
               .insert(i, Default::default());
@@ -1200,7 +1195,7 @@ pub fn stream_and_get_source_and_map<'a, S: StreamChunks>(
 ) -> (GeneratedInfo, Option<SourceMap>) {
   let mut mappings_encoder = create_encoder(options.columns);
   let mut sources: Vec<String> = Vec::new();
-  let mut sources_content: Vec<String> = Vec::new();
+  let mut sources_content: Vec<Arc<str>> = Vec::new();
   let mut names: Vec<String> = Vec::new();
 
   let generated_info = input_source.stream_chunks(
@@ -1215,11 +1210,11 @@ pub fn stream_and_get_source_and_map<'a, S: StreamChunks>(
         sources.push("".into());
       }
       sources[source_index2] = source.to_string();
-      if let Some(ref source_content) = source_content {
+      if let Some(source_content) = source_content {
         while sources_content.len() <= source_index2 {
           sources_content.push("".into());
         }
-        sources_content[source_index2] = source_content.to_string();
+        sources_content[source_index2] = source_content.clone();
       }
       on_source(source_index, source, source_content);
     },

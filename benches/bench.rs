@@ -62,7 +62,7 @@ fn benchmark_concat_generate_string(b: &mut Bencher) {
     value: HELLOWORLD_MIN_JS,
     name: "helloworld.min.js",
     source_map: SourceMap::from_json(HELLOWORLD_MIN_JS_MAP).unwrap(),
-    original_source: Some(HELLOWORLD_JS.to_string()),
+    original_source: Some(HELLOWORLD_JS.to_string().into()),
     inner_source_map: Some(SourceMap::from_json(HELLOWORLD_JS_MAP).unwrap()),
     remove_original_source: false,
   });
@@ -92,7 +92,7 @@ fn benchmark_concat_generate_string_with_cache(b: &mut Bencher) {
     value: HELLOWORLD_MIN_JS,
     name: "helloworld.min.js",
     source_map: SourceMap::from_json(HELLOWORLD_MIN_JS_MAP).unwrap(),
-    original_source: Some(HELLOWORLD_JS.to_string()),
+    original_source: Some(HELLOWORLD_JS.to_string().into()),
     inner_source_map: Some(SourceMap::from_json(HELLOWORLD_JS_MAP).unwrap()),
     remove_original_source: false,
   });
@@ -121,7 +121,7 @@ fn benchmark_cached_source_hash(b: &mut Bencher) {
     value: HELLOWORLD_MIN_JS,
     name: "helloworld.min.js",
     source_map: SourceMap::from_json(HELLOWORLD_MIN_JS_MAP).unwrap(),
-    original_source: Some(HELLOWORLD_JS.to_string()),
+    original_source: Some(HELLOWORLD_JS.to_string().into()),
     inner_source_map: Some(SourceMap::from_json(HELLOWORLD_JS_MAP).unwrap()),
     remove_original_source: false,
   });
