@@ -2,6 +2,7 @@ use std::{
   borrow::Cow,
   cell::RefCell,
   hash::{Hash, Hasher},
+  sync::Arc,
 };
 
 use rustc_hash::FxHashMap as HashMap;
@@ -12,7 +13,7 @@ use crate::{
   },
   linear_map::LinearMap,
   rope::Rope,
-  with_indices::WithIndices,
+  source_content_lines::SourceContentLines,
   BoxSource, MapOptions, Mapping, OriginalLocation, Source, SourceExt,
   SourceMap, SourceValue,
 };
@@ -318,21 +319,22 @@ impl std::fmt::Debug for ReplaceSource {
   }
 }
 
-enum SourceContent<'text> {
-  Raw(Rope<'text>),
-  Lines(Vec<WithIndices<'text, Rope<'text>>>),
+enum SourceContent {
+  Raw(Arc<str>),
+  Lines(SourceContentLines),
 }
 
-fn check_content_at_position<'text>(
-  lines: &[WithIndices<'text, Rope<'text>>],
+fn check_content_at_position(
+  lines: &SourceContentLines,
   line: u32,
   column: u32,
-  expected: Rope, // FIXME: memory
+  expected: &Rope,
 ) -> bool {
   if let Some(line) = lines.get(line as usize - 1) {
     line
       .substring(column as usize, usize::MAX)
-      .starts_with(&expected)
+      .into_rope()
+      .starts_with(expected)
   } else {
     false
   }
@@ -389,15 +391,13 @@ impl StreamChunks for ReplaceSource {
     // In this case, we can't split this mapping.
     // webpack-sources also have this function, refer https://github.com/webpack/webpack-sources/blob/main/lib/ReplaceSource.js#L158
     let check_original_content =
-      |source_index: u32, line: u32, column: u32, expected_chunk: Rope| {
+      |source_index: u32, line: u32, column: u32, expected_chunk: &Rope| {
         if let Some(Some(source_content)) =
           source_content_lines.borrow_mut().get_mut(&source_index)
         {
           match source_content {
             SourceContent::Raw(source) => {
-              let lines = split_into_lines(source)
-                .map(WithIndices::new)
-                .collect::<Vec<_>>();
+              let lines = SourceContentLines::from(source.clone());
               let matched =
                 check_content_at_position(&lines, line, column, expected_chunk);
               *source_content = SourceContent::Lines(lines);
@@ -451,7 +451,7 @@ impl StreamChunks for ReplaceSource {
               original.source_index,
               original.original_line,
               original.original_column,
-              chunk.byte_slice(0..chunk_pos as usize),
+              &chunk.byte_slice(0..chunk_pos as usize),
             )
           }) {
             original.original_column += chunk_pos;
@@ -508,7 +508,7 @@ impl StreamChunks for ReplaceSource {
                   original.source_index,
                   original.original_line,
                   original.original_column,
-                  chunk_slice.clone(),
+                  &chunk_slice,
                 )
               })
             {
@@ -628,7 +628,7 @@ impl StreamChunks for ReplaceSource {
                   original.source_index,
                   original.original_line,
                   original.original_column,
-                  chunk.byte_slice(
+                  &chunk.byte_slice(
                     chunk_pos as usize..(chunk_pos + offset as u32) as usize,
                   ),
                 )
@@ -683,7 +683,8 @@ impl StreamChunks for ReplaceSource {
       },
       &mut |source_index, source, source_content| {
         let mut source_content_lines = source_content_lines.borrow_mut();
-        let lines = source_content.clone().map(SourceContent::Raw);
+        let lines = source_content
+          .map(|source_content| SourceContent::Raw(source_content.clone()));
         source_content_lines.insert(source_index, lines);
         on_source(source_index, source, source_content);
       },
@@ -766,8 +767,13 @@ impl Clone for ReplaceSource {
 impl Hash for ReplaceSource {
   fn hash<H: Hasher>(&self, state: &mut H) {
     "ReplaceSource".hash(state);
+    // replacements are ordered, so when hashing,
+    // skip fields (enforce and insertion_order) that are only used
     for repl in &self.replacements {
-      repl.hash(state);
+      repl.start.hash(state);
+      repl.end.hash(state);
+      repl.content.hash(state);
+      repl.name.hash(state);
     }
     self.inner.hash(state);
   }
@@ -784,6 +790,8 @@ impl Eq for ReplaceSource {}
 
 #[cfg(test)]
 mod tests {
+  use rustc_hash::FxHasher;
+
   use crate::{
     source_map_source::WithoutOriginalOptions, OriginalSource, RawStringSource,
     ReplacementEnforce, SourceExt, SourceMapSource,
@@ -1101,7 +1109,7 @@ function StaticPage(_ref) {
     assert_eq!(source_map.get_name(1).unwrap(), "data");
     assert_eq!(source_map.get_name(2).unwrap(), "foo");
     assert_eq!(
-      source_map.get_source_content(0).unwrap(),
+      source_map.get_source_content(0).unwrap().as_ref(),
       r#"export default function StaticPage({ data }) {
 return <div>{data.foo}</div>
 }
@@ -1185,7 +1193,7 @@ return <div>{data.foo}</div>
     assert_eq!(source.map(&MapOptions::default()), None);
     let mut hasher = twox_hash::XxHash64::default();
     source.hash(&mut hasher);
-    assert_eq!(format!("{:x}", hasher.finish()), "15e48cdf294935ab");
+    assert_eq!(format!("{:x}", hasher.finish()), "96abdb94c6fd5aba");
   }
 
   #[test]
@@ -1359,5 +1367,26 @@ return <div>{data.foo}</div>
     );
 
     assert_eq!(source.size(), source.source().into_string_lossy().len());
+  }
+
+  #[test]
+  fn replace_source_hash_is_order_independent() {
+    let mut source1 =
+      ReplaceSource::new(RawStringSource::from_static("hello, world!").boxed());
+    source1.replace(0, 5, "你好", None);
+    source1.replace(6, 11, "世界", None);
+
+    let mut source2 =
+      ReplaceSource::new(RawStringSource::from_static("hello, world!").boxed());
+    source2.replace(6, 11, "世界", None);
+    source2.replace(0, 5, "你好", None);
+
+    assert_eq!(source1.source(), source2.source());
+
+    let mut hasher1 = FxHasher::default();
+    source1.hash(&mut hasher1);
+    let mut hasher2 = FxHasher::default();
+    source2.hash(&mut hasher2);
+    assert_eq!(hasher1.finish(), hasher2.finish());
   }
 }

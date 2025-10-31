@@ -1,6 +1,7 @@
 use std::{
   borrow::Cow,
   hash::{Hash, Hasher},
+  sync::Arc,
 };
 
 use crate::{
@@ -36,13 +37,13 @@ use crate::{
 /// ```
 #[derive(Clone, Eq)]
 pub struct OriginalSource {
-  value: String,
+  value: Arc<str>,
   name: String,
 }
 
 impl OriginalSource {
   /// Create a [OriginalSource].
-  pub fn new(value: impl Into<String>, name: impl Into<String>) -> Self {
+  pub fn new(value: impl Into<Arc<str>>, name: impl Into<String>) -> Self {
     Self {
       value: value.into(),
       name: name.into(),
@@ -56,7 +57,7 @@ impl Source for OriginalSource {
   }
 
   fn rope(&self) -> Rope<'_> {
-    Rope::from(&self.value)
+    Rope::from(self.value.as_ref())
   }
 
   fn buffer(&self) -> Cow<[u8]> {
@@ -113,7 +114,7 @@ impl StreamChunks for OriginalSource {
     on_source: OnSource<'_, 'a>,
     _on_name: OnName,
   ) -> crate::helpers::GeneratedInfo {
-    on_source(0, Cow::Borrowed(&self.name), Some(Rope::from(&self.value)));
+    on_source(0, Cow::Borrowed(&self.name), Some(&self.value));
     if options.columns {
       // With column info we need to read all lines and split them
       let mut line = 1;
@@ -200,7 +201,7 @@ impl StreamChunks for OriginalSource {
       // we need to split source by lines
       let mut line = 1;
       let mut last_line = None;
-      for l in split_into_lines(&self.value.as_str()) {
+      for l in split_into_lines(&self.value.as_ref()) {
         on_chunk(
           (!options.final_source).then_some(l.into_rope()),
           Mapping {
@@ -250,13 +251,10 @@ mod tests {
     assert_eq!(result_text.into_string_lossy(), "Line1\n\nLine3\n");
     assert_eq!(result_map.sources(), &["file.js".to_string()]);
     assert_eq!(result_list_map.sources(), ["file.js".to_string()]);
-    assert_eq!(
-      result_map.sources_content(),
-      ["Line1\n\nLine3\n".to_string()],
-    );
+    assert_eq!(result_map.sources_content(), ["Line1\n\nLine3\n".into()],);
     assert_eq!(
       result_list_map.sources_content(),
-      ["Line1\n\nLine3\n".to_string()],
+      ["Line1\n\nLine3\n".into()],
     );
     assert_eq!(result_map.mappings(), "AAAA;;AAEA");
     assert_eq!(result_list_map.mappings(), "AAAA;AACA;AACA");

@@ -1,6 +1,7 @@
 use std::{
   borrow::Cow,
   hash::{Hash, Hasher},
+  sync::Arc,
 };
 
 use crate::{
@@ -21,7 +22,7 @@ pub struct SourceMapSourceOptions<V, N> {
   /// The source map of the source code.
   pub source_map: SourceMap,
   /// The original source code.
-  pub original_source: Option<String>,
+  pub original_source: Option<Arc<str>>,
   /// The original source map.
   pub inner_source_map: Option<SourceMap>,
   /// Whether remove the original source.
@@ -62,7 +63,7 @@ pub struct SourceMapSource {
   value: String,
   name: String,
   source_map: SourceMap,
-  original_source: Option<String>,
+  original_source: Option<Arc<str>>,
   inner_source_map: Option<SourceMap>,
   remove_original_source: bool,
 }
@@ -194,7 +195,7 @@ impl StreamChunks for SourceMapSource {
         &*self.value,
         &self.source_map,
         &self.name,
-        self.original_source.as_deref().map(Rope::from),
+        self.original_source.as_ref(),
         inner_source_map,
         self.remove_original_source,
         on_chunk,
@@ -249,9 +250,7 @@ mod tests {
       value: source_r_code,
       name: "text",
       source_map: source_r_map.clone(),
-      original_source: Some(
-        inner_source.source().into_string_lossy().into_owned(),
-      ),
+      original_source: Some(inner_source.source().into_string_lossy().into()),
       inner_source_map: inner_source.map(&MapOptions::default()),
       remove_original_source: false,
     });
@@ -259,9 +258,7 @@ mod tests {
       value: source_r_code,
       name: "text",
       source_map: source_r_map,
-      original_source: Some(
-        inner_source.source().into_string_lossy().into_owned(),
-      ),
+      original_source: Some(inner_source.source().into_string_lossy().into()),
       inner_source_map: inner_source.map(&MapOptions::default()),
       remove_original_source: true,
     });
@@ -486,7 +483,7 @@ mod tests {
         }"#,
       )
       .unwrap(),
-      original_source: Some("hello".to_string()),
+      original_source: Some("hello".into()),
       inner_source_map: Some(
         SourceMap::from_json(
           r#"{
@@ -527,7 +524,7 @@ mod tests {
         }"#,
       )
       .unwrap(),
-      original_source: Some("HELLO WORLD".to_string()),
+      original_source: Some("HELLO WORLD".into()),
       inner_source_map: Some(
         SourceMap::from_json(
           r#"{
@@ -586,7 +583,7 @@ mod tests {
   }
   a0();
 })();
-"#.to_string()),
+"#.into()),
       inner_source_map: Some(SourceMap::from_json(
         r#"{
           "version": 3,
@@ -661,9 +658,7 @@ mod tests {
       value: source_r_code,
       name: "text",
       source_map: source_r_map.clone(),
-      original_source: Some(
-        inner_source.source().into_string_lossy().into_owned(),
-      ),
+      original_source: Some(inner_source.source().into_string_lossy().into()),
       inner_source_map,
       remove_original_source: false,
     });
@@ -699,7 +694,7 @@ mod tests {
         }"#,
       )
       .unwrap(),
-      original_source: Some("hello".to_string()),
+      original_source: Some("hello".into()),
       inner_source_map: Some(
         SourceMap::from_json(
           r#"{
@@ -742,7 +737,7 @@ mod tests {
         }"#,
       )
       .unwrap(),
-      original_source: Some("你好 世界".to_string()),
+      original_source: Some("你好 世界".into()),
       inner_source_map: Some(
         SourceMap::from_json(
           r#"{
@@ -783,7 +778,7 @@ mod tests {
         }"#,
       )
       .unwrap(),
-      original_source: Some("你好 世界".to_string()),
+      original_source: Some("你好 世界".into()),
       inner_source_map: Some(
         SourceMap::from_json(
           r#"{

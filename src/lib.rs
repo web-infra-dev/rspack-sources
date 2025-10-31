@@ -13,6 +13,7 @@ mod raw_source;
 mod replace_source;
 mod rope;
 mod source;
+mod source_content_lines;
 mod source_map_source;
 mod with_indices;
 
