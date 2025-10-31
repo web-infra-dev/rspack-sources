@@ -79,7 +79,6 @@ pub trait StreamChunks {
 pub type OnChunk<'a, 'b> = &'a mut dyn FnMut(Option<Rope<'b>>, Mapping);
 
 /// [OnSource] abstraction, see [webpack-sources onSource](https://github.com/webpack/webpack-sources/blob/9f98066311d53a153fdc7c633422a1d086528027/lib/helpers/streamChunks.js#L13).
-/// SourceContent 改成 Arc<str>，会导致内部计算 substr 的时候，无法得到期望的生命周期
 ///
 pub type OnSource<'a, 'b> =
   &'a mut dyn FnMut(u32, Cow<'b, str>, Option<&'b Arc<str>>);
@@ -193,8 +192,6 @@ where
     data: PhantomData,
   }
 }
-
-const EMPTY_ROPE: Rope = Rope::new();
 
 /// Split the string with a needle, each string will contain the needle.
 ///
@@ -709,7 +706,7 @@ type InnerSourceIndexValueMapping<'a> =
 
 type Owner = Arc<str>;
 
-type BorrowedValue<'a> = Vec<WithIndices<'a, Rope<'a>>>;
+type BorrowedValue<'a> = Vec<WithIndices<'a, &'a str>>;
 
 self_cell::self_cell!(
   struct SourceContentLines {
@@ -720,7 +717,7 @@ self_cell::self_cell!(
 );
 
 impl SourceContentLines {
-  pub fn get(&self, line: usize) -> Option<&WithIndices<'_, Rope<'_>>> {
+  pub fn get(&self, line: usize) -> Option<&WithIndices<'_, &str>> {
     self.borrow_dependent().get(line)
   }
 }
@@ -728,11 +725,16 @@ impl SourceContentLines {
 impl From<Arc<str>> for SourceContentLines {
   fn from(value: Arc<str>) -> Self {
     SourceContentLines::new(value, |owner| {
-      let source = Rope::from(owner.as_ref());
-      split_into_lines(&source)
+      split_into_lines(&owner.as_ref())
         .map(WithIndices::new)
         .collect::<Vec<_>>()
     })
+  }
+}
+
+impl From<&Arc<str>> for SourceContentLines {
+  fn from(value: &Arc<str>) -> Self {
+    Self::from(value.clone())
   }
 }
 
@@ -858,7 +860,7 @@ where
                     let inner_source_contents = inner_source_contents.borrow();
                     match inner_source_contents.get(&inner_source_index) {
                       Some(Some(source_content)) => {
-                        Some(SourceContentLines::from(source_content.clone()))
+                        Some(SourceContentLines::from(source_content))
                       }
                       _ => None,
                     }
@@ -875,8 +877,9 @@ where
                   });
                 if let Some(original_chunk) = original_chunk {
                   if original_chunk.len() <= inner_chunk.len()
-                    && inner_chunk.get_byte_slice(..original_chunk.len())
-                      == Some(original_chunk)
+                    && inner_chunk
+                      .get_byte_slice(..original_chunk.len())
+                      .is_some_and(|slice| slice == original_chunk)
                   {
                     inner_original_column += location_in_chunk;
                     inner_name_index = -1;
@@ -956,7 +959,7 @@ where
                     let inner_source_contents = inner_source_contents.borrow();
                     match inner_source_contents.get(&inner_source_index) {
                       Some(Some(source_content)) => {
-                        Some(SourceContentLines::from(source_content.clone()))
+                        Some(SourceContentLines::from(source_content))
                       }
                       _ => None,
                     }
@@ -970,7 +973,7 @@ where
                   name_index_value_mapping.get(&name_index).cloned().unwrap();
                 let original_name = original_source_lines
                   .get(inner_original_line as usize - 1)
-                  .map_or(EMPTY_ROPE, |i| {
+                  .map_or("", |i| {
                     let start = inner_original_column as usize;
                     let end = start + name.len();
                     i.substring(start, end)
