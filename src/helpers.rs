@@ -12,6 +12,7 @@ use crate::{
   decoder::MappingsDecoder,
   encoder::create_encoder,
   linear_map::LinearMap,
+  object_pool::with_current_thread_object_pool_scope,
   source::{Mapping, OriginalLocation},
   source_content_lines::SourceContentLines,
   with_indices::WithIndices,
@@ -19,6 +20,13 @@ use crate::{
 };
 
 pub fn get_map<'a, S: StreamChunks>(
+  stream: &'a S,
+  options: &'a MapOptions,
+) -> Option<SourceMap> {
+  with_current_thread_object_pool_scope(|| get_map_impl(stream, options))
+}
+
+pub fn get_map_impl<'a, S: StreamChunks>(
   stream: &'a S,
   options: &'a MapOptions,
 ) -> Option<SourceMap> {

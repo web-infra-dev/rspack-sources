@@ -466,10 +466,7 @@ mod tests {
       .into_string_lossy()
       .into_owned());
     test_cached!(source, |s: &dyn Source| s.map(&MapOptions::default()));
-    test_cached!(source, |s: &dyn Source| s.map(&MapOptions {
-      columns: false,
-      final_source: true
-    }));
+    test_cached!(source, |s: &dyn Source| s.map(&MapOptions::new(false)));
   }
 
   #[test]

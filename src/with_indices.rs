@@ -1,26 +1,29 @@
 use std::{cell::OnceCell, marker::PhantomData};
 
-use crate::helpers::SourceText;
+use crate::{
+  helpers::SourceText,
+  object_pool::{pull_usize_vec, Pooled},
+};
 
-#[derive(Debug, Clone)]
-pub struct WithIndices<'a, S>
+#[derive(Debug)]
+pub struct WithIndices<'text, S>
 where
-  S: SourceText<'a>,
+  S: SourceText<'text>,
 {
   /// line is a string reference
   pub line: S,
   /// the byte position of each `char` in `line` string slice .
-  pub indices_indexes: OnceCell<Vec<usize>>,
-  data: PhantomData<&'a S>,
+  pub char_byte_indices: OnceCell<Pooled<Vec<usize>>>,
+  data: PhantomData<&'text S>,
 }
 
-impl<'a, S> WithIndices<'a, S>
+impl<'text, S> WithIndices<'text, S>
 where
-  S: SourceText<'a>,
+  S: SourceText<'text>,
 {
   pub fn new(line: S) -> Self {
     Self {
-      indices_indexes: OnceCell::new(),
+      char_byte_indices: OnceCell::new(),
       line,
       data: PhantomData,
     }
@@ -32,13 +35,15 @@ where
       return S::default();
     }
 
-    let indices_indexes = self.indices_indexes.get_or_init(|| {
-      self.line.char_indices().map(|(i, _)| i).collect::<Vec<_>>()
+    let char_byte_indices = self.char_byte_indices.get_or_init(|| {
+      let mut vec = pull_usize_vec(self.line.len());
+      vec.extend(self.line.char_indices().map(|(i, _)| i));
+      vec
     });
 
     let str_len = self.line.len();
-    let start = *indices_indexes.get(start_index).unwrap_or(&str_len);
-    let end = *indices_indexes.get(end_index).unwrap_or(&str_len);
+    let start = *char_byte_indices.get(start_index).unwrap_or(&str_len);
+    let end = *char_byte_indices.get(end_index).unwrap_or(&str_len);
 
     #[allow(unsafe_code)]
     unsafe {
