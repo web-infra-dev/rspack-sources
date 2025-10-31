@@ -766,8 +766,13 @@ impl Clone for ReplaceSource {
 impl Hash for ReplaceSource {
   fn hash<H: Hasher>(&self, state: &mut H) {
     "ReplaceSource".hash(state);
+    // replacements are ordered, so when hashing,
+    // skip fields (enforce and insertion_order) that are only used
     for repl in &self.replacements {
-      repl.hash(state);
+      repl.start.hash(state);
+      repl.end.hash(state);
+      repl.content.hash(state);
+      repl.name.hash(state);
     }
     self.inner.hash(state);
   }
@@ -784,6 +789,8 @@ impl Eq for ReplaceSource {}
 
 #[cfg(test)]
 mod tests {
+  use rustc_hash::FxHasher;
+
   use crate::{
     source_map_source::WithoutOriginalOptions, OriginalSource, RawStringSource,
     ReplacementEnforce, SourceExt, SourceMapSource,
@@ -1185,7 +1192,7 @@ return <div>{data.foo}</div>
     assert_eq!(source.map(&MapOptions::default()), None);
     let mut hasher = twox_hash::XxHash64::default();
     source.hash(&mut hasher);
-    assert_eq!(format!("{:x}", hasher.finish()), "15e48cdf294935ab");
+    assert_eq!(format!("{:x}", hasher.finish()), "96abdb94c6fd5aba");
   }
 
   #[test]
@@ -1359,5 +1366,26 @@ return <div>{data.foo}</div>
     );
 
     assert_eq!(source.size(), source.source().into_string_lossy().len());
+  }
+
+  #[test]
+  fn replace_source_hash_is_order_independent() {
+    let mut source1 =
+      ReplaceSource::new(RawStringSource::from_static("hello, world!").boxed());
+    source1.replace(0, 5, "你好", None);
+    source1.replace(6, 11, "世界", None);
+
+    let mut source2 =
+      ReplaceSource::new(RawStringSource::from_static("hello, world!").boxed());
+    source2.replace(6, 11, "世界", None);
+    source2.replace(0, 5, "你好", None);
+
+    assert_eq!(source1.source(), source2.source());
+
+    let mut hasher1 = FxHasher::default();
+    source1.hash(&mut hasher1);
+    let mut hasher2 = FxHasher::default();
+    source2.hash(&mut hasher2);
+    assert_eq!(hasher1.finish(), hasher2.finish());
   }
 }

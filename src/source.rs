@@ -24,7 +24,7 @@ pub type BoxSource = Arc<dyn Source>;
 /// `SourceValue` provides a flexible way to handle source content regardless of whether
 /// it's originally stored as a string or raw bytes. This is particularly useful for
 /// build tools and bundlers that need to process various types of source files.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum SourceValue<'a> {
   /// Text content stored as a UTF-8 string.
   String(Cow<'a, str>),
