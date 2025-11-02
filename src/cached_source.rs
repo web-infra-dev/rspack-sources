@@ -11,6 +11,7 @@ use crate::{
     stream_and_get_source_and_map, stream_chunks_of_raw_source,
     stream_chunks_of_source_map, StreamChunks,
   },
+  object_pool::ObjectPool,
   rope::Rope,
   source::SourceValue,
   BoxSource, MapOptions, Source, SourceExt, SourceMap,
@@ -124,6 +125,7 @@ impl StreamChunks for CachedSource {
   fn stream_chunks<'a>(
     &'a self,
     options: &MapOptions,
+    object_pool: &'a ObjectPool,
     on_chunk: crate::helpers::OnChunk<'_, 'a>,
     on_source: crate::helpers::OnSource<'_, 'a>,
     on_name: crate::helpers::OnName<'_, 'a>,
@@ -138,7 +140,13 @@ impl StreamChunks for CachedSource {
         let source = self.rope();
         if let Some(map) = map {
           stream_chunks_of_source_map(
-            source, map, on_chunk, on_source, on_name, options,
+            options,
+            object_pool,
+            source,
+            map,
+            on_chunk,
+            on_source,
+            on_name,
           )
         } else {
           stream_chunks_of_raw_source(
@@ -148,8 +156,9 @@ impl StreamChunks for CachedSource {
       }
       None => {
         let (generated_info, map) = stream_and_get_source_and_map(
-          &self.inner,
           options,
+          object_pool,
+          &self.inner,
           on_chunk,
           on_source,
           on_name,
@@ -310,6 +319,7 @@ mod tests {
     let mut on_name_count = 0;
     let generated_info = source.stream_chunks(
       &map_options,
+      &ObjectPool::default(),
       &mut |_chunk, _mapping| {
         on_chunk_count += 1;
       },
@@ -324,6 +334,7 @@ mod tests {
     let cached_source = CachedSource::new(source);
     cached_source.stream_chunks(
       &map_options,
+      &ObjectPool::default(),
       &mut |_chunk, _mapping| {},
       &mut |_source_index, _source, _source_content| {},
       &mut |_name_index, _name| {},
@@ -334,6 +345,7 @@ mod tests {
     let mut cached_on_name_count = 0;
     let cached_generated_info = cached_source.stream_chunks(
       &map_options,
+      &ObjectPool::default(),
       &mut |_chunk, _mapping| {
         cached_on_chunk_count += 1;
       },

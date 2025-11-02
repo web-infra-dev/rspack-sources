@@ -10,6 +10,7 @@ use rustc_hash::FxHashMap as HashMap;
 use crate::{
   helpers::{get_map, GeneratedInfo, OnChunk, OnName, OnSource, StreamChunks},
   linear_map::LinearMap,
+  object_pool::ObjectPool,
   source::{Mapping, OriginalLocation},
   BoxSource, MapOptions, RawStringSource, Rope, Source, SourceExt, SourceMap,
   SourceValue,
@@ -231,6 +232,7 @@ impl StreamChunks for ConcatSource {
   fn stream_chunks<'a>(
     &'a self,
     options: &MapOptions,
+    object_pool: &'a ObjectPool,
     on_chunk: OnChunk<'_, 'a>,
     on_source: OnSource<'_, 'a>,
     on_name: OnName<'_, 'a>,
@@ -238,7 +240,13 @@ impl StreamChunks for ConcatSource {
     let children = self.optimized_children();
 
     if children.len() == 1 {
-      return children[0].stream_chunks(options, on_chunk, on_source, on_name);
+      return children[0].stream_chunks(
+        options,
+        object_pool,
+        on_chunk,
+        on_source,
+        on_name,
+      );
     }
     let mut current_line_offset = 0;
     let mut current_column_offset = 0;
@@ -260,6 +268,7 @@ impl StreamChunks for ConcatSource {
         generated_column,
       } = item.stream_chunks(
         options,
+        object_pool,
         &mut |chunk, mapping| {
           let line = mapping.generated_line + current_line_offset;
           let column = if mapping.generated_line == 1 {

@@ -6,9 +6,11 @@ use rspack_sources::stream_chunks::{
   stream_chunks_default, GeneratedInfo, OnChunk, OnName, OnSource, StreamChunks,
 };
 use rspack_sources::{
-  ConcatSource, MapOptions, RawStringSource, Rope, Source, SourceExt,
-  SourceMap, SourceValue,
+  ConcatSource, MapOptions, ObjectPool, RawStringSource, Rope, Source,
+  SourceExt, SourceMap, SourceValue,
 };
+use simd_json::borrowed::Object;
+use simd_json::lazy::object;
 
 #[derive(Debug, Eq)]
 struct CompatSource(&'static str, Option<SourceMap>);
@@ -43,14 +45,16 @@ impl StreamChunks for CompatSource {
   fn stream_chunks<'a>(
     &'a self,
     options: &MapOptions,
+    object_pool: &'a ObjectPool,
     on_chunk: OnChunk<'_, 'a>,
     on_source: OnSource<'_, 'a>,
     on_name: OnName<'_, 'a>,
   ) -> GeneratedInfo {
     stream_chunks_default(
+      options,
+      object_pool,
       self.0,
       self.1.as_ref(),
-      options,
       on_chunk,
       on_source,
       on_name,

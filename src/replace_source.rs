@@ -12,6 +12,7 @@ use crate::{
     get_map, split_into_lines, GeneratedInfo, SourceText, StreamChunks,
   },
   linear_map::LinearMap,
+  object_pool::ObjectPool,
   rope::Rope,
   source_content_lines::SourceContentLines,
   BoxSource, MapOptions, Mapping, OriginalLocation, Source, SourceExt,
@@ -319,9 +320,9 @@ impl std::fmt::Debug for ReplaceSource {
   }
 }
 
-enum SourceContent {
+enum SourceContent<'object_pool> {
   Raw(Arc<str>),
-  Lines(SourceContentLines),
+  Lines(SourceContentLines<'object_pool>),
 }
 
 fn check_content_at_position(
@@ -344,6 +345,7 @@ impl StreamChunks for ReplaceSource {
   fn stream_chunks<'a>(
     &'a self,
     options: &crate::MapOptions,
+    object_pool: &'a ObjectPool,
     on_chunk: crate::helpers::OnChunk<'_, 'a>,
     on_source: crate::helpers::OnSource<'_, 'a>,
     on_name: crate::helpers::OnName<'_, 'a>,
@@ -397,7 +399,7 @@ impl StreamChunks for ReplaceSource {
         {
           match source_content {
             SourceContent::Raw(source) => {
-              let lines = SourceContentLines::from(source.clone());
+              let lines = SourceContentLines::from(object_pool, source.clone());
               let matched =
                 check_content_at_position(&lines, line, column, expected_chunk);
               *source_content = SourceContent::Lines(lines);
@@ -417,6 +419,7 @@ impl StreamChunks for ReplaceSource {
         columns: options.columns,
         final_source: false,
       },
+      object_pool,
       &mut |chunk, mut mapping| {
         // SAFETY: final_source is false in ReplaceSource
         let chunk = chunk.unwrap();

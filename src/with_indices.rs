@@ -2,7 +2,7 @@ use std::{cell::OnceCell, marker::PhantomData};
 
 use crate::{
   helpers::SourceText,
-  object_pool::{pull_usize_vec, Pooled},
+  object_pool::{ObjectPool, Pooled},
 };
 
 #[derive(Debug)]
@@ -13,18 +13,20 @@ where
   /// line is a string reference
   pub line: S,
   /// the byte position of each `char` in `line` string slice .
-  pub char_byte_indices: OnceCell<Pooled<Vec<usize>>>,
+  pub char_byte_indices: OnceCell<Pooled>,
   data: PhantomData<&'text S>,
+  object_pool: &'text ObjectPool,
 }
 
 impl<'text, S> WithIndices<'text, S>
 where
   S: SourceText<'text>,
 {
-  pub fn new(line: S) -> Self {
+  pub fn new(object_pool: &'text ObjectPool, line: S) -> Self {
     Self {
       char_byte_indices: OnceCell::new(),
       line,
+      object_pool,
       data: PhantomData,
     }
   }
@@ -36,7 +38,7 @@ where
     }
 
     let char_byte_indices = self.char_byte_indices.get_or_init(|| {
-      let mut vec = pull_usize_vec(self.line.len());
+      let mut vec = self.object_pool.pull(self.line.len());
       vec.extend(self.line.char_indices().map(|(i, _)| i));
       vec
     });
@@ -58,13 +60,14 @@ where
 /// tests are just copy from `substring` crate
 #[cfg(test)]
 mod tests {
-  use crate::Rope;
+  use crate::{object_pool::ObjectPool, Rope};
 
   use super::WithIndices;
   #[test]
   fn test_substring() {
     assert_eq!(
-      WithIndices::new(Rope::from("foobar")).substring(0, 3),
+      WithIndices::new(&ObjectPool::default(), Rope::from("foobar"))
+        .substring(0, 3),
       "foo"
     );
   }
@@ -72,26 +75,40 @@ mod tests {
   #[test]
   fn test_out_of_bounds() {
     assert_eq!(
-      WithIndices::new(Rope::from("foobar")).substring(0, 10),
+      WithIndices::new(&ObjectPool::default(), Rope::from("foobar"))
+        .substring(0, 10),
       "foobar"
     );
-    assert_eq!(WithIndices::new(Rope::from("foobar")).substring(6, 10), "");
+    assert_eq!(
+      WithIndices::new(&ObjectPool::default(), Rope::from("foobar"))
+        .substring(6, 10),
+      ""
+    );
   }
 
   #[test]
   fn test_start_less_than_end() {
-    assert_eq!(WithIndices::new(Rope::from("foobar")).substring(3, 2), "");
+    assert_eq!(
+      WithIndices::new(&ObjectPool::default(), Rope::from("foobar"))
+        .substring(3, 2),
+      ""
+    );
   }
 
   #[test]
   fn test_start_and_end_equal() {
-    assert_eq!(WithIndices::new(Rope::from("foobar")).substring(3, 3), "");
+    assert_eq!(
+      WithIndices::new(&ObjectPool::default(), Rope::from("foobar"))
+        .substring(3, 3),
+      ""
+    );
   }
 
   #[test]
   fn test_multiple_byte_characters() {
     assert_eq!(
-      WithIndices::new(Rope::from("fõøbα®")).substring(2, 5),
+      WithIndices::new(&ObjectPool::default(), Rope::from("fõøbα®"))
+        .substring(2, 5),
       "øbα"
     );
   }

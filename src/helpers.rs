@@ -12,7 +12,7 @@ use crate::{
   decoder::MappingsDecoder,
   encoder::create_encoder,
   linear_map::LinearMap,
-  object_pool::with_current_thread_object_pool_scope,
+  object_pool::ObjectPool,
   source::{Mapping, OriginalLocation},
   source_content_lines::SourceContentLines,
   with_indices::WithIndices,
@@ -20,13 +20,6 @@ use crate::{
 };
 
 pub fn get_map<'a, S: StreamChunks>(
-  stream: &'a S,
-  options: &'a MapOptions,
-) -> Option<SourceMap> {
-  with_current_thread_object_pool_scope(|| get_map_impl(stream, options))
-}
-
-pub fn get_map_impl<'a, S: StreamChunks>(
   stream: &'a S,
   options: &'a MapOptions,
 ) -> Option<SourceMap> {
@@ -40,6 +33,7 @@ pub fn get_map_impl<'a, S: StreamChunks>(
       columns: options.columns,
       final_source: true,
     },
+    &ObjectPool::default(),
     // on_chunk
     &mut |_, mapping| {
       mappings_encoder.encode(&mapping);
@@ -78,6 +72,7 @@ pub trait StreamChunks {
   fn stream_chunks<'a>(
     &'a self,
     options: &MapOptions,
+    object_pool: &'a ObjectPool,
     on_chunk: OnChunk<'_, 'a>,
     on_source: OnSource<'_, 'a>,
     on_name: OnName<'_, 'a>,
@@ -97,9 +92,10 @@ pub type OnName<'a, 'b> = &'a mut dyn FnMut(u32, Cow<'b, str>);
 
 /// Default stream chunks behavior impl, see [webpack-sources streamChunks](https://github.com/webpack/webpack-sources/blob/9f98066311d53a153fdc7c633422a1d086528027/lib/helpers/streamChunks.js#L15-L35).
 pub fn stream_chunks_default<'a, S>(
+  options: &MapOptions,
+  object_pool: &'a ObjectPool,
   source: S,
   source_map: Option<&'a SourceMap>,
-  options: &MapOptions,
   on_chunk: OnChunk<'_, 'a>,
   on_source: OnSource<'_, 'a>,
   on_name: OnName<'_, 'a>,
@@ -109,7 +105,13 @@ where
 {
   if let Some(map) = source_map {
     stream_chunks_of_source_map(
-      source, map, on_chunk, on_source, on_name, options,
+      options,
+      object_pool,
+      source,
+      map,
+      on_chunk,
+      on_source,
+      on_name,
     )
   } else {
     stream_chunks_of_raw_source(source, options, on_chunk, on_source, on_name)
@@ -308,12 +310,13 @@ where
 }
 
 pub fn stream_chunks_of_source_map<'a, S>(
+  options: &MapOptions,
+  object_pool: &'a ObjectPool,
   source: S,
   source_map: &'a SourceMap,
   on_chunk: OnChunk<'_, 'a>,
   on_source: OnSource<'_, 'a>,
   on_name: OnName<'_, 'a>,
-  options: &MapOptions,
 ) -> GeneratedInfo
 where
   S: SourceText<'a> + 'a,
@@ -322,24 +325,33 @@ where
     MapOptions {
       columns: true,
       final_source: true,
+      ..
     } => stream_chunks_of_source_map_final(
       source, source_map, on_chunk, on_source, on_name,
     ),
     MapOptions {
       columns: true,
       final_source: false,
+      ..
     } => stream_chunks_of_source_map_full(
-      source, source_map, on_chunk, on_source, on_name,
+      object_pool,
+      source,
+      source_map,
+      on_chunk,
+      on_source,
+      on_name,
     ),
     MapOptions {
       columns: false,
       final_source: true,
+      ..
     } => stream_chunks_of_source_map_lines_final(
       source, source_map, on_chunk, on_source, on_name,
     ),
     MapOptions {
       columns: false,
       final_source: false,
+      ..
     } => stream_chunks_of_source_map_lines_full(
       source, source_map, on_chunk, on_source, on_name,
     ),
@@ -418,6 +430,7 @@ where
 }
 
 fn stream_chunks_of_source_map_full<'a, S>(
+  object_pool: &'a ObjectPool,
   source: S,
   source_map: &'a SourceMap,
   on_chunk: OnChunk<'_, 'a>,
@@ -428,7 +441,9 @@ where
   S: SourceText<'a> + 'a,
 {
   let lines = split_into_lines(&source);
-  let line_with_indices_list = lines.map(WithIndices::new).collect::<Vec<_>>();
+  let line_with_indices_list = lines
+    .map(|line| WithIndices::new(object_pool, line))
+    .collect::<Vec<_>>();
 
   if line_with_indices_list.is_empty() {
     return GeneratedInfo {
@@ -715,6 +730,8 @@ type InnerSourceIndexValueMapping<'a> =
 
 #[allow(clippy::too_many_arguments)]
 pub fn stream_chunks_of_combined_source_map<'a, S>(
+  options: &MapOptions,
+  object_pool: &'a ObjectPool,
   source: S,
   source_map: &'a SourceMap,
   inner_source_name: &'a str,
@@ -724,7 +741,6 @@ pub fn stream_chunks_of_combined_source_map<'a, S>(
   on_chunk: OnChunk<'_, 'a>,
   on_source: OnSource<'_, 'a>,
   on_name: OnName<'_, 'a>,
-  options: &MapOptions,
 ) -> GeneratedInfo
 where
   S: SourceText<'a> + 'a,
@@ -781,6 +797,8 @@ where
   };
 
   stream_chunks_of_source_map(
+    options,
+    object_pool,
     source.clone(),
     source_map,
     &mut |chunk, mapping| {
@@ -835,7 +853,10 @@ where
                     let inner_source_contents = inner_source_contents.borrow();
                     match inner_source_contents.get(&inner_source_index) {
                       Some(Some(source_content)) => {
-                        Some(SourceContentLines::from(source_content.clone()))
+                        Some(SourceContentLines::from(
+                          object_pool,
+                          source_content.clone(),
+                        ))
                       }
                       _ => None,
                     }
@@ -934,7 +955,10 @@ where
                     let inner_source_contents = inner_source_contents.borrow();
                     match inner_source_contents.get(&inner_source_index) {
                       Some(Some(source_content)) => {
-                        Some(SourceContentLines::from(source_content.clone()))
+                        Some(SourceContentLines::from(
+                          object_pool,
+                          source_content.clone(),
+                        ))
                       }
                       _ => None,
                     }
@@ -1098,6 +1122,11 @@ where
         }
         source_index_mapping.borrow_mut().insert(i, -2);
         stream_chunks_of_source_map(
+          &MapOptions {
+            columns: options.columns,
+            final_source: false,
+          },
+          object_pool,
           source_content.unwrap().as_ref(),
           inner_source_map,
           &mut |chunk, mapping| {
@@ -1167,10 +1196,6 @@ where
             inner_name_index_mapping.borrow_mut().insert(i, -2);
             inner_name_index_value_mapping.borrow_mut().insert(i, name);
           },
-          &MapOptions {
-            columns: options.columns,
-            final_source: false,
-          },
         );
       } else {
         let mut source_mapping = source_mapping.borrow_mut();
@@ -1190,13 +1215,13 @@ where
       name_index_mapping.borrow_mut().insert(i, -2);
       name_index_value_mapping.borrow_mut().insert(i, name);
     },
-    options,
   )
 }
 
 pub fn stream_and_get_source_and_map<'a, S: StreamChunks>(
-  input_source: &'a S,
   options: &MapOptions,
+  object_pool: &'a ObjectPool,
+  input_source: &'a S,
   on_chunk: OnChunk<'_, 'a>,
   on_source: OnSource<'_, 'a>,
   on_name: OnName<'_, 'a>,
@@ -1208,6 +1233,7 @@ pub fn stream_and_get_source_and_map<'a, S: StreamChunks>(
 
   let generated_info = input_source.stream_chunks(
     options,
+    object_pool,
     &mut |chunk, mapping| {
       mappings_encoder.encode(&mapping);
       on_chunk(chunk, mapping);

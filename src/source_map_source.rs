@@ -9,6 +9,7 @@ use crate::{
     get_map, stream_chunks_of_combined_source_map, stream_chunks_of_source_map,
     StreamChunks,
   },
+  object_pool::ObjectPool,
   MapOptions, Rope, Source, SourceMap, SourceValue,
 };
 
@@ -186,12 +187,15 @@ impl StreamChunks for SourceMapSource {
   fn stream_chunks<'a>(
     &'a self,
     options: &MapOptions,
+    object_pool: &'a ObjectPool,
     on_chunk: crate::helpers::OnChunk<'_, 'a>,
     on_source: crate::helpers::OnSource<'_, 'a>,
     on_name: crate::helpers::OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {
     if let Some(inner_source_map) = &self.inner_source_map {
       stream_chunks_of_combined_source_map(
+        options,
+        object_pool,
         &*self.value,
         &self.source_map,
         &self.name,
@@ -201,16 +205,16 @@ impl StreamChunks for SourceMapSource {
         on_chunk,
         on_source,
         on_name,
-        options,
       )
     } else {
       stream_chunks_of_source_map(
+        options,
+        object_pool,
         self.value.as_str(),
         &self.source_map,
         on_chunk,
         on_source,
         on_name,
-        options,
       )
     }
   }

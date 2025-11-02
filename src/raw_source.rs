@@ -9,6 +9,7 @@ use crate::{
     get_generated_source_info, stream_chunks_of_raw_source, OnChunk, OnName,
     OnSource, StreamChunks,
   },
+  object_pool::ObjectPool,
   MapOptions, Rope, Source, SourceMap, SourceValue,
 };
 
@@ -110,6 +111,7 @@ impl StreamChunks for RawStringSource {
   fn stream_chunks<'a>(
     &'a self,
     options: &MapOptions,
+    _: &'a ObjectPool,
     on_chunk: OnChunk<'_, 'a>,
     on_source: OnSource<'_, 'a>,
     on_name: OnName<'_, 'a>,
@@ -243,6 +245,7 @@ impl StreamChunks for RawBufferSource {
   fn stream_chunks<'a>(
     &'a self,
     options: &MapOptions,
+    _: &'a ObjectPool,
     on_chunk: OnChunk<'_, 'a>,
     on_source: OnSource<'_, 'a>,
     on_name: OnName<'_, 'a>,

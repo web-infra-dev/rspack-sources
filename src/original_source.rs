@@ -10,6 +10,7 @@ use crate::{
     split_into_potential_tokens, GeneratedInfo, OnChunk, OnName, OnSource,
     SourceText, StreamChunks,
   },
+  object_pool::ObjectPool,
   source::{Mapping, OriginalLocation},
   MapOptions, Rope, Source, SourceMap, SourceValue,
 };
@@ -110,6 +111,7 @@ impl StreamChunks for OriginalSource {
   fn stream_chunks<'a>(
     &'a self,
     options: &MapOptions,
+    _: &'a ObjectPool,
     on_chunk: OnChunk<'_, 'a>,
     on_source: OnSource<'_, 'a>,
     _on_name: OnName,
