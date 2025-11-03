@@ -36,16 +36,15 @@ dyn-clone = "1.0.17"
 rustc-hash = "2.1.0"
 memchr = "2.7.4"
 
-
 codspeed-criterion-compat = { version = "2.7.2", default-features = false, optional = true }
 static_assertions = "1.1.0"
 simd-json = "0.14.3"
-self_cell = "1.2.1"
 
 [dev-dependencies]
 twox-hash = "2.1.0"
 regex = "1.11.1"
 criterion = { version = "0.5.1", default-features = false }
+rayon = "1.11.0"
 
 [features]
 codspeed = ["codspeed-criterion-compat"]

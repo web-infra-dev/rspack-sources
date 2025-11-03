@@ -13,24 +13,22 @@ pub use criterion::*;
 pub use codspeed_criterion_compat::*;
 
 use rspack_sources::{
-  BoxSource, CachedSource, ConcatSource, MapOptions, Source, SourceExt,
-  SourceMap, SourceMapSource, SourceMapSourceOptions,
+  BoxSource, CachedSource, ConcatSource, MapOptions, ObjectPool, Source,
+  SourceExt, SourceMap, SourceMapSource, SourceMapSourceOptions,
 };
 
 use bench_complex_replace_source::{
-  benchmark_complex_replace_source_map, benchmark_complex_replace_source_source,
+  benchmark_complex_replace_source_map, benchmark_complex_replace_source_size,
+  benchmark_complex_replace_source_source,
 };
 use bench_source_map::{
   benchmark_parse_source_map_from_json, benchmark_source_map_clone,
-  benchmark_stringify_source_map_to_json,
 };
 
 use benchmark_repetitive_react_components::{
   benchmark_repetitive_react_components_map,
   benchmark_repetitive_react_components_source,
 };
-
-use crate::bench_complex_replace_source::benchmark_complex_replace_source_size;
 
 const HELLOWORLD_JS: &str = include_str!(concat!(
   env!("CARGO_MANIFEST_DIR"),
@@ -80,7 +78,7 @@ fn benchmark_concat_generate_string(b: &mut Bencher) {
 
   b.iter(|| {
     concat
-      .map(&MapOptions::default())
+      .map(&ObjectPool::default(), &MapOptions::default())
       .unwrap()
       .to_json()
       .unwrap();
@@ -109,7 +107,7 @@ fn benchmark_concat_generate_string_with_cache(b: &mut Bencher) {
 
   b.iter(|| {
     cached
-      .map(&MapOptions::default())
+      .map(&ObjectPool::default(), &MapOptions::default())
       .unwrap()
       .to_json()
       .unwrap();
@@ -177,11 +175,6 @@ fn bench_rspack_sources(criterion: &mut Criterion) {
   );
 
   group.bench_function("source_map_clone", benchmark_source_map_clone);
-
-  group.bench_function(
-    "stringify_source_map_to_json",
-    benchmark_stringify_source_map_to_json,
-  );
 
   group.bench_function(
     "repetitive_react_components_map",

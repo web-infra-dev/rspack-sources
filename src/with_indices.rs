@@ -1,27 +1,32 @@
 use std::{cell::OnceCell, marker::PhantomData};
 
-use crate::helpers::SourceText;
+use crate::{
+  helpers::SourceText,
+  object_pool::{ObjectPool, Pooled},
+};
 
-#[derive(Debug, Clone)]
-pub struct WithIndices<'a, S>
+#[derive(Debug)]
+pub struct WithIndices<'object_pool, 'text, S>
 where
-  S: SourceText<'a>,
+  S: SourceText<'text>,
 {
   /// line is a string reference
   pub line: S,
   /// the byte position of each `char` in `line` string slice .
-  pub indices_indexes: OnceCell<Vec<usize>>,
-  data: PhantomData<&'a S>,
+  pub char_byte_indices: OnceCell<Pooled<'object_pool>>,
+  data: PhantomData<&'text S>,
+  object_pool: &'object_pool ObjectPool,
 }
 
-impl<'a, S> WithIndices<'a, S>
+impl<'object_pool, 'text, S> WithIndices<'object_pool, 'text, S>
 where
-  S: SourceText<'a>,
+  S: SourceText<'text>,
 {
-  pub fn new(line: S) -> Self {
+  pub fn new(object_pool: &'object_pool ObjectPool, line: S) -> Self {
     Self {
-      indices_indexes: OnceCell::new(),
+      char_byte_indices: OnceCell::new(),
       line,
+      object_pool,
       data: PhantomData,
     }
   }
@@ -32,13 +37,15 @@ where
       return S::default();
     }
 
-    let indices_indexes = self.indices_indexes.get_or_init(|| {
-      self.line.char_indices().map(|(i, _)| i).collect::<Vec<_>>()
+    let char_byte_indices = self.char_byte_indices.get_or_init(|| {
+      let mut vec = self.object_pool.pull(self.line.len());
+      vec.extend(self.line.char_indices().map(|(i, _)| i));
+      vec
     });
 
     let str_len = self.line.len();
-    let start = *indices_indexes.get(start_index).unwrap_or(&str_len);
-    let end = *indices_indexes.get(end_index).unwrap_or(&str_len);
+    let start = *char_byte_indices.get(start_index).unwrap_or(&str_len);
+    let end = *char_byte_indices.get(end_index).unwrap_or(&str_len);
 
     #[allow(unsafe_code)]
     unsafe {
@@ -53,13 +60,14 @@ where
 /// tests are just copy from `substring` crate
 #[cfg(test)]
 mod tests {
-  use crate::Rope;
+  use crate::{object_pool::ObjectPool, Rope};
 
   use super::WithIndices;
   #[test]
   fn test_substring() {
     assert_eq!(
-      WithIndices::new(Rope::from("foobar")).substring(0, 3),
+      WithIndices::new(&ObjectPool::default(), Rope::from("foobar"))
+        .substring(0, 3),
       "foo"
     );
   }
@@ -67,26 +75,40 @@ mod tests {
   #[test]
   fn test_out_of_bounds() {
     assert_eq!(
-      WithIndices::new(Rope::from("foobar")).substring(0, 10),
+      WithIndices::new(&ObjectPool::default(), Rope::from("foobar"))
+        .substring(0, 10),
       "foobar"
     );
-    assert_eq!(WithIndices::new(Rope::from("foobar")).substring(6, 10), "");
+    assert_eq!(
+      WithIndices::new(&ObjectPool::default(), Rope::from("foobar"))
+        .substring(6, 10),
+      ""
+    );
   }
 
   #[test]
   fn test_start_less_than_end() {
-    assert_eq!(WithIndices::new(Rope::from("foobar")).substring(3, 2), "");
+    assert_eq!(
+      WithIndices::new(&ObjectPool::default(), Rope::from("foobar"))
+        .substring(3, 2),
+      ""
+    );
   }
 
   #[test]
   fn test_start_and_end_equal() {
-    assert_eq!(WithIndices::new(Rope::from("foobar")).substring(3, 3), "");
+    assert_eq!(
+      WithIndices::new(&ObjectPool::default(), Rope::from("foobar"))
+        .substring(3, 3),
+      ""
+    );
   }
 
   #[test]
   fn test_multiple_byte_characters() {
     assert_eq!(
-      WithIndices::new(Rope::from("fõøbα®")).substring(2, 5),
+      WithIndices::new(&ObjectPool::default(), Rope::from("fõøbα®"))
+        .substring(2, 5),
       "øbα"
     );
   }

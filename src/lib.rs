@@ -7,6 +7,7 @@ mod encoder;
 mod error;
 mod helpers;
 mod linear_map;
+mod object_pool;
 mod original_source;
 mod raw_source;
 mod replace_source;
@@ -40,3 +41,5 @@ pub mod stream_chunks {
 }
 
 pub use helpers::{decode_mappings, encode_mappings};
+
+pub use object_pool::ObjectPool;

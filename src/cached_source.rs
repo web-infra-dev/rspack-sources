@@ -11,6 +11,7 @@ use crate::{
     stream_and_get_source_and_map, stream_chunks_of_raw_source,
     stream_chunks_of_source_map, StreamChunks,
   },
+  object_pool::ObjectPool,
   rope::Rope,
   source::SourceValue,
   BoxSource, MapOptions, Source, SourceExt, SourceMap,
@@ -99,18 +100,22 @@ impl Source for CachedSource {
     *self.cache.size.get_or_init(|| self.inner.size())
   }
 
-  fn map(&self, options: &MapOptions) -> Option<SourceMap> {
+  fn map(
+    &self,
+    object_pool: &ObjectPool,
+    options: &MapOptions,
+  ) -> Option<SourceMap> {
     if options.columns {
       self
         .cache
         .columns_map
-        .get_or_init(|| self.inner.map(options))
+        .get_or_init(|| self.inner.map(object_pool, options))
         .clone()
     } else {
       self
         .cache
         .line_only_map
-        .get_or_init(|| self.inner.map(options))
+        .get_or_init(|| self.inner.map(object_pool, options))
         .clone()
     }
   }
@@ -123,6 +128,7 @@ impl Source for CachedSource {
 impl StreamChunks for CachedSource {
   fn stream_chunks<'a>(
     &'a self,
+    object_pool: &'a ObjectPool,
     options: &MapOptions,
     on_chunk: crate::helpers::OnChunk<'_, 'a>,
     on_source: crate::helpers::OnSource<'_, 'a>,
@@ -138,7 +144,13 @@ impl StreamChunks for CachedSource {
         let source = self.rope();
         if let Some(map) = map {
           stream_chunks_of_source_map(
-            source, map, on_chunk, on_source, on_name, options,
+            options,
+            object_pool,
+            source,
+            map,
+            on_chunk,
+            on_source,
+            on_name,
           )
         } else {
           stream_chunks_of_raw_source(
@@ -148,8 +160,9 @@ impl StreamChunks for CachedSource {
       }
       None => {
         let (generated_info, map) = stream_and_get_source_and_map(
-          &self.inner,
           options,
+          object_pool,
+          &self.inner,
           on_chunk,
           on_source,
           on_name,
@@ -233,7 +246,9 @@ mod tests {
       })
       .boxed(),
     ]);
-    let map = source.map(&Default::default()).unwrap();
+    let map = source
+      .map(&ObjectPool::default(), &Default::default())
+      .unwrap();
     assert_eq!(map.mappings(), ";;AACA");
   }
 
@@ -248,11 +263,11 @@ mod tests {
     source.source();
     source.buffer();
     source.size();
-    source.map(&map_options);
+    source.map(&ObjectPool::default(), &map_options);
 
     assert_eq!(
       *clone.cache.columns_map.get().unwrap(),
-      source.map(&map_options)
+      source.map(&ObjectPool::default(), &map_options)
     );
   }
 
@@ -302,16 +317,14 @@ mod tests {
 
   #[test]
   fn should_produce_correct_output_for_cached_raw_source() {
-    let map_options = MapOptions {
-      columns: true,
-      final_source: true,
-    };
+    let map_options = MapOptions::new(true);
 
     let source = RawStringSource::from("Test\nTest\nTest\n");
     let mut on_chunk_count = 0;
     let mut on_source_count = 0;
     let mut on_name_count = 0;
     let generated_info = source.stream_chunks(
+      &ObjectPool::default(),
       &map_options,
       &mut |_chunk, _mapping| {
         on_chunk_count += 1;
@@ -326,6 +339,7 @@ mod tests {
 
     let cached_source = CachedSource::new(source);
     cached_source.stream_chunks(
+      &ObjectPool::default(),
       &map_options,
       &mut |_chunk, _mapping| {},
       &mut |_source_index, _source, _source_content| {},
@@ -336,6 +350,7 @@ mod tests {
     let mut cached_on_source_count = 0;
     let mut cached_on_name_count = 0;
     let cached_generated_info = cached_source.stream_chunks(
+      &ObjectPool::default(),
       &map_options,
       &mut |_chunk, _mapping| {
         cached_on_chunk_count += 1;
