@@ -470,8 +470,11 @@ where
   } else {
     line_with_indices_list.len()
   } as u32;
-  let final_column: u32 =
-    if last_new_line { 0 } else { last_line.len() } as u32;
+  let final_column: u32 = if last_new_line {
+    0
+  } else {
+    last_line.utf16_len()
+  } as u32;
   let mut current_generated_line: u32 = 1;
   let mut current_generated_column: u32 = 0;
   let mut mapping_active = false;
@@ -1300,6 +1303,9 @@ pub trait SourceText<'a>: Default + Clone + ToString {
   /// Returns the length of the text in bytes.
   fn len(&self) -> usize;
 
+  /// Returns the utf16 length of the text in bytes.
+  fn utf16_len(&self) -> usize;
+
   /// Converts this text into a Rope.
   fn into_rope(self) -> Rope<'a>
   where
@@ -1349,6 +1355,10 @@ impl<'a> SourceText<'a> for Rope<'a> {
   fn get_byte(&self, byte_index: usize) -> Option<u8> {
     self.get_byte(byte_index)
   }
+
+  fn utf16_len(&self) -> usize {
+    self.utf16_len()
+  }
 }
 
 impl<'a> SourceText<'a> for &'a str {
@@ -1390,5 +1400,67 @@ impl<'a> SourceText<'a> for &'a str {
 
   fn get_byte(&self, byte_index: usize) -> Option<u8> {
     self.as_bytes().get(byte_index).copied()
+  }
+
+  fn utf16_len(&self) -> usize {
+    self.encode_utf16().count()
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::stream_chunks_of_source_map_full;
+  use crate::{
+    helpers::GeneratedInfo, Mapping, ObjectPool, OriginalLocation, SourceMap,
+  };
+
+  #[test]
+  fn test_stream_chunks_of_source_map_full_handles_utf16() {
+    let source = "var i18n = JSON.parse('{\"魑魅魍魉\":{\"en-US\":\"Evil spirits\",\"zh-CN\":\"魑魅魍魉\"}}');\nvar __webpack_exports___ = i18n[\"魑魅魍魉\"];\nexport { __webpack_exports___ as 魑魅魍魉 };";
+    let source_map = SourceMap::from_json("{\"version\":3,\"sources\":[\"i18.js\"],\"sourcesContent\":[\"var i18n = JSON.parse('{\\\"魑魅魍魉\\\":{\\\"en-US\\\":\\\"Evil spirits\\\",\\\"zh-CN\\\":\\\"魑魅魍魉\\\"}}');\\nvar __webpack_exports___ = i18n[\\\"魑魅魍魉\\\"];\\nexport { __webpack_exports___ as 魑魅魍魉 };\\n\"],\"names\":[\"i18n\",\"JSON\",\"__webpack_exports___\",\"魑魅魍魉\"],\"mappings\":\"AAAA,IAAIA,OAAOC,KAAK,KAAK,CAAC;AACtB,IAAIC,uBAAuBF,IAAI,CAAC,OAAO;AACvC,SAASE,wBAAwBC,IAAI,GAAG\"}").unwrap();
+
+    let mut chunks = vec![];
+
+    let object_pool = ObjectPool::default();
+    let generated_info = stream_chunks_of_source_map_full(
+      &object_pool,
+      source,
+      &source_map,
+      &mut |chunk, mapping| {
+        chunks.push((chunk.unwrap(), mapping));
+      },
+      &mut |_i, _source, _source_content| {},
+      &mut |_i, _name| {},
+    );
+
+    assert_eq!(
+      chunks,
+      vec![
+        ("var ".into(), Mapping { generated_line: 1, generated_column: 0, original: Some(OriginalLocation { source_index: 0, original_line: 1, original_column: 0, name_index: None }) }),
+        ("i18n = ".into(), Mapping { generated_line: 1, generated_column: 4, original: Some(OriginalLocation { source_index: 0, original_line: 1, original_column: 4, name_index: Some(0) }) }),
+        ("JSON.".into(), Mapping { generated_line: 1, generated_column: 11, original: Some(OriginalLocation { source_index: 0, original_line: 1, original_column: 11, name_index: Some(1) }) }),
+        ("parse".into(), Mapping { generated_line: 1, generated_column: 16, original: Some(OriginalLocation { source_index: 0, original_line: 1, original_column: 16, name_index: None }) }),
+        ("(".into(), Mapping { generated_line: 1, generated_column: 21, original: Some(OriginalLocation { source_index: 0, original_line: 1, original_column: 21, name_index: None }) }),
+        ("'{\"魑魅魍魉\":{\"en-US\":\"Evil spirits\",\"zh-CN\":\"魑魅魍魉\"}}');\n".into(), Mapping { generated_line: 1, generated_column: 22, original: Some(OriginalLocation { source_index: 0, original_line: 1, original_column: 22, name_index: None }) }),
+        ("var ".into(), Mapping { generated_line: 2, generated_column: 0, original: Some(OriginalLocation { source_index: 0, original_line: 2, original_column: 0, name_index: None }) }),
+        ("__webpack_exports___ = ".into(), Mapping { generated_line: 2, generated_column: 4, original: Some(OriginalLocation { source_index: 0, original_line: 2, original_column: 4, name_index: Some(2) }) }),
+        ("i18n".into(), Mapping { generated_line: 2, generated_column: 27, original: Some(OriginalLocation { source_index: 0, original_line: 2, original_column: 27, name_index: Some(0) }) }),
+        ("[".into(), Mapping { generated_line: 2, generated_column: 31, original: Some(OriginalLocation { source_index: 0, original_line: 2, original_column: 31, name_index: None }) }),
+        ("\"魑魅魍魉\"]".into(), Mapping { generated_line: 2, generated_column: 32, original: Some(OriginalLocation { source_index: 0, original_line: 2, original_column: 32, name_index: None }) }),
+        (";\n".into(), Mapping { generated_line: 2, generated_column: 39, original: Some(OriginalLocation { source_index: 0, original_line: 2, original_column: 39, name_index: None }) }),
+        ("export { ".into(), Mapping { generated_line: 3, generated_column: 0, original: Some(OriginalLocation { source_index: 0, original_line: 3, original_column: 0, name_index: None }) }),
+        ("__webpack_exports___ as ".into(), Mapping { generated_line: 3, generated_column: 9, original: Some(OriginalLocation { source_index: 0, original_line: 3, original_column: 9, name_index: Some(2) }) }),
+        ("魑魅魍魉".into(), Mapping { generated_line: 3, generated_column: 33, original: Some(OriginalLocation { source_index: 0, original_line: 3, original_column: 33, name_index: Some(3) }) }),
+        (" };".into(), Mapping { generated_line: 3, generated_column: 37, original: Some(OriginalLocation { source_index: 0, original_line: 3, original_column: 37, name_index: None }) })
+      ]
+    );
+
+    assert_eq!(
+      generated_info,
+      GeneratedInfo {
+        generated_line: 3,
+        generated_column: 40
+      }
+    )
   }
 }

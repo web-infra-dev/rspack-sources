@@ -39,7 +39,18 @@ where
 
     let char_byte_indices = self.char_byte_indices.get_or_init(|| {
       let mut vec = self.object_pool.pull(self.line.len());
-      vec.extend(self.line.char_indices().map(|(i, _)| i));
+      for (byte_index, char) in self.line.char_indices() {
+        match char.len_utf16() {
+          1 => {
+            vec.push(byte_index);
+          }
+          2 => {
+            vec.push(byte_index);
+            vec.push(byte_index);
+          }
+          _ => {}
+        }
+      }
       vec
     });
 
@@ -107,9 +118,9 @@ mod tests {
   #[test]
   fn test_multiple_byte_characters() {
     assert_eq!(
-      WithIndices::new(&ObjectPool::default(), Rope::from("fõøbα®"))
-        .substring(2, 5),
-      "øbα"
+      WithIndices::new(&ObjectPool::default(), Rope::from("🙈🙉🙊🐒"))
+        .substring(2, 4),
+      "🙉"
     );
   }
 }

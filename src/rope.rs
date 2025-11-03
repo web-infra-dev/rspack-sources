@@ -134,6 +134,16 @@ impl<'a> Rope<'a> {
     }
   }
 
+  /// Returns the length of the rope in UTF-16 code units.
+  pub fn utf16_len(&self) -> usize {
+    match &self.repr {
+      Repr::Light(s) => s.encode_utf16().count(),
+      Repr::Full(data) => {
+        data.iter().map(|(s, _)| s.encode_utf16().count()).sum()
+      }
+    }
+  }
+
   /// Returns an iterator over the characters and their byte positions.
   pub fn char_indices(&self) -> CharIndices<'_> {
     match &self.repr {
