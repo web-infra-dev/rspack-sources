@@ -11,7 +11,6 @@ pub use codspeed_criterion_compat::*;
 use rspack_sources::{
   BoxSource, MapOptions, ObjectPool, OriginalSource, ReplaceSource, SourceExt,
 };
-use simd_json::borrowed::Object;
 
 static LARGE_REPLACE_SOURCE: LazyLock<BoxSource> = LazyLock::new(|| {
   let mut source = ReplaceSource::new(
