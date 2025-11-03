@@ -265,12 +265,16 @@ impl Source for ReplaceSource {
     size
   }
 
-  fn map(&self, options: &crate::MapOptions) -> Option<SourceMap> {
+  fn map(
+    &self,
+    _: &ObjectPool,
+    options: &crate::MapOptions,
+  ) -> Option<SourceMap> {
     let replacements = &self.replacements;
     if replacements.is_empty() {
-      return self.inner.map(options);
+      return self.inner.map(&ObjectPool::default(), options);
     }
-    get_map(self, options)
+    get_map(&ObjectPool::default(), self, options)
   }
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
@@ -344,8 +348,8 @@ fn check_content_at_position(
 impl StreamChunks for ReplaceSource {
   fn stream_chunks<'a>(
     &'a self,
-    options: &crate::MapOptions,
     object_pool: &'a ObjectPool,
+    options: &crate::MapOptions,
     on_chunk: crate::helpers::OnChunk<'_, 'a>,
     on_source: crate::helpers::OnSource<'_, 'a>,
     on_name: crate::helpers::OnName<'_, 'a>,
@@ -415,11 +419,11 @@ impl StreamChunks for ReplaceSource {
       };
 
     let result = self.inner.stream_chunks(
+      object_pool,
       &MapOptions {
         columns: options.columns,
         final_source: false,
       },
-      object_pool,
       &mut |chunk, mut mapping| {
         // SAFETY: final_source is false in ReplaceSource
         let chunk = chunk.unwrap();
@@ -869,7 +873,9 @@ mod tests {
     source.replace(start_line6 + 4, start_line6 + 5, " ", None);
 
     let result = source.source();
-    let result_map = source.map(&MapOptions::default()).unwrap();
+    let result_map = source
+      .map(&ObjectPool::default(), &MapOptions::default())
+      .unwrap();
 
     assert_eq!(
       code,
@@ -901,7 +907,9 @@ Last Line"#
 5:0 -> [file.txt] 6:0, :4 -> [file.txt] 6:4, :5 -> [file.txt] 7:0"#
     );
 
-    let result_list_map = source.map(&MapOptions::new(false)).unwrap();
+    let result_list_map = source
+      .map(&ObjectPool::default(), &MapOptions::new(false))
+      .unwrap();
     assert_eq!(
       with_readable_mappings(&result_list_map),
       r#"
@@ -924,8 +932,12 @@ Last Line"#
     source.insert(0, "Message: ", None);
     source.replace(2, (line1.len() + 5) as u32, "y A", None);
     let result_text = source.source();
-    let result_map = source.map(&MapOptions::default()).unwrap();
-    let result_list_map = source.map(&MapOptions::new(false)).unwrap();
+    let result_map = source
+      .map(&ObjectPool::default(), &MapOptions::default())
+      .unwrap();
+    let result_list_map = source
+      .map(&ObjectPool::default(), &MapOptions::new(false))
+      .unwrap();
 
     assert_eq!(
       original_code,
@@ -955,8 +967,12 @@ World!"#
     source.insert(0, "Line 0\n", None);
 
     let result_text = source.source();
-    let result_map = source.map(&MapOptions::default()).unwrap();
-    let result_list_map = source.map(&MapOptions::new(false)).unwrap();
+    let result_map = source
+      .map(&ObjectPool::default(), &MapOptions::default())
+      .unwrap();
+    let result_list_map = source
+      .map(&ObjectPool::default(), &MapOptions::new(false))
+      .unwrap();
 
     assert_eq!(result_text.into_string_lossy(), "Line -1\nLine 0\nLine 1");
     assert_eq!(
@@ -984,8 +1000,12 @@ World!"#
     source.insert(0, "Line 0\n", None);
     source.replace(0, 6, "Hello", None);
     let result_text = source.source();
-    let result_map = source.map(&MapOptions::default()).unwrap();
-    let result_list_map = source.map(&MapOptions::new(false)).unwrap();
+    let result_map = source
+      .map(&ObjectPool::default(), &MapOptions::default())
+      .unwrap();
+    let result_list_map = source
+      .map(&ObjectPool::default(), &MapOptions::new(false))
+      .unwrap();
 
     assert_eq!(
       result_text.into_string_lossy(),
@@ -1009,8 +1029,12 @@ Line 2"#
     let mut source = ReplaceSource::new(OriginalSource::new(line1, "file.txt"));
     source.insert((line1.len() + 1) as u32, "Line 2\n", None);
     let result_text = source.source();
-    let result_map = source.map(&MapOptions::default()).unwrap();
-    let result_list_map = source.map(&MapOptions::new(false)).unwrap();
+    let result_map = source
+      .map(&ObjectPool::default(), &MapOptions::default())
+      .unwrap();
+    let result_list_map = source
+      .map(&ObjectPool::default(), &MapOptions::new(false))
+      .unwrap();
 
     assert_eq!(result_text.into_string_lossy(), "Line 1\nLine 2\n");
     assert_eq!(
@@ -1030,7 +1054,9 @@ Line 2"#
       ReplaceSource::new(OriginalSource::new(bootstrap_code, "file.js"));
     source.replace(7, 12, "h", Some("hello"));
     source.replace(20, 25, "w", Some("world"));
-    let result_map = source.map(&MapOptions::default()).expect("failed");
+    let result_map = source
+      .map(&ObjectPool::default(), &MapOptions::default())
+      .expect("failed");
 
     let target_code = source.source();
     assert_eq!(target_code.into_string_lossy(), "   var h\n   var w\n");
@@ -1095,7 +1121,9 @@ export default function StaticPage(_ref) {
     );
 
     let target_code = source.source();
-    let source_map = source.map(&MapOptions::default()).unwrap();
+    let source_map = source
+      .map(&ObjectPool::default(), &MapOptions::default())
+      .unwrap();
 
     assert_eq!(
       target_code.into_string_lossy(),
@@ -1146,7 +1174,9 @@ return <div>{data.foo}</div>
     source.replace(12, 24, "", None);
 
     let target_code = source.source();
-    let source_map = source.map(&MapOptions::default()).unwrap();
+    let source_map = source
+      .map(&ObjectPool::default(), &MapOptions::default())
+      .unwrap();
 
     assert_eq!(target_code.into_string_lossy(), "if (false) {}");
     assert_eq!(
@@ -1172,7 +1202,9 @@ return <div>{data.foo}</div>
     source.replace(0, 999, "replaced!\n", Some("whole"));
 
     let result_text = source.source();
-    let result_map = source.map(&MapOptions::default()).unwrap();
+    let result_map = source
+      .map(&ObjectPool::default(), &MapOptions::default())
+      .unwrap();
 
     assert_eq!(
       result_text.into_string_lossy(),
@@ -1193,7 +1225,10 @@ return <div>{data.foo}</div>
     source.replace(3, 5, "", None);
     assert_eq!(source.size(), 3);
     assert_eq!(source.source().into_string_lossy(), "box");
-    assert_eq!(source.map(&MapOptions::default()), None);
+    assert_eq!(
+      source.map(&ObjectPool::default(), &MapOptions::default()),
+      None
+    );
     let mut hasher = twox_hash::XxHash64::default();
     source.hash(&mut hasher);
     assert_eq!(format!("{:x}", hasher.finish()), "96abdb94c6fd5aba");
@@ -1228,7 +1263,7 @@ return <div>{data.foo}</div>
     );
     assert_eq!(
       source
-        .map(&MapOptions::default())
+        .map(&ObjectPool::default(), &MapOptions::default())
         .unwrap()
         .to_json()
         .unwrap(),

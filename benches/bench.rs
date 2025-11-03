@@ -13,8 +13,8 @@ pub use criterion::*;
 pub use codspeed_criterion_compat::*;
 
 use rspack_sources::{
-  BoxSource, CachedSource, ConcatSource, MapOptions, Source, SourceExt,
-  SourceMap, SourceMapSource, SourceMapSourceOptions,
+  BoxSource, CachedSource, ConcatSource, MapOptions, ObjectPool, Source,
+  SourceExt, SourceMap, SourceMapSource, SourceMapSourceOptions,
 };
 
 use bench_complex_replace_source::{
@@ -79,7 +79,7 @@ fn benchmark_concat_generate_string(b: &mut Bencher) {
 
   b.iter(|| {
     concat
-      .map(&MapOptions::default())
+      .map(&ObjectPool::default(), &MapOptions::default())
       .unwrap()
       .to_json()
       .unwrap();
@@ -108,7 +108,7 @@ fn benchmark_concat_generate_string_with_cache(b: &mut Bencher) {
 
   b.iter(|| {
     cached
-      .map(&MapOptions::default())
+      .map(&ObjectPool::default(), &MapOptions::default())
       .unwrap()
       .to_json()
       .unwrap();

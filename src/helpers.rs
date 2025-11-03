@@ -20,8 +20,9 @@ use crate::{
 };
 
 pub fn get_map<'a, S: StreamChunks>(
+  object_pool: &'a ObjectPool,
   stream: &'a S,
-  options: &'a MapOptions,
+  options: &MapOptions,
 ) -> Option<SourceMap> {
   let mut mappings_encoder = create_encoder(options.columns);
   let mut sources: Vec<String> = Vec::new();
@@ -29,11 +30,11 @@ pub fn get_map<'a, S: StreamChunks>(
   let mut names: Vec<String> = Vec::new();
 
   stream.stream_chunks(
+    object_pool,
     &MapOptions {
       columns: options.columns,
       final_source: true,
     },
-    &ObjectPool::default(),
     // on_chunk
     &mut |_, mapping| {
       mappings_encoder.encode(&mapping);
@@ -71,8 +72,8 @@ pub trait StreamChunks {
   /// [StreamChunks] abstraction
   fn stream_chunks<'a>(
     &'a self,
-    options: &MapOptions,
     object_pool: &'a ObjectPool,
+    options: &MapOptions,
     on_chunk: OnChunk<'_, 'a>,
     on_source: OnSource<'_, 'a>,
     on_name: OnName<'_, 'a>,
@@ -1232,8 +1233,8 @@ pub fn stream_and_get_source_and_map<'a, S: StreamChunks>(
   let mut names: Vec<String> = Vec::new();
 
   let generated_info = input_source.stream_chunks(
-    options,
     object_pool,
+    options,
     &mut |chunk, mapping| {
       mappings_encoder.encode(&mapping);
       on_chunk(chunk, mapping);

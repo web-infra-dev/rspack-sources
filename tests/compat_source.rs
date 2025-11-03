@@ -9,8 +9,6 @@ use rspack_sources::{
   ConcatSource, MapOptions, ObjectPool, RawStringSource, Rope, Source,
   SourceExt, SourceMap, SourceValue,
 };
-use simd_json::borrowed::Object;
-use simd_json::lazy::object;
 
 #[derive(Debug, Eq)]
 struct CompatSource(&'static str, Option<SourceMap>);
@@ -32,7 +30,11 @@ impl Source for CompatSource {
     42
   }
 
-  fn map(&self, _options: &MapOptions) -> Option<SourceMap> {
+  fn map(
+    &self,
+    _object_pool: &ObjectPool,
+    _options: &MapOptions,
+  ) -> Option<SourceMap> {
     self.1.clone()
   }
 
@@ -44,8 +46,8 @@ impl Source for CompatSource {
 impl StreamChunks for CompatSource {
   fn stream_chunks<'a>(
     &'a self,
-    options: &MapOptions,
     object_pool: &'a ObjectPool,
+    options: &MapOptions,
     on_chunk: OnChunk<'_, 'a>,
     on_source: OnSource<'_, 'a>,
     on_name: OnName<'_, 'a>,
@@ -89,7 +91,10 @@ fn should_work_with_custom_compat_source() {
   assert_eq!(source.source().into_string_lossy(), CONTENT);
   assert_eq!(source.size(), 42);
   assert_eq!(source.buffer(), CONTENT.as_bytes());
-  assert_eq!(source.map(&MapOptions::default()), None);
+  assert_eq!(
+    source.map(&ObjectPool::default(), &MapOptions::default()),
+    None
+  );
 }
 
 #[test]
@@ -111,7 +116,9 @@ fn should_generate_correct_source_map() {
   ]);
 
   let source = result.source();
-  let map = result.map(&MapOptions::default()).unwrap();
+  let map = result
+    .map(&ObjectPool::default(), &MapOptions::default())
+    .unwrap();
 
   let expected_source = "Line0\nLine1\nLine2\nLine3\n";
   let expected_source_map = SourceMap::from_json(

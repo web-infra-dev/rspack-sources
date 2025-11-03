@@ -76,7 +76,7 @@ impl Source for RawStringSource {
     self.0.len()
   }
 
-  fn map(&self, _: &MapOptions) -> Option<SourceMap> {
+  fn map(&self, _: &ObjectPool, _: &MapOptions) -> Option<SourceMap> {
     None
   }
 
@@ -110,8 +110,8 @@ impl Hash for RawStringSource {
 impl StreamChunks for RawStringSource {
   fn stream_chunks<'a>(
     &'a self,
-    options: &MapOptions,
     _: &'a ObjectPool,
+    options: &MapOptions,
     on_chunk: OnChunk<'_, 'a>,
     on_source: OnSource<'_, 'a>,
     on_name: OnName<'_, 'a>,
@@ -210,7 +210,7 @@ impl Source for RawBufferSource {
     self.value.len()
   }
 
-  fn map(&self, _: &MapOptions) -> Option<SourceMap> {
+  fn map(&self, _: &ObjectPool, _: &MapOptions) -> Option<SourceMap> {
     None
   }
 
@@ -244,8 +244,8 @@ impl Hash for RawBufferSource {
 impl StreamChunks for RawBufferSource {
   fn stream_chunks<'a>(
     &'a self,
-    options: &MapOptions,
     _: &'a ObjectPool,
+    options: &MapOptions,
     on_chunk: OnChunk<'_, 'a>,
     on_source: OnSource<'_, 'a>,
     on_name: OnName<'_, 'a>,
@@ -277,7 +277,9 @@ mod tests {
     let source1 = ReplaceSource::new(source1);
     let source2 = OriginalSource::new("world".to_string(), "world.txt");
     let concat = ConcatSource::new([source1.boxed(), source2.boxed()]);
-    let map = concat.map(&MapOptions::new(false)).unwrap();
+    let map = concat
+      .map(&ObjectPool::default(), &MapOptions::new(false))
+      .unwrap();
     assert_eq!(map.mappings(), ";;AAAA",);
   }
 }

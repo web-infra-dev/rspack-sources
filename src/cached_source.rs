@@ -100,18 +100,22 @@ impl Source for CachedSource {
     *self.cache.size.get_or_init(|| self.inner.size())
   }
 
-  fn map(&self, options: &MapOptions) -> Option<SourceMap> {
+  fn map(
+    &self,
+    object_pool: &ObjectPool,
+    options: &MapOptions,
+  ) -> Option<SourceMap> {
     if options.columns {
       self
         .cache
         .columns_map
-        .get_or_init(|| self.inner.map(options))
+        .get_or_init(|| self.inner.map(object_pool, options))
         .clone()
     } else {
       self
         .cache
         .line_only_map
-        .get_or_init(|| self.inner.map(options))
+        .get_or_init(|| self.inner.map(object_pool, options))
         .clone()
     }
   }
@@ -124,8 +128,8 @@ impl Source for CachedSource {
 impl StreamChunks for CachedSource {
   fn stream_chunks<'a>(
     &'a self,
-    options: &MapOptions,
     object_pool: &'a ObjectPool,
+    options: &MapOptions,
     on_chunk: crate::helpers::OnChunk<'_, 'a>,
     on_source: crate::helpers::OnSource<'_, 'a>,
     on_name: crate::helpers::OnName<'_, 'a>,
@@ -242,7 +246,9 @@ mod tests {
       })
       .boxed(),
     ]);
-    let map = source.map(&Default::default()).unwrap();
+    let map = source
+      .map(&ObjectPool::default(), &Default::default())
+      .unwrap();
     assert_eq!(map.mappings(), ";;AACA");
   }
 
@@ -257,11 +263,11 @@ mod tests {
     source.source();
     source.buffer();
     source.size();
-    source.map(&map_options);
+    source.map(&ObjectPool::default(), &map_options);
 
     assert_eq!(
       *clone.cache.columns_map.get().unwrap(),
-      source.map(&map_options)
+      source.map(&ObjectPool::default(), &map_options)
     );
   }
 
@@ -318,8 +324,8 @@ mod tests {
     let mut on_source_count = 0;
     let mut on_name_count = 0;
     let generated_info = source.stream_chunks(
-      &map_options,
       &ObjectPool::default(),
+      &map_options,
       &mut |_chunk, _mapping| {
         on_chunk_count += 1;
       },
@@ -333,8 +339,8 @@ mod tests {
 
     let cached_source = CachedSource::new(source);
     cached_source.stream_chunks(
-      &map_options,
       &ObjectPool::default(),
+      &map_options,
       &mut |_chunk, _mapping| {},
       &mut |_source_index, _source, _source_content| {},
       &mut |_name_index, _name| {},
@@ -344,8 +350,8 @@ mod tests {
     let mut cached_on_source_count = 0;
     let mut cached_on_name_count = 0;
     let cached_generated_info = cached_source.stream_chunks(
-      &map_options,
       &ObjectPool::default(),
+      &map_options,
       &mut |_chunk, _mapping| {
         cached_on_chunk_count += 1;
       },

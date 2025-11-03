@@ -9,8 +9,9 @@ pub use criterion::*;
 pub use codspeed_criterion_compat::*;
 
 use rspack_sources::{
-  BoxSource, MapOptions, OriginalSource, ReplaceSource, SourceExt,
+  BoxSource, MapOptions, ObjectPool, OriginalSource, ReplaceSource, SourceExt,
 };
+use simd_json::borrowed::Object;
 
 static LARGE_REPLACE_SOURCE: LazyLock<BoxSource> = LazyLock::new(|| {
   let mut source = ReplaceSource::new(
@@ -36724,7 +36725,7 @@ pub fn benchmark_complex_replace_source_map(b: &mut Bencher) {
   let source = LARGE_REPLACE_SOURCE.clone();
 
   b.iter(|| {
-    black_box(source.map(&MapOptions::default()));
+    black_box(source.map(&ObjectPool::default(), &MapOptions::default()));
   });
 }
 

@@ -125,7 +125,11 @@ pub trait Source:
   fn size(&self) -> usize;
 
   /// Get the [SourceMap].
-  fn map(&self, options: &MapOptions) -> Option<SourceMap>;
+  fn map(
+    &self,
+    object_pool: &ObjectPool,
+    options: &MapOptions,
+  ) -> Option<SourceMap>;
 
   /// Update hash based on the source.
   fn update_hash(&self, state: &mut dyn Hasher) {
@@ -153,8 +157,12 @@ impl Source for BoxSource {
     self.as_ref().size()
   }
 
-  fn map(&self, options: &MapOptions) -> Option<SourceMap> {
-    self.as_ref().map(options)
+  fn map(
+    &self,
+    object_pool: &ObjectPool,
+    options: &MapOptions,
+  ) -> Option<SourceMap> {
+    self.as_ref().map(object_pool, options)
   }
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
@@ -167,15 +175,15 @@ dyn_clone::clone_trait_object!(Source);
 impl StreamChunks for BoxSource {
   fn stream_chunks<'a>(
     &'a self,
-    options: &MapOptions,
     object_pool: &'a ObjectPool,
+    options: &MapOptions,
     on_chunk: crate::helpers::OnChunk<'_, 'a>,
     on_source: crate::helpers::OnSource<'_, 'a>,
     on_name: crate::helpers::OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {
     self.as_ref().stream_chunks(
-      options,
       object_pool,
+      options,
       on_chunk,
       on_source,
       on_name,

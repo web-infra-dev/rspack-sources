@@ -69,8 +69,12 @@ impl Source for OriginalSource {
     self.value.len()
   }
 
-  fn map(&self, options: &MapOptions) -> Option<SourceMap> {
-    get_map(self, options)
+  fn map(
+    &self,
+    object_pool: &ObjectPool,
+    options: &MapOptions,
+  ) -> Option<SourceMap> {
+    get_map(object_pool, self, options)
   }
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
@@ -110,8 +114,8 @@ impl std::fmt::Debug for OriginalSource {
 impl StreamChunks for OriginalSource {
   fn stream_chunks<'a>(
     &'a self,
-    options: &MapOptions,
     _: &'a ObjectPool,
+    options: &MapOptions,
     on_chunk: OnChunk<'_, 'a>,
     on_source: OnSource<'_, 'a>,
     _on_name: OnName,
@@ -247,8 +251,12 @@ mod tests {
   fn should_handle_multiline_string() {
     let source = OriginalSource::new("Line1\n\nLine3\n", "file.js");
     let result_text = source.source();
-    let result_map = source.map(&MapOptions::default()).unwrap();
-    let result_list_map = source.map(&MapOptions::new(false)).unwrap();
+    let result_map = source
+      .map(&ObjectPool::default(), &MapOptions::default())
+      .unwrap();
+    let result_list_map = source
+      .map(&ObjectPool::default(), &MapOptions::new(false))
+      .unwrap();
 
     assert_eq!(result_text.into_string_lossy(), "Line1\n\nLine3\n");
     assert_eq!(result_map.sources(), &["file.js".to_string()]);
@@ -266,8 +274,9 @@ mod tests {
   fn should_handle_empty_string() {
     let source = OriginalSource::new("", "file.js");
     let result_text = source.source();
-    let result_map = source.map(&MapOptions::default());
-    let result_list_map = source.map(&MapOptions::new(false));
+    let result_map = source.map(&ObjectPool::default(), &MapOptions::default());
+    let result_list_map =
+      source.map(&ObjectPool::default(), &MapOptions::new(false));
 
     assert_eq!(result_text.into_string_lossy(), "");
     assert!(result_map.is_none());
@@ -277,7 +286,9 @@ mod tests {
   #[test]
   fn should_omit_mappings_for_columns_with_node() {
     let source = OriginalSource::new("Line1\n\nLine3\n", "file.js");
-    let result_map = source.map(&MapOptions::new(false)).unwrap();
+    let result_map = source
+      .map(&ObjectPool::default(), &MapOptions::new(false))
+      .unwrap();
     assert_eq!(result_map.mappings(), "AAAA;AACA;AACA");
   }
 
@@ -302,11 +313,17 @@ mod tests {
     let source = OriginalSource::new(input, "file.js");
     assert_eq!(source.source().into_string_lossy(), input);
     assert_eq!(
-      source.map(&MapOptions::default()).unwrap().mappings(),
+      source
+        .map(&ObjectPool::default(), &MapOptions::default())
+        .unwrap()
+        .mappings(),
       "AAAA,eAAe,SAAS,MAAM,WAAW;AACzC,eAAe,SAAS,MAAM,WAAW",
     );
     assert_eq!(
-      source.map(&MapOptions::new(false)).unwrap().mappings(),
+      source
+        .map(&ObjectPool::default(), &MapOptions::new(false))
+        .unwrap()
+        .mappings(),
       "AAAA;AACA",
     );
   }
@@ -322,7 +339,9 @@ mod tests {
     let source2 = OriginalSource::new(code2, "world.txt");
 
     let concat = ConcatSource::new([source1.boxed(), source2.boxed()]);
-    let map = concat.map(&MapOptions::new(false)).unwrap();
+    let map = concat
+      .map(&ObjectPool::default(), &MapOptions::new(false))
+      .unwrap();
     assert_eq!(map.mappings(), "AAAA;AACA;ACDA",);
   }
 }
