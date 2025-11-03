@@ -24,9 +24,9 @@ impl<'object_pool> SourceContentLines<'object_pool> {
     self.borrow_dependent().get(line)
   }
 
-  pub fn from(object_pool: &'object_pool ObjectPool, value: Arc<str>) -> Self {
+  pub fn from(object_pool: &'object_pool ObjectPool, text: Arc<str>) -> Self {
     let owner = Owner {
-      text: value.clone(),
+      text,
       object_pool,
     };
 
