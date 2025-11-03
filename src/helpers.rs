@@ -259,7 +259,7 @@ where
       last_line = line;
     }
 
-    (line_count.max(1), last_line.len())
+    (line_count.max(1), last_line.utf16_len())
   };
   GeneratedInfo {
     generated_line: generated_line as u32,
@@ -716,7 +716,11 @@ where
   } else {
     lines.len()
   } as u32;
-  let final_column = if last_new_line { 0 } else { last_line.len() } as u32;
+  let final_column = if last_new_line {
+    0
+  } else {
+    last_line.utf16_len()
+  } as u32;
   GeneratedInfo {
     generated_line: final_line,
     generated_column: final_column,
@@ -1409,23 +1413,33 @@ impl<'a> SourceText<'a> for &'a str {
 
 #[cfg(test)]
 mod tests {
-  use super::stream_chunks_of_source_map_full;
-  use crate::{
-    helpers::GeneratedInfo, Mapping, ObjectPool, OriginalLocation, SourceMap,
+  use std::sync::LazyLock;
+
+  use super::{
+    stream_chunks_of_source_map_final, stream_chunks_of_source_map_full,
+    stream_chunks_of_source_map_lines_final,
+    stream_chunks_of_source_map_lines_full, GeneratedInfo,
   };
+  use crate::{Mapping, ObjectPool, OriginalLocation, SourceMap};
+
+  const UTF16_SOURCE: &'static str = "var i18n = JSON.parse('{\"魑魅魍魉\":{\"en-US\":\"Evil spirits\",\"zh-CN\":\"魑魅魍魉\"}}');\nvar __webpack_exports___ = i18n[\"魑魅魍魉\"];\nexport { __webpack_exports___ as 魑魅魍魉 };";
+
+  const UTF16_SOURCE_MAP: LazyLock<SourceMap> = LazyLock::new(|| {
+    SourceMap::from_json("{\"version\":3,\"sources\":[\"i18.js\"],\"sourcesContent\":[\"var i18n = JSON.parse('{\\\"魑魅魍魉\\\":{\\\"en-US\\\":\\\"Evil spirits\\\",\\\"zh-CN\\\":\\\"魑魅魍魉\\\"}}');\\nvar __webpack_exports___ = i18n[\\\"魑魅魍魉\\\"];\\nexport { __webpack_exports___ as 魑魅魍魉 };\\n\"],\"names\":[\"i18n\",\"JSON\",\"__webpack_exports___\",\"魑魅魍魉\"],\"mappings\":\"AAAA,IAAIA,OAAOC,KAAK,KAAK,CAAC;AACtB,IAAIC,uBAAuBF,IAAI,CAAC,OAAO;AACvC,SAASE,wBAAwBC,IAAI,GAAG\"}").unwrap()
+  });
 
   #[test]
   fn test_stream_chunks_of_source_map_full_handles_utf16() {
-    let source = "var i18n = JSON.parse('{\"魑魅魍魉\":{\"en-US\":\"Evil spirits\",\"zh-CN\":\"魑魅魍魉\"}}');\nvar __webpack_exports___ = i18n[\"魑魅魍魉\"];\nexport { __webpack_exports___ as 魑魅魍魉 };";
-    let source_map = SourceMap::from_json("{\"version\":3,\"sources\":[\"i18.js\"],\"sourcesContent\":[\"var i18n = JSON.parse('{\\\"魑魅魍魉\\\":{\\\"en-US\\\":\\\"Evil spirits\\\",\\\"zh-CN\\\":\\\"魑魅魍魉\\\"}}');\\nvar __webpack_exports___ = i18n[\\\"魑魅魍魉\\\"];\\nexport { __webpack_exports___ as 魑魅魍魉 };\\n\"],\"names\":[\"i18n\",\"JSON\",\"__webpack_exports___\",\"魑魅魍魉\"],\"mappings\":\"AAAA,IAAIA,OAAOC,KAAK,KAAK,CAAC;AACtB,IAAIC,uBAAuBF,IAAI,CAAC,OAAO;AACvC,SAASE,wBAAwBC,IAAI,GAAG\"}").unwrap();
+    let source = UTF16_SOURCE;
+    let source_map = &*UTF16_SOURCE_MAP;
+    let object_pool = ObjectPool::default();
 
     let mut chunks = vec![];
 
-    let object_pool = ObjectPool::default();
     let generated_info = stream_chunks_of_source_map_full(
       &object_pool,
       source,
-      &source_map,
+      source_map,
       &mut |chunk, mapping| {
         chunks.push((chunk.unwrap(), mapping));
       },
@@ -1453,6 +1467,72 @@ mod tests {
         ("魑魅魍魉".into(), Mapping { generated_line: 3, generated_column: 33, original: Some(OriginalLocation { source_index: 0, original_line: 3, original_column: 33, name_index: Some(3) }) }),
         (" };".into(), Mapping { generated_line: 3, generated_column: 37, original: Some(OriginalLocation { source_index: 0, original_line: 3, original_column: 37, name_index: None }) })
       ]
+    );
+
+    assert_eq!(
+      generated_info,
+      GeneratedInfo {
+        generated_line: 3,
+        generated_column: 40
+      }
+    )
+  }
+
+  #[test]
+  fn test_stream_chunks_of_source_map_final_handles_utf16() {
+    let source = UTF16_SOURCE;
+    let source_map = &*UTF16_SOURCE_MAP;
+
+    let generated_info = stream_chunks_of_source_map_final(
+      source,
+      source_map,
+      &mut |_chunk, _mapping| {},
+      &mut |_i, _source, _source_content| {},
+      &mut |_i, _name| {},
+    );
+
+    assert_eq!(
+      generated_info,
+      GeneratedInfo {
+        generated_line: 3,
+        generated_column: 40
+      }
+    )
+  }
+
+  #[test]
+  fn test_stream_chunks_of_source_map_lines_final_handles_utf16() {
+    let source = UTF16_SOURCE;
+    let source_map = &*UTF16_SOURCE_MAP;
+
+    let generated_info = stream_chunks_of_source_map_lines_final(
+      source,
+      source_map,
+      &mut |_chunk, _mapping| {},
+      &mut |_i, _source, _source_content| {},
+      &mut |_i, _name| {},
+    );
+
+    assert_eq!(
+      generated_info,
+      GeneratedInfo {
+        generated_line: 3,
+        generated_column: 40
+      }
+    )
+  }
+
+  #[test]
+  fn test_stream_chunks_of_source_map_lines_full_handles_utf16() {
+    let source = UTF16_SOURCE;
+    let source_map = &*UTF16_SOURCE_MAP;
+
+    let generated_info = stream_chunks_of_source_map_lines_full(
+      source,
+      source_map,
+      &mut |_chunk, _mapping| {},
+      &mut |_i, _source, _source_content| {},
+      &mut |_i, _name| {},
     );
 
     assert_eq!(
