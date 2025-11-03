@@ -22,17 +22,17 @@ use crate::{
 /// - [webpack-sources docs](https://github.com/webpack/webpack-sources/#originalsource).
 ///
 /// ```
-/// use rspack_sources::{OriginalSource, MapOptions, Source};
+/// use rspack_sources::{OriginalSource, MapOptions, Source, ObjectPool};
 ///
 /// let input = "if (hello()) { world(); hi(); there(); } done();\nif (hello()) { world(); hi(); there(); } done();";
 /// let source = OriginalSource::new(input, "file.js");
 /// assert_eq!(source.source().into_string_lossy(), input);
 /// assert_eq!(
-///   source.map(&MapOptions::default()).unwrap().mappings(),
+///   source.map(&ObjectPool::default(), &MapOptions::default()).unwrap().mappings(),
 ///   "AAAA,eAAe,SAAS,MAAM,WAAW;AACzC,eAAe,SAAS,MAAM,WAAW",
 /// );
 /// assert_eq!(
-///   source.map(&MapOptions::new(false)).unwrap().mappings(),
+///   source.map(&ObjectPool::default(), &MapOptions::new(false)).unwrap().mappings(),
 ///   "AAAA;AACA",
 /// );
 /// ```

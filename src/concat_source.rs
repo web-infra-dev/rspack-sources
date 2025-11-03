@@ -23,7 +23,7 @@ use crate::{
 /// ```
 /// use rspack_sources::{
 ///   BoxSource, ConcatSource, MapOptions, OriginalSource, RawStringSource, Source,
-///   SourceExt, SourceMap,
+///   SourceExt, SourceMap, ObjectPool
 /// };
 ///
 /// let mut source = ConcatSource::new([
@@ -42,7 +42,7 @@ use crate::{
 ///   "Hello World\nconsole.log('test');\nconsole.log('test2');\nHello2\n"
 /// );
 /// assert_eq!(
-///   source.map(&MapOptions::new(false)).unwrap(),
+///   source.map(&ObjectPool::default(), &MapOptions::new(false)).unwrap(),
 ///   SourceMap::from_json(
 ///     r#"{
 ///       "version": 3,

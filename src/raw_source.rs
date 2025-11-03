@@ -18,12 +18,12 @@ use crate::{
 /// - [webpack-sources docs](https://github.com/webpack/webpack-sources/#rawsource).
 ///
 /// ```
-/// use rspack_sources::{MapOptions, RawStringSource, Source};
+/// use rspack_sources::{MapOptions, RawStringSource, Source, ObjectPool};
 ///
 /// let code = "some source code";
 /// let s = RawStringSource::from(code.to_string());
 /// assert_eq!(s.source().into_string_lossy(), code);
-/// assert_eq!(s.map(&MapOptions::default()), None);
+/// assert_eq!(s.map(&ObjectPool::default(), &MapOptions::default()), None);
 /// assert_eq!(s.size(), 16);
 /// ```
 #[derive(Clone, PartialEq, Eq)]
@@ -131,12 +131,12 @@ impl StreamChunks for RawStringSource {
 /// - [webpack-sources docs](https://github.com/webpack/webpack-sources/#rawsource).
 ///
 /// ```
-/// use rspack_sources::{MapOptions, RawBufferSource, Source};
+/// use rspack_sources::{MapOptions, RawBufferSource, Source, ObjectPool};
 ///
 /// let code = "some source code".as_bytes();
 /// let s = RawBufferSource::from(code);
 /// assert_eq!(s.buffer(), code);
-/// assert_eq!(s.map(&MapOptions::default()), None);
+/// assert_eq!(s.map(&ObjectPool::default(), &MapOptions::default()), None);
 /// assert_eq!(s.size(), 16);
 /// ```
 pub struct RawBufferSource {
