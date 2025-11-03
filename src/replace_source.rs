@@ -403,7 +403,7 @@ impl StreamChunks for ReplaceSource {
         {
           match source_content {
             SourceContent::Raw(source) => {
-              let lines = SourceContentLines::from(object_pool, source.clone());
+              let lines = SourceContentLines::new(object_pool, source.clone());
               let matched =
                 check_content_at_position(&lines, line, column, expected_chunk);
               *source_content = SourceContent::Lines(lines);

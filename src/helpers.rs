@@ -854,7 +854,7 @@ where
                     let inner_source_contents = inner_source_contents.borrow();
                     match inner_source_contents.get(&inner_source_index) {
                       Some(Some(source_content)) => {
-                        Some(SourceContentLines::from(
+                        Some(SourceContentLines::new(
                           object_pool,
                           source_content.clone(),
                         ))
@@ -956,7 +956,7 @@ where
                     let inner_source_contents = inner_source_contents.borrow();
                     match inner_source_contents.get(&inner_source_index) {
                       Some(Some(source_content)) => {
-                        Some(SourceContentLines::from(
+                        Some(SourceContentLines::new(
                           object_pool,
                           source_content.clone(),
                         ))

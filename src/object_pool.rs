@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::BTreeMap, rc::Rc};
+use std::{cell::RefCell, collections::BTreeMap};
 
 // Vector pooling minimum capacity threshold
 // Recommended threshold: 64
@@ -12,15 +12,7 @@ const MIN_POOL_CAPACITY: usize = 64;
 /// A memory pool for reusing `T` allocations to reduce memory allocation overhead.
 #[derive(Default, Debug)]
 pub struct ObjectPool {
-  objects: Rc<RefCell<BTreeMap<usize, Vec<Vec<usize>>>>>,
-}
-
-impl Clone for ObjectPool {
-  fn clone(&self) -> Self {
-    Self {
-      objects: self.objects.clone(),
-    }
-  }
+  objects: RefCell<BTreeMap<usize, Vec<Vec<usize>>>>,
 }
 
 impl ObjectPool {
@@ -29,16 +21,16 @@ impl ObjectPool {
     if requested_capacity < MIN_POOL_CAPACITY
       || self.objects.borrow().is_empty()
     {
-      return Pooled::new(self.clone(), Vec::with_capacity(requested_capacity));
+      return Pooled::new(self, Vec::with_capacity(requested_capacity));
     }
     let mut objects = self.objects.borrow_mut();
     if let Some((_, bucket)) = objects.range_mut(requested_capacity..).next() {
       if let Some(mut object) = bucket.pop() {
         object.clear();
-        return Pooled::new(self.clone(), object);
+        return Pooled::new(self, object);
       }
     }
-    Pooled::new(self.clone(), Vec::with_capacity(requested_capacity))
+    Pooled::new(self, Vec::with_capacity(requested_capacity))
   }
 
   /// Returns a `T` to the pool for future reuse.
@@ -59,13 +51,13 @@ impl ObjectPool {
 /// pooled objects lifecycle. When the `Pooled` instance is dropped, the contained object
 /// is automatically returned to its associated pool for future reuse.
 #[derive(Debug)]
-pub struct Pooled {
+pub struct Pooled<'object_pool> {
   object: Option<Vec<usize>>,
-  pool: ObjectPool,
+  pool: &'object_pool ObjectPool,
 }
 
-impl Pooled {
-  fn new(pool: ObjectPool, object: Vec<usize>) -> Self {
+impl<'object_pool> Pooled<'object_pool> {
+  fn new(pool: &'object_pool ObjectPool, object: Vec<usize>) -> Self {
     Pooled {
       object: Some(object),
       pool,
@@ -81,7 +73,7 @@ impl Pooled {
   }
 }
 
-impl Drop for Pooled {
+impl Drop for Pooled<'_> {
   fn drop(&mut self) {
     if let Some(object) = self.object.take() {
       self.pool.return_to_pool(object);
@@ -89,7 +81,7 @@ impl Drop for Pooled {
   }
 }
 
-impl std::ops::Deref for Pooled {
+impl std::ops::Deref for Pooled<'_> {
   type Target = Vec<usize>;
 
   fn deref(&self) -> &Self::Target {
@@ -97,7 +89,7 @@ impl std::ops::Deref for Pooled {
   }
 }
 
-impl std::ops::DerefMut for Pooled {
+impl std::ops::DerefMut for Pooled<'_> {
   fn deref_mut(&mut self) -> &mut Self::Target {
     self.as_mut()
   }

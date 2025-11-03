@@ -6,23 +6,23 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub struct WithIndices<'text, S>
+pub struct WithIndices<'object_pool, 'text, S>
 where
   S: SourceText<'text>,
 {
   /// line is a string reference
   pub line: S,
   /// the byte position of each `char` in `line` string slice .
-  pub char_byte_indices: OnceCell<Pooled>,
+  pub char_byte_indices: OnceCell<Pooled<'object_pool>>,
   data: PhantomData<&'text S>,
-  object_pool: &'text ObjectPool,
+  object_pool: &'object_pool ObjectPool,
 }
 
-impl<'text, S> WithIndices<'text, S>
+impl<'object_pool, 'text, S> WithIndices<'object_pool, 'text, S>
 where
   S: SourceText<'text>,
 {
-  pub fn new(object_pool: &'text ObjectPool, line: S) -> Self {
+  pub fn new(object_pool: &'object_pool ObjectPool, line: S) -> Self {
     Self {
       char_byte_indices: OnceCell::new(),
       line,
