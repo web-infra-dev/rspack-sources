@@ -39,16 +39,10 @@ where
 
     let char_byte_indices = self.char_byte_indices.get_or_init(|| {
       let mut vec = self.object_pool.pull(self.line.len());
-      for (byte_index, char) in self.line.char_indices() {
-        match char.len_utf16() {
-          1 => {
-            vec.push(byte_index);
-          }
-          2 => {
-            vec.push(byte_index);
-            vec.push(byte_index);
-          }
-          _ => {}
+      for (byte_index, ch) in self.line.char_indices() {
+        // For each UTF-16 code unit in the char, push the byte index
+        for _ in 0..ch.len_utf16() {
+          vec.push(byte_index);
         }
       }
       vec
