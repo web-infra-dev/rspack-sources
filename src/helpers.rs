@@ -1429,7 +1429,7 @@ mod tests {
   });
 
   #[test]
-  fn test_stream_chunks_of_source_map_full_handles_utf16() {
+  fn test_stream_chunks_of_source_map_full_handles_multi_unit_utf16() {
     let source = UTF16_SOURCE;
     let source_map = &*UTF16_SOURCE_MAP;
     let object_pool = ObjectPool::default();
@@ -1479,7 +1479,7 @@ mod tests {
   }
 
   #[test]
-  fn test_stream_chunks_of_source_map_final_handles_utf16() {
+  fn test_stream_chunks_of_source_map_final_handles_multi_unit_utf16() {
     let source = UTF16_SOURCE;
     let source_map = &*UTF16_SOURCE_MAP;
 
@@ -1501,7 +1501,7 @@ mod tests {
   }
 
   #[test]
-  fn test_stream_chunks_of_source_map_lines_final_handles_utf16() {
+  fn test_stream_chunks_of_source_map_lines_final_handles_multi_unit_utf16() {
     let source = UTF16_SOURCE;
     let source_map = &*UTF16_SOURCE_MAP;
 
@@ -1523,7 +1523,7 @@ mod tests {
   }
 
   #[test]
-  fn test_stream_chunks_of_source_map_lines_full_handles_utf16() {
+  fn test_stream_chunks_of_source_map_lines_full_handles_multi_unit_utf16() {
     let source = UTF16_SOURCE;
     let source_map = &*UTF16_SOURCE_MAP;
 
