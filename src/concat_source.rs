@@ -163,8 +163,16 @@ impl ConcatSource {
 
 impl Source for ConcatSource {
   fn source(&self) -> SourceValue {
-    let rope = self.rope();
-    SourceValue::String(Cow::Owned(rope.to_string()))
+    let children = self.optimized_children();
+    if children.len() == 1 {
+      children[0].source()
+    } else {
+      let mut buf = String::with_capacity(self.size());
+      for child in children {
+        buf.push_str(&child.source().into_string_lossy());
+      }
+      SourceValue::String(Cow::Owned(buf))
+    }
   }
 
   fn rope(&self) -> Rope<'_> {
@@ -186,7 +194,7 @@ impl Source for ConcatSource {
     if children.len() == 1 {
       children[0].buffer()
     } else {
-      let mut buffer = vec![];
+      let mut buffer = Vec::with_capacity(self.size());
       self.to_writer(&mut buffer).unwrap();
       Cow::Owned(buffer)
     }
