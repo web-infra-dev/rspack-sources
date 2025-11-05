@@ -6,25 +6,25 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub struct WithIndices<'object_pool, 'text, S>
+pub struct WithUtf16<'object_pool, 'text, S>
 where
   S: SourceText<'text>,
 {
   /// line is a string reference
   pub line: S,
   /// the byte position of each `char` in `line` string slice .
-  pub char_byte_indices: OnceCell<Pooled<'object_pool>>,
+  pub utf16_byte_indices: OnceCell<Pooled<'object_pool>>,
   data: PhantomData<&'text S>,
   object_pool: &'object_pool ObjectPool,
 }
 
-impl<'object_pool, 'text, S> WithIndices<'object_pool, 'text, S>
+impl<'object_pool, 'text, S> WithUtf16<'object_pool, 'text, S>
 where
   S: SourceText<'text>,
 {
   pub fn new(object_pool: &'object_pool ObjectPool, line: S) -> Self {
     Self {
-      char_byte_indices: OnceCell::new(),
+      utf16_byte_indices: OnceCell::new(),
       line,
       object_pool,
       data: PhantomData,
@@ -32,25 +32,29 @@ where
   }
 
   /// substring::SubString with cache
-  pub(crate) fn substring(&self, start_index: usize, end_index: usize) -> S {
+  pub fn substring(&self, start_index: usize, end_index: usize) -> S {
     if end_index <= start_index {
       return S::default();
     }
 
-    let char_byte_indices = self.char_byte_indices.get_or_init(|| {
+    let utf16_byte_indices = self.utf16_byte_indices.get_or_init(|| {
       let mut vec = self.object_pool.pull(self.line.len());
       for (byte_index, ch) in self.line.char_indices() {
-        // For each UTF-16 code unit in the char, push the byte index
-        for _ in 0..ch.len_utf16() {
-          vec.push(byte_index);
+        match ch.len_utf16() {
+          1 => vec.push(byte_index),
+          2 => {
+            vec.push(byte_index);
+            vec.push(byte_index);
+          }
+          _ => unreachable!(),
         }
       }
       vec
     });
 
     let str_len = self.line.len();
-    let start = *char_byte_indices.get(start_index).unwrap_or(&str_len);
-    let end = *char_byte_indices.get(end_index).unwrap_or(&str_len);
+    let start = *utf16_byte_indices.get(start_index).unwrap_or(&str_len);
+    let end = *utf16_byte_indices.get(end_index).unwrap_or(&str_len);
 
     #[allow(unsafe_code)]
     unsafe {
@@ -67,11 +71,11 @@ where
 mod tests {
   use crate::{object_pool::ObjectPool, Rope};
 
-  use super::WithIndices;
+  use super::WithUtf16;
   #[test]
   fn test_substring() {
     assert_eq!(
-      WithIndices::new(&ObjectPool::default(), Rope::from("foobar"))
+      WithUtf16::new(&ObjectPool::default(), Rope::from("foobar"))
         .substring(0, 3),
       "foo"
     );
@@ -80,12 +84,12 @@ mod tests {
   #[test]
   fn test_out_of_bounds() {
     assert_eq!(
-      WithIndices::new(&ObjectPool::default(), Rope::from("foobar"))
+      WithUtf16::new(&ObjectPool::default(), Rope::from("foobar"))
         .substring(0, 10),
       "foobar"
     );
     assert_eq!(
-      WithIndices::new(&ObjectPool::default(), Rope::from("foobar"))
+      WithUtf16::new(&ObjectPool::default(), Rope::from("foobar"))
         .substring(6, 10),
       ""
     );
@@ -94,7 +98,7 @@ mod tests {
   #[test]
   fn test_start_less_than_end() {
     assert_eq!(
-      WithIndices::new(&ObjectPool::default(), Rope::from("foobar"))
+      WithUtf16::new(&ObjectPool::default(), Rope::from("foobar"))
         .substring(3, 2),
       ""
     );
@@ -103,7 +107,7 @@ mod tests {
   #[test]
   fn test_start_and_end_equal() {
     assert_eq!(
-      WithIndices::new(&ObjectPool::default(), Rope::from("foobar"))
+      WithUtf16::new(&ObjectPool::default(), Rope::from("foobar"))
         .substring(3, 3),
       ""
     );
@@ -112,7 +116,7 @@ mod tests {
   #[test]
   fn test_multiple_byte_characters() {
     assert_eq!(
-      WithIndices::new(&ObjectPool::default(), Rope::from("🙈🙉🙊🐒"))
+      WithUtf16::new(&ObjectPool::default(), Rope::from("🙈🙉🙊🐒"))
         .substring(2, 4),
       "🙉"
     );

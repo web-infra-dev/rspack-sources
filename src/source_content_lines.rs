@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
 use crate::{
-  helpers::split_into_lines, object_pool::ObjectPool, with_indices::WithIndices,
+  helpers::split_into_lines, object_pool::ObjectPool, with_utf16::WithUtf16,
 };
 
 pub struct SourceContentLines<'object_pool> {
   text: Arc<str>,
   // Self-referential data structure: lines borrow from the text.
-  lines: Vec<WithIndices<'object_pool, 'static, &'static str>>,
+  lines: Vec<WithUtf16<'object_pool, 'static, &'static str>>,
 }
 
 impl<'object_pool> SourceContentLines<'object_pool> {
@@ -18,15 +18,12 @@ impl<'object_pool> SourceContentLines<'object_pool> {
     let text_ref =
       unsafe { std::mem::transmute::<&str, &'static str>(text.as_ref()) };
     let lines = split_into_lines::<&str>(&text_ref)
-      .map(|line| WithIndices::new(object_pool, line))
+      .map(|line| WithUtf16::new(object_pool, line))
       .collect::<Vec<_>>();
     Self { text, lines }
   }
 
-  pub fn get(
-    &self,
-    line: usize,
-  ) -> Option<&WithIndices<'object_pool, '_, &str>> {
+  pub fn get(&self, line: usize) -> Option<&WithUtf16<'object_pool, '_, &str>> {
     let _ = &self.text;
     self.lines.get(line)
   }

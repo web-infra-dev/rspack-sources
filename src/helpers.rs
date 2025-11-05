@@ -15,7 +15,7 @@ use crate::{
   object_pool::ObjectPool,
   source::{Mapping, OriginalLocation},
   source_content_lines::SourceContentLines,
-  with_indices::WithIndices,
+  with_utf16::WithUtf16,
   MapOptions, Rope, SourceMap,
 };
 
@@ -443,7 +443,7 @@ where
 {
   let lines = split_into_lines(&source);
   let line_with_indices_list = lines
-    .map(|line| WithIndices::new(object_pool, line))
+    .map(|line| WithUtf16::new(object_pool, line))
     .collect::<Vec<_>>();
 
   if line_with_indices_list.is_empty() {
