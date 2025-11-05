@@ -443,9 +443,9 @@ impl StreamChunks for ReplaceSource {
                 generated_column_offset += mapping.generated_column as i64;
               }
             } else if generated_column_offset_line == line {
-              generated_column_offset -= chunk.len() as i64;
+              generated_column_offset -= chunk.utf16_len() as i64;
             } else {
-              generated_column_offset = -(chunk.len() as i64);
+              generated_column_offset = -(chunk.utf16_len() as i64);
               generated_column_offset_line = line;
             }
             pos = end_pos;
@@ -572,9 +572,9 @@ impl StreamChunks for ReplaceSource {
 
             if m == lines.len() - 1 && !content_line.ends_with('\n') {
               if generated_column_offset_line == line {
-                generated_column_offset += content_line.len() as i64;
+                generated_column_offset += content_line.utf16_len() as i64;
               } else {
-                generated_column_offset = content_line.len() as i64;
+                generated_column_offset = content_line.utf16_len() as i64;
                 generated_column_offset_line = line;
               }
             } else {
@@ -618,9 +618,10 @@ impl StreamChunks for ReplaceSource {
                 }
               } else if generated_column_offset_line == line {
                 generated_column_offset -=
-                  chunk.len() as i64 - chunk_pos as i64;
+                  chunk.utf16_len() as i64 - chunk_pos as i64;
               } else {
-                generated_column_offset = chunk_pos as i64 - chunk.len() as i64;
+                generated_column_offset =
+                  chunk_pos as i64 - chunk.utf16_len() as i64;
                 generated_column_offset_line = line;
               }
               pos = end_pos;
@@ -737,9 +738,9 @@ impl StreamChunks for ReplaceSource {
 
       if m == matches.len() - 1 && !content_line.ends_with('\n') {
         if generated_column_offset_line == line {
-          generated_column_offset += content_line.len() as i64;
+          generated_column_offset += content_line.utf16_len() as i64;
         } else {
-          generated_column_offset = content_line.len() as i64;
+          generated_column_offset = content_line.utf16_len() as i64;
           generated_column_offset_line = line;
         }
       } else {
@@ -801,7 +802,7 @@ mod tests {
 
   use crate::{
     source_map_source::WithoutOriginalOptions, OriginalSource, RawStringSource,
-    ReplacementEnforce, SourceExt, SourceMapSource,
+    ReplacementEnforce, SourceExt, SourceMapSource, SourceMapSourceOptions,
   };
 
   use super::*;
@@ -1426,5 +1427,31 @@ return <div>{data.foo}</div>
     let mut hasher2 = FxHasher::default();
     source2.hash(&mut hasher2);
     assert_eq!(hasher1.finish(), hasher2.finish());
+  }
+
+  #[test]
+  fn test_replace_source_with_multi_unit_utf16() {
+    let mut source = ReplaceSource::new(
+      SourceMapSource::new(SourceMapSourceOptions {
+          value: "var i18n = JSON.parse('{\"魑魅魍魉\":{\"en-US\":\"Evil spirits\",\"zh-CN\":\"魑魅魍魉\"}}');\nvar __webpack_exports___ = i18n[\"魑魅魍魉\"];\nexport { __webpack_exports___ as 魑魅魍魉 };\n",
+          name: "main.js",
+          source_map: SourceMap::from_json("{\"version\":3,\"sources\":[\"i18n.js\"],\"sourcesContent\":[\"var i18n = JSON.parse('{\\\"魑魅魍魉\\\":{\\\"en-US\\\":\\\"Evil spirits\\\",\\\"zh-CN\\\":\\\"魑魅魍魉\\\"}}');\\nvar __webpack_exports___ = i18n[\\\"魑魅魍魉\\\"];\\nexport { __webpack_exports___ as 魑魅魍魉 };\\n\"],\"names\":[\"i18n\",\"JSON\",\"__webpack_exports___\",\"魑魅魍魉\"],\"mappings\":\"AAAA,IAAIA,OAAOC,KAAK,KAAK,CAAC;AACtB,IAAIC,uBAAuBF,IAAI,CAAC,OAAO;AACvC,SAASE,wBAAwBC,IAAI,GAAG\"}").unwrap(),
+          original_source: None,
+          inner_source_map: None,
+          remove_original_source: false,
+        }).boxed()
+      );
+    source.replace(140, 188, "", None);
+
+    assert_eq!(source.source().into_string_lossy(), "var i18n = JSON.parse('{\"魑魅魍魉\":{\"en-US\":\"Evil spirits\",\"zh-CN\":\"魑魅魍魉\"}}');\nvar __webpack_exports___ = i18n[\"魑魅魍魉\"];\n\n");
+    assert_eq!(source.map(&ObjectPool::default(), &MapOptions::default()).unwrap(), SourceMap::from_json(
+      r#"{
+          "version": 3,
+          "sources": ["i18n.js"],
+          "mappings": "AAAA,IAAIA,OAAOC,KAAK,KAAK,CAAC;AACtB,IAAIC,uBAAuBF,IAAI,CAAC,OAAO;AACC",
+          "names": ["i18n", "JSON", "__webpack_exports___", "魑魅魍魉"],
+          "sourcesContent": ["var i18n = JSON.parse('{\"魑魅魍魉\":{\"en-US\":\"Evil spirits\",\"zh-CN\":\"魑魅魍魉\"}}');\nvar __webpack_exports___ = i18n[\"魑魅魍魉\"];\nexport { __webpack_exports___ as 魑魅魍魉 };\n"]
+        }"#
+    ).unwrap());
   }
 }
