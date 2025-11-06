@@ -7,10 +7,10 @@ use std::{
 use crate::{
   helpers::{
     get_map, stream_chunks_of_combined_source_map, stream_chunks_of_source_map,
-    StreamChunks,
+    Chunks, StreamChunks,
   },
   object_pool::ObjectPool,
-  MapOptions, Rope, Source, SourceMap, SourceValue,
+  MapOptions, Source, SourceMap, SourceValue,
 };
 
 /// Options for [SourceMapSource::new].
@@ -61,8 +61,8 @@ impl<V, N> From<WithoutOriginalOptions<V, N>> for SourceMapSourceOptions<V, N> {
 /// - [webpack-sources docs](https://github.com/webpack/webpack-sources/#sourcemapsource).
 #[derive(Clone, Eq)]
 pub struct SourceMapSource {
-  value: String,
-  name: String,
+  value: Arc<str>,
+  name: Box<str>,
   source_map: SourceMap,
   original_source: Option<Arc<str>>,
   inner_source_map: Option<SourceMap>,
@@ -79,8 +79,8 @@ impl SourceMapSource {
   {
     let options = options.into();
     Self {
-      value: options.value.into(),
-      name: options.name.into(),
+      value: Arc::from(options.value.into()),
+      name: Box::from(options.name.into()),
       source_map: options.source_map,
       original_source: options.original_source,
       inner_source_map: options.inner_source_map,
@@ -92,10 +92,6 @@ impl SourceMapSource {
 impl Source for SourceMapSource {
   fn source(&self) -> SourceValue {
     SourceValue::String(Cow::Borrowed(&self.value))
-  }
-
-  fn rope(&self) -> Rope<'_> {
-    Rope::from(&self.value)
   }
 
   fn buffer(&self) -> Cow<[u8]> {
@@ -114,7 +110,8 @@ impl Source for SourceMapSource {
     if self.inner_source_map.is_none() {
       return Some(self.source_map.clone());
     }
-    get_map(object_pool, self, options)
+    let chunks = self.stream_chunks();
+    get_map(object_pool, chunks.as_ref(), options)
   }
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
@@ -187,8 +184,10 @@ impl std::fmt::Debug for SourceMapSource {
   }
 }
 
-impl StreamChunks for SourceMapSource {
-  fn stream_chunks<'a>(
+struct SourceMapSourceChunks<'source>(&'source SourceMapSource);
+
+impl<'source> Chunks for SourceMapSourceChunks<'source> {
+  fn stream<'a>(
     &'a self,
     object_pool: &'a ObjectPool,
     options: &MapOptions,
@@ -196,16 +195,16 @@ impl StreamChunks for SourceMapSource {
     on_source: crate::helpers::OnSource<'_, 'a>,
     on_name: crate::helpers::OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {
-    if let Some(inner_source_map) = &self.inner_source_map {
+    if let Some(inner_source_map) = &self.0.inner_source_map {
       stream_chunks_of_combined_source_map(
         options,
         object_pool,
-        &*self.value,
-        &self.source_map,
-        &self.name,
-        self.original_source.as_ref(),
+        &*self.0.value,
+        &self.0.source_map,
+        &self.0.name,
+        self.0.original_source.as_ref(),
         inner_source_map,
-        self.remove_original_source,
+        self.0.remove_original_source,
         on_chunk,
         on_source,
         on_name,
@@ -214,13 +213,19 @@ impl StreamChunks for SourceMapSource {
       stream_chunks_of_source_map(
         options,
         object_pool,
-        self.value.as_str(),
-        &self.source_map,
+        self.0.value.as_ref(),
+        &self.0.source_map,
         on_chunk,
         on_source,
         on_name,
       )
     }
+  }
+}
+
+impl StreamChunks for SourceMapSource {
+  fn stream_chunks<'a>(&'a self) -> Box<dyn Chunks + 'a> {
+    Box::new(SourceMapSourceChunks(self))
   }
 }
 

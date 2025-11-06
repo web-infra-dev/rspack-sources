@@ -1,40 +1,29 @@
-use std::{cell::OnceCell, marker::PhantomData};
+use std::cell::OnceCell;
 
-use crate::{
-  helpers::SourceText,
-  object_pool::{ObjectPool, Pooled},
-};
+use crate::object_pool::{ObjectPool, Pooled};
 
 #[derive(Debug)]
-pub struct WithUtf16<'object_pool, 'text, S>
-where
-  S: SourceText<'text>,
-{
+pub struct WithUtf16<'object_pool, 'text> {
   /// line is a string reference
-  pub line: S,
+  pub line: &'text str,
   /// the byte position of each `char` in `line` string slice .
   pub utf16_byte_indices: OnceCell<Pooled<'object_pool>>,
-  data: PhantomData<&'text S>,
   object_pool: &'object_pool ObjectPool,
 }
 
-impl<'object_pool, 'text, S> WithUtf16<'object_pool, 'text, S>
-where
-  S: SourceText<'text>,
-{
-  pub fn new(object_pool: &'object_pool ObjectPool, line: S) -> Self {
+impl<'object_pool, 'text> WithUtf16<'object_pool, 'text> {
+  pub fn new(object_pool: &'object_pool ObjectPool, line: &'text str) -> Self {
     Self {
       utf16_byte_indices: OnceCell::new(),
       line,
       object_pool,
-      data: PhantomData,
     }
   }
 
   /// substring::SubString with cache
-  pub fn substring(&self, start_index: usize, end_index: usize) -> S {
+  pub fn substring(&self, start_index: usize, end_index: usize) -> &'text str {
     if end_index <= start_index {
-      return S::default();
+      return "";
     }
 
     let utf16_byte_indices = self.utf16_byte_indices.get_or_init(|| {
@@ -61,7 +50,7 @@ where
       // SAFETY: Since `indices` iterates over the `CharIndices` of `self`, we can guarantee
       // that the indices obtained from it will always be within the bounds of `self` and they
       // will always lie on UTF-8 sequence boundaries.
-      self.line.byte_slice_unchecked(start..end)
+      self.line.get_unchecked(start..end)
     }
   }
 }
@@ -69,14 +58,13 @@ where
 /// tests are just copy from `substring` crate
 #[cfg(test)]
 mod tests {
-  use crate::{object_pool::ObjectPool, Rope};
+  use crate::object_pool::ObjectPool;
 
   use super::WithUtf16;
   #[test]
   fn test_substring() {
     assert_eq!(
-      WithUtf16::new(&ObjectPool::default(), Rope::from("foobar"))
-        .substring(0, 3),
+      WithUtf16::new(&ObjectPool::default(), "foobar").substring(0, 3),
       "foo"
     );
   }
@@ -84,13 +72,11 @@ mod tests {
   #[test]
   fn test_out_of_bounds() {
     assert_eq!(
-      WithUtf16::new(&ObjectPool::default(), Rope::from("foobar"))
-        .substring(0, 10),
+      WithUtf16::new(&ObjectPool::default(), "foobar").substring(0, 10),
       "foobar"
     );
     assert_eq!(
-      WithUtf16::new(&ObjectPool::default(), Rope::from("foobar"))
-        .substring(6, 10),
+      WithUtf16::new(&ObjectPool::default(), "foobar").substring(6, 10),
       ""
     );
   }
@@ -98,8 +84,7 @@ mod tests {
   #[test]
   fn test_start_less_than_end() {
     assert_eq!(
-      WithUtf16::new(&ObjectPool::default(), Rope::from("foobar"))
-        .substring(3, 2),
+      WithUtf16::new(&ObjectPool::default(), "foobar").substring(3, 2),
       ""
     );
   }
@@ -107,8 +92,7 @@ mod tests {
   #[test]
   fn test_start_and_end_equal() {
     assert_eq!(
-      WithUtf16::new(&ObjectPool::default(), Rope::from("foobar"))
-        .substring(3, 3),
+      WithUtf16::new(&ObjectPool::default(), "foobar").substring(3, 3),
       ""
     );
   }
@@ -116,8 +100,7 @@ mod tests {
   #[test]
   fn test_multiple_byte_characters() {
     assert_eq!(
-      WithUtf16::new(&ObjectPool::default(), Rope::from("🙈🙉🙊🐒"))
-        .substring(2, 4),
+      WithUtf16::new(&ObjectPool::default(), "🙈🙉🙊🐒").substring(2, 4),
       "🙉"
     );
   }

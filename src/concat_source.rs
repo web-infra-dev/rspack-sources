@@ -8,11 +8,11 @@ use std::{
 use rustc_hash::FxHashMap as HashMap;
 
 use crate::{
-  helpers::{get_map, GeneratedInfo, OnChunk, OnName, OnSource, StreamChunks},
+  helpers::{get_map, Chunks, GeneratedInfo, StreamChunks},
   linear_map::LinearMap,
   object_pool::ObjectPool,
   source::{Mapping, OriginalLocation},
-  BoxSource, MapOptions, RawStringSource, Rope, Source, SourceExt, SourceMap,
+  BoxSource, MapOptions, RawStringSource, Source, SourceExt, SourceMap,
   SourceValue,
 };
 
@@ -175,20 +175,6 @@ impl Source for ConcatSource {
     }
   }
 
-  fn rope(&self) -> Rope<'_> {
-    let children = self.optimized_children();
-    if children.len() == 1 {
-      children[0].rope()
-    } else {
-      let mut rope = Rope::new();
-      for child in children {
-        let child_rope = child.rope();
-        rope.append(child_rope);
-      }
-      rope
-    }
-  }
-
   fn buffer(&self) -> Cow<[u8]> {
     let children = self.optimized_children();
     if children.len() == 1 {
@@ -208,12 +194,14 @@ impl Source for ConcatSource {
       .sum()
   }
 
-  fn map(
-    &self,
-    object_pool: &ObjectPool,
+  fn map<'a>(
+    &'a self,
+    object_pool: &'a ObjectPool,
     options: &MapOptions,
   ) -> Option<SourceMap> {
-    get_map(object_pool, self, options)
+    let chunks = self.stream_chunks();
+    let result = get_map(object_pool, chunks.as_ref(), options);
+    result
   }
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
@@ -240,19 +228,32 @@ impl PartialEq for ConcatSource {
 }
 impl Eq for ConcatSource {}
 
-impl StreamChunks for ConcatSource {
-  fn stream_chunks<'a>(
-    &'a self,
-    object_pool: &'a ObjectPool,
-    options: &MapOptions,
-    on_chunk: OnChunk<'_, 'a>,
-    on_source: OnSource<'_, 'a>,
-    on_name: OnName<'_, 'a>,
-  ) -> crate::helpers::GeneratedInfo {
-    let children = self.optimized_children();
+struct ConcatSourceChunks<'a> {
+  children_chunks: Vec<Box<dyn Chunks + 'a>>,
+}
 
-    if children.len() == 1 {
-      return children[0].stream_chunks(
+impl<'a> ConcatSourceChunks<'a> {
+  fn new(concat_source: &'a ConcatSource) -> Self {
+    let children = concat_source.optimized_children();
+    let children_chunks = children
+      .iter()
+      .map(|child| child.stream_chunks())
+      .collect::<Vec<_>>();
+    Self { children_chunks }
+  }
+}
+
+impl<'a> Chunks for ConcatSourceChunks<'a> {
+  fn stream<'b>(
+    &'b self,
+    object_pool: &'b ObjectPool,
+    options: &MapOptions,
+    on_chunk: crate::helpers::OnChunk<'_, 'b>,
+    on_source: crate::helpers::OnSource<'_, 'b>,
+    on_name: crate::helpers::OnName<'_, 'b>,
+  ) -> GeneratedInfo {
+    if self.children_chunks.len() == 1 {
+      return self.children_chunks[0].stream(
         object_pool,
         options,
         on_chunk,
@@ -271,14 +272,14 @@ impl StreamChunks for ConcatSource {
     let name_index_mapping: RefCell<LinearMap<u32>> =
       RefCell::new(LinearMap::default());
 
-    for item in children {
+    for child_handle in &self.children_chunks {
       source_index_mapping.borrow_mut().clear();
       name_index_mapping.borrow_mut().clear();
       let mut last_mapping_line = 0;
       let GeneratedInfo {
         generated_line,
         generated_column,
-      } = item.stream_chunks(
+      } = child_handle.stream(
         object_pool,
         options,
         &mut |chunk, mapping| {
@@ -415,6 +416,12 @@ impl StreamChunks for ConcatSource {
       generated_line: current_line_offset + 1,
       generated_column: current_column_offset,
     }
+  }
+}
+
+impl StreamChunks for ConcatSource {
+  fn stream_chunks<'a>(&'a self) -> Box<dyn Chunks + 'a> {
+    Box::new(ConcatSourceChunks::new(self))
   }
 }
 

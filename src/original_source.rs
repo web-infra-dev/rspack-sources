@@ -7,12 +7,11 @@ use std::{
 use crate::{
   helpers::{
     get_generated_source_info, get_map, split_into_lines,
-    split_into_potential_tokens, GeneratedInfo, OnChunk, OnName, OnSource,
-    SourceText, StreamChunks,
+    split_into_potential_tokens, Chunks, GeneratedInfo, StreamChunks,
   },
   object_pool::ObjectPool,
   source::{Mapping, OriginalLocation},
-  MapOptions, Rope, Source, SourceMap, SourceValue,
+  MapOptions, Source, SourceMap, SourceValue,
 };
 
 /// Represents source code, it will create source map for the source code,
@@ -39,12 +38,12 @@ use crate::{
 #[derive(Clone, Eq)]
 pub struct OriginalSource {
   value: Arc<str>,
-  name: String,
+  name: Box<str>,
 }
 
 impl OriginalSource {
   /// Create a [OriginalSource].
-  pub fn new(value: impl Into<Arc<str>>, name: impl Into<String>) -> Self {
+  pub fn new(value: impl Into<Arc<str>>, name: impl Into<Box<str>>) -> Self {
     Self {
       value: value.into(),
       name: name.into(),
@@ -55,10 +54,6 @@ impl OriginalSource {
 impl Source for OriginalSource {
   fn source(&self) -> SourceValue {
     SourceValue::String(Cow::Borrowed(&self.value))
-  }
-
-  fn rope(&self) -> Rope<'_> {
-    Rope::from(self.value.as_ref())
   }
 
   fn buffer(&self) -> Cow<[u8]> {
@@ -74,7 +69,8 @@ impl Source for OriginalSource {
     object_pool: &ObjectPool,
     options: &MapOptions,
   ) -> Option<SourceMap> {
-    get_map(object_pool, self, options)
+    let chunks = self.stream_chunks();
+    get_map(object_pool, chunks.as_ref(), options)
   }
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
@@ -111,26 +107,34 @@ impl std::fmt::Debug for OriginalSource {
   }
 }
 
-impl StreamChunks for OriginalSource {
-  fn stream_chunks<'a>(
-    &'a self,
-    _: &'a ObjectPool,
+struct OriginalSourceChunks<'a>(&'a OriginalSource);
+
+impl<'a> OriginalSourceChunks<'a> {
+  pub fn new(source: &'a OriginalSource) -> Self {
+    Self(source)
+  }
+}
+
+impl<'a> Chunks for OriginalSourceChunks<'a> {
+  fn stream<'b>(
+    &'b self,
+    _object_pool: &'b ObjectPool,
     options: &MapOptions,
-    on_chunk: OnChunk<'_, 'a>,
-    on_source: OnSource<'_, 'a>,
-    _on_name: OnName,
-  ) -> crate::helpers::GeneratedInfo {
-    on_source(0, Cow::Borrowed(&self.name), Some(&self.value));
+    on_chunk: crate::helpers::OnChunk<'_, 'b>,
+    on_source: crate::helpers::OnSource<'_, 'b>,
+    _on_name: crate::helpers::OnName<'_, 'b>,
+  ) -> GeneratedInfo {
+    on_source(0, Cow::Borrowed(&self.0.name), Some(&self.0.value));
     if options.columns {
       // With column info we need to read all lines and split them
       let mut line = 1;
       let mut column = 0;
-      for token in split_into_potential_tokens(&*self.value) {
+      for token in split_into_potential_tokens(self.0.value.as_ref()) {
         let is_end_of_line = token.ends_with("\n");
         if is_end_of_line && token.len() == 1 {
           if !options.final_source {
             on_chunk(
-              Some(token.into_rope()),
+              Some(Cow::Borrowed(token)),
               Mapping {
                 generated_line: line,
                 generated_column: column,
@@ -140,7 +144,7 @@ impl StreamChunks for OriginalSource {
           }
         } else {
           on_chunk(
-            (!options.final_source).then_some(token.into_rope()),
+            (!options.final_source).then_some(Cow::Borrowed(token)),
             Mapping {
               generated_line: line,
               generated_column: column,
@@ -167,7 +171,7 @@ impl StreamChunks for OriginalSource {
     } else if options.final_source {
       // Without column info and with final source we only
       // need meta info to generate mapping
-      let result = get_generated_source_info(&*self.value);
+      let result = get_generated_source_info(self.0.value.as_ref());
       if result.generated_column == 0 {
         for line in 1..result.generated_line {
           on_chunk(
@@ -207,9 +211,9 @@ impl StreamChunks for OriginalSource {
       // we need to split source by lines
       let mut line = 1;
       let mut last_line = None;
-      for l in split_into_lines(&self.value.as_ref()) {
+      for l in split_into_lines(&self.0.value.as_ref()) {
         on_chunk(
-          (!options.final_source).then_some(l.into_rope()),
+          (!options.final_source).then_some(Cow::Borrowed(l)),
           Mapping {
             generated_line: line,
             generated_column: 0,
@@ -238,6 +242,12 @@ impl StreamChunks for OriginalSource {
         }
       }
     }
+  }
+}
+
+impl StreamChunks for OriginalSource {
+  fn stream_chunks<'a>(&'a self) -> Box<dyn Chunks + 'a> {
+    Box::new(OriginalSourceChunks::new(self))
   }
 }
 

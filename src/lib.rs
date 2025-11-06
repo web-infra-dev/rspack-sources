@@ -11,7 +11,6 @@ mod object_pool;
 mod original_source;
 mod raw_source;
 mod replace_source;
-mod rope;
 mod source;
 mod source_content_lines;
 mod source_map_source;
@@ -23,7 +22,6 @@ pub use error::{Error, Result};
 pub use original_source::OriginalSource;
 pub use raw_source::{RawBufferSource, RawStringSource};
 pub use replace_source::{ReplaceSource, ReplacementEnforce};
-pub use rope::Rope;
 pub use source::{
   BoxSource, MapOptions, Mapping, OriginalLocation, Source, SourceExt,
   SourceMap, SourceValue,
@@ -35,7 +33,7 @@ pub use source_map_source::{
 /// Reexport `StreamChunks` related types.
 pub mod stream_chunks {
   pub use super::helpers::{
-    stream_chunks_default, GeneratedInfo, OnChunk, OnName, OnSource,
+    stream_chunks_default, Chunks, GeneratedInfo, OnChunk, OnName, OnSource,
     StreamChunks,
   };
 }
