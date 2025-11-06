@@ -11,9 +11,8 @@ use dyn_clone::DynClone;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-  helpers::{decode_mappings, StreamChunks},
+  helpers::{decode_mappings, Chunks, StreamChunks},
   object_pool::ObjectPool,
-  rope::Rope,
   Result,
 };
 
@@ -115,9 +114,6 @@ pub trait Source:
   /// Get the source code.
   fn source(&self) -> SourceValue;
 
-  /// Get the source code as a [Rope].
-  fn rope(&self) -> Rope<'_>;
-
   /// Get the source buffer.
   fn buffer(&self) -> Cow<[u8]>;
 
@@ -145,10 +141,6 @@ impl Source for BoxSource {
     self.as_ref().source()
   }
 
-  fn rope(&self) -> Rope<'_> {
-    self.as_ref().rope()
-  }
-
   fn buffer(&self) -> Cow<[u8]> {
     self.as_ref().buffer()
   }
@@ -173,21 +165,8 @@ impl Source for BoxSource {
 dyn_clone::clone_trait_object!(Source);
 
 impl StreamChunks for BoxSource {
-  fn stream_chunks<'a>(
-    &'a self,
-    object_pool: &'a ObjectPool,
-    options: &MapOptions,
-    on_chunk: crate::helpers::OnChunk<'_, 'a>,
-    on_source: crate::helpers::OnSource<'_, 'a>,
-    on_name: crate::helpers::OnName<'_, 'a>,
-  ) -> crate::helpers::GeneratedInfo {
-    self.as_ref().stream_chunks(
-      object_pool,
-      options,
-      on_chunk,
-      on_source,
-      on_name,
-    )
+  fn stream_chunks<'a>(&'a self) -> Box<dyn Chunks + 'a> {
+    self.as_ref().stream_chunks()
   }
 }
 

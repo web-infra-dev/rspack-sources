@@ -8,15 +8,12 @@ pub type Result<T> = result::Result<T, Error>;
 pub enum Error {
   /// a JSON parsing related failure
   BadJson(simd_json::Error),
-  /// rope related failure
-  Rope(&'static str),
 }
 
 impl fmt::Display for Error {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
       Error::BadJson(err) => write!(f, "bad json: {err}"),
-      Error::Rope(err) => write!(f, "rope error: {err}"),
     }
   }
 }

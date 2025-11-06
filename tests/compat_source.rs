@@ -3,11 +3,12 @@ use std::borrow::Cow;
 use std::hash::Hash;
 
 use rspack_sources::stream_chunks::{
-  stream_chunks_default, GeneratedInfo, OnChunk, OnName, OnSource, StreamChunks,
+  stream_chunks_default, Chunks, GeneratedInfo, OnChunk, OnName, OnSource,
+  StreamChunks,
 };
 use rspack_sources::{
-  ConcatSource, MapOptions, ObjectPool, RawStringSource, Rope, Source,
-  SourceExt, SourceMap, SourceValue,
+  ConcatSource, MapOptions, ObjectPool, RawStringSource, Source, SourceExt,
+  SourceMap, SourceValue,
 };
 
 #[derive(Debug, Eq)]
@@ -16,10 +17,6 @@ struct CompatSource(&'static str, Option<SourceMap>);
 impl Source for CompatSource {
   fn source(&self) -> SourceValue {
     SourceValue::String(Cow::Borrowed(self.0))
-  }
-
-  fn rope(&self) -> Rope<'_> {
-    Rope::from(self.0)
   }
 
   fn buffer(&self) -> Cow<[u8]> {
@@ -43,8 +40,16 @@ impl Source for CompatSource {
   }
 }
 
-impl StreamChunks for CompatSource {
-  fn stream_chunks<'a>(
+struct CompatSourceChunks<'source>(&'static str, Option<&'source SourceMap>);
+
+impl<'source> CompatSourceChunks<'source> {
+  pub fn new(source: &'source CompatSource) -> Self {
+    CompatSourceChunks(&source.0, source.1.as_ref())
+  }
+}
+
+impl Chunks for CompatSourceChunks<'_> {
+  fn stream<'a>(
     &'a self,
     object_pool: &'a ObjectPool,
     options: &MapOptions,
@@ -56,11 +61,17 @@ impl StreamChunks for CompatSource {
       options,
       object_pool,
       self.0,
-      self.1.as_ref(),
+      self.1,
       on_chunk,
       on_source,
       on_name,
     )
+  }
+}
+
+impl StreamChunks for CompatSource {
+  fn stream_chunks<'a>(&'a self) -> Box<dyn Chunks + 'a> {
+    Box::new(CompatSourceChunks::new(self))
   }
 }
 

@@ -36737,7 +36737,7 @@ pub fn benchmark_complex_replace_source_map_cached_source_stream_chunks(
   cached_source.map(&ObjectPool::default(), &MapOptions::default());
 
   b.iter(|| {
-    black_box(cached_source.stream_chunks(
+    black_box(cached_source.stream_chunks().stream(
       &ObjectPool::default(),
       &MapOptions::default(),
       &mut |_chunk, _mapping| {},

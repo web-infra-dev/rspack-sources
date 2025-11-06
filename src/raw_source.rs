@@ -6,11 +6,11 @@ use std::{
 
 use crate::{
   helpers::{
-    get_generated_source_info, stream_chunks_of_raw_source, OnChunk, OnName,
-    OnSource, StreamChunks,
+    get_generated_source_info, stream_chunks_of_raw_source, Chunks,
+    GeneratedInfo, StreamChunks,
   },
   object_pool::ObjectPool,
-  MapOptions, Rope, Source, SourceMap, SourceValue,
+  MapOptions, Source, SourceMap, SourceValue,
 };
 
 /// A string variant of [RawStringSource].
@@ -55,17 +55,13 @@ impl From<String> for RawStringSource {
 
 impl From<&str> for RawStringSource {
   fn from(value: &str) -> Self {
-    Self(Cow::Owned(value.to_owned()))
+    Self(Cow::Owned(value.to_string()))
   }
 }
 
 impl Source for RawStringSource {
   fn source(&self) -> SourceValue {
     SourceValue::String(Cow::Borrowed(&self.0))
-  }
-
-  fn rope(&self) -> Rope<'_> {
-    Rope::from(&self.0)
   }
 
   fn buffer(&self) -> Cow<[u8]> {
@@ -107,22 +103,34 @@ impl Hash for RawStringSource {
   }
 }
 
-impl StreamChunks for RawStringSource {
-  fn stream_chunks<'a>(
+struct RawStringChunks<'source>(&'source str);
+
+impl<'source> RawStringChunks<'source> {
+  pub fn new(source: &'source RawStringSource) -> Self {
+    RawStringChunks(&source.0)
+  }
+}
+
+impl Chunks for RawStringChunks<'_> {
+  fn stream<'a>(
     &'a self,
-    _: &'a ObjectPool,
+    _object_pool: &'a ObjectPool,
     options: &MapOptions,
-    on_chunk: OnChunk<'_, 'a>,
-    on_source: OnSource<'_, 'a>,
-    on_name: OnName<'_, 'a>,
+    on_chunk: crate::helpers::OnChunk<'_, 'a>,
+    on_source: crate::helpers::OnSource<'_, 'a>,
+    on_name: crate::helpers::OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {
     if options.final_source {
-      get_generated_source_info(&*self.0)
+      get_generated_source_info(self.0)
     } else {
-      stream_chunks_of_raw_source(
-        &*self.0, options, on_chunk, on_source, on_name,
-      )
+      stream_chunks_of_raw_source(self.0, options, on_chunk, on_source, on_name)
     }
+  }
+}
+
+impl StreamChunks for RawStringSource {
+  fn stream_chunks<'a>(&'a self) -> Box<dyn Chunks + 'a> {
+    Box::new(RawStringChunks::new(self))
   }
 }
 
@@ -198,10 +206,6 @@ impl Source for RawBufferSource {
     SourceValue::Buffer(Cow::Borrowed(&self.value))
   }
 
-  fn rope(&self) -> Rope<'_> {
-    Rope::from(self.get_or_init_value_as_string())
-  }
-
   fn buffer(&self) -> Cow<[u8]> {
     Cow::Borrowed(&self.value)
   }
@@ -241,26 +245,29 @@ impl Hash for RawBufferSource {
   }
 }
 
-impl StreamChunks for RawBufferSource {
-  fn stream_chunks<'a>(
+struct RawBufferSourceChunks<'a>(&'a RawBufferSource);
+
+impl Chunks for RawBufferSourceChunks<'_> {
+  fn stream<'a>(
     &'a self,
-    _: &'a ObjectPool,
+    _object_pool: &'a ObjectPool,
     options: &MapOptions,
-    on_chunk: OnChunk<'_, 'a>,
-    on_source: OnSource<'_, 'a>,
-    on_name: OnName<'_, 'a>,
-  ) -> crate::helpers::GeneratedInfo {
+    on_chunk: crate::helpers::OnChunk<'_, 'a>,
+    on_source: crate::helpers::OnSource<'_, 'a>,
+    on_name: crate::helpers::OnName<'_, 'a>,
+  ) -> GeneratedInfo {
+    let code = self.0.get_or_init_value_as_string();
     if options.final_source {
-      get_generated_source_info(self.source().into_string_lossy().as_ref())
+      get_generated_source_info(code)
     } else {
-      stream_chunks_of_raw_source(
-        self.get_or_init_value_as_string(),
-        options,
-        on_chunk,
-        on_source,
-        on_name,
-      )
+      stream_chunks_of_raw_source(code, options, on_chunk, on_source, on_name)
     }
+  }
+}
+
+impl StreamChunks for RawBufferSource {
+  fn stream_chunks<'a>(&'a self) -> Box<dyn Chunks + 'a> {
+    Box::new(RawBufferSourceChunks(self))
   }
 }
 

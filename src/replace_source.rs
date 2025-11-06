@@ -8,12 +8,9 @@ use std::{
 use rustc_hash::FxHashMap as HashMap;
 
 use crate::{
-  helpers::{
-    get_map, split_into_lines, GeneratedInfo, SourceText, StreamChunks,
-  },
+  helpers::{get_map, split_into_lines, Chunks, GeneratedInfo, StreamChunks},
   linear_map::LinearMap,
   object_pool::ObjectPool,
-  rope::Rope,
   source_content_lines::SourceContentLines,
   BoxSource, MapOptions, Mapping, OriginalLocation, Source, SourceExt,
   SourceMap, SourceValue,
@@ -194,37 +191,6 @@ impl Source for ReplaceSource {
     SourceValue::String(Cow::Owned(source_code))
   }
 
-  fn rope(&self) -> Rope<'_> {
-    let inner_source_code = self.inner.rope();
-
-    // mut_string_push_str is faster that vec join
-    // concatenate strings benchmark, see https://github.com/hoodie/concatenation_benchmarks-rs
-    if self.replacements.is_empty() {
-      return inner_source_code;
-    }
-    let mut source_code = Rope::new();
-    let mut inner_pos = 0;
-    for replacement in self.replacements.iter() {
-      if inner_pos < replacement.start {
-        let end_pos = (replacement.start as usize).min(inner_source_code.len());
-        let slice = inner_source_code.byte_slice(inner_pos as usize..end_pos);
-        source_code.append(slice);
-      }
-      source_code.add(&replacement.content);
-      #[allow(clippy::manual_clamp)]
-      {
-        inner_pos = inner_pos
-          .max(replacement.end)
-          .min(inner_source_code.len() as u32);
-      }
-    }
-    let slice =
-      inner_source_code.byte_slice(inner_pos as usize..inner_source_code.len());
-    source_code.append(slice);
-
-    source_code
-  }
-
   fn buffer(&self) -> Cow<[u8]> {
     self.source().into_bytes()
   }
@@ -274,7 +240,8 @@ impl Source for ReplaceSource {
     if replacements.is_empty() {
       return self.inner.map(&ObjectPool::default(), options);
     }
-    get_map(&ObjectPool::default(), self, options)
+    let chunks = self.stream_chunks();
+    get_map(&ObjectPool::default(), chunks.as_ref(), options)
   }
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
@@ -333,23 +300,36 @@ fn check_content_at_position(
   lines: &SourceContentLines,
   line: u32,
   column: u32,
-  expected: &Rope,
+  expected: &str,
 ) -> bool {
   if let Some(line) = lines.get(line as usize - 1) {
     line
       .substring(column as usize, usize::MAX)
-      .into_rope()
       .starts_with(expected)
   } else {
     false
   }
 }
 
-impl StreamChunks for ReplaceSource {
-  fn stream_chunks<'a>(
+struct ReplaceSourceChunks<'a> {
+  chunks: Box<dyn Chunks + 'a>,
+  replacements: &'a [Replacement],
+}
+
+impl<'a> ReplaceSourceChunks<'a> {
+  pub fn new(source: &'a ReplaceSource) -> Self {
+    Self {
+      chunks: source.inner.stream_chunks(),
+      replacements: &source.replacements,
+    }
+  }
+}
+
+impl Chunks for ReplaceSourceChunks<'_> {
+  fn stream<'a>(
     &'a self,
     object_pool: &'a ObjectPool,
-    options: &crate::MapOptions,
+    options: &MapOptions,
     on_chunk: crate::helpers::OnChunk<'_, 'a>,
     on_source: crate::helpers::OnSource<'_, 'a>,
     on_name: crate::helpers::OnName<'_, 'a>,
@@ -397,7 +377,7 @@ impl StreamChunks for ReplaceSource {
     // In this case, we can't split this mapping.
     // webpack-sources also have this function, refer https://github.com/webpack/webpack-sources/blob/main/lib/ReplaceSource.js#L158
     let check_original_content =
-      |source_index: u32, line: u32, column: u32, expected_chunk: &Rope| {
+      |source_index: u32, line: u32, column: u32, expected_chunk: &str| {
         if let Some(Some(source_content)) =
           source_content_lines.borrow_mut().get_mut(&source_index)
         {
@@ -418,7 +398,7 @@ impl StreamChunks for ReplaceSource {
         }
       };
 
-    let result = self.inner.stream_chunks(
+    let result = self.chunks.stream(
       object_pool,
       &MapOptions {
         columns: options.columns,
@@ -443,9 +423,9 @@ impl StreamChunks for ReplaceSource {
                 generated_column_offset += mapping.generated_column as i64;
               }
             } else if generated_column_offset_line == line {
-              generated_column_offset -= chunk.utf16_len() as i64;
+              generated_column_offset -= chunk.encode_utf16().count() as i64;
             } else {
-              generated_column_offset = -(chunk.utf16_len() as i64);
+              generated_column_offset = -(chunk.encode_utf16().count() as i64);
               generated_column_offset_line = line;
             }
             pos = end_pos;
@@ -458,7 +438,7 @@ impl StreamChunks for ReplaceSource {
               original.source_index,
               original.original_line,
               original.original_column,
-              &chunk.byte_slice(0..chunk_pos as usize),
+              &chunk[0..chunk_pos as usize],
             )
           }) {
             original.original_column += chunk_pos;
@@ -482,8 +462,15 @@ impl StreamChunks for ReplaceSource {
           if next_replacement_pos > pos {
             // Emit chunk until replacement
             let offset = next_replacement_pos - pos;
-            let chunk_slice = chunk
-              .byte_slice(chunk_pos as usize..(chunk_pos + offset) as usize);
+            let chunk_slice = match &chunk {
+              Cow::Borrowed(s) => Cow::Borrowed(
+                &s[chunk_pos as usize..(chunk_pos + offset) as usize],
+              ),
+              Cow::Owned(s) => Cow::Owned(
+                s[chunk_pos as usize..(chunk_pos + offset) as usize]
+                  .to_string(),
+              ),
+            };
             on_chunk(
               Some(chunk_slice.clone()),
               Mapping {
@@ -528,7 +515,7 @@ impl StreamChunks for ReplaceSource {
           let repl = &repls[i];
 
           let lines =
-            split_into_lines(&repl.content.as_str()).collect::<Vec<_>>();
+            split_into_lines(repl.content.as_str()).collect::<Vec<_>>();
           let mut replacement_name_index = mapping
             .original
             .as_ref()
@@ -548,7 +535,7 @@ impl StreamChunks for ReplaceSource {
           }
           for (m, content_line) in lines.iter().enumerate() {
             on_chunk(
-              Some(content_line.into_rope()),
+              Some(Cow::Borrowed(content_line)),
               Mapping {
                 generated_line: line as u32,
                 generated_column: ((mapping.generated_column as i64)
@@ -572,9 +559,11 @@ impl StreamChunks for ReplaceSource {
 
             if m == lines.len() - 1 && !content_line.ends_with('\n') {
               if generated_column_offset_line == line {
-                generated_column_offset += content_line.utf16_len() as i64;
+                generated_column_offset +=
+                  content_line.encode_utf16().count() as i64;
               } else {
-                generated_column_offset = content_line.utf16_len() as i64;
+                generated_column_offset =
+                  content_line.encode_utf16().count() as i64;
                 generated_column_offset_line = line;
               }
             } else {
@@ -618,10 +607,10 @@ impl StreamChunks for ReplaceSource {
                 }
               } else if generated_column_offset_line == line {
                 generated_column_offset -=
-                  chunk.utf16_len() as i64 - chunk_pos as i64;
+                  chunk.encode_utf16().count() as i64 - chunk_pos as i64;
               } else {
                 generated_column_offset =
-                  chunk_pos as i64 - chunk.utf16_len() as i64;
+                  chunk_pos as i64 - chunk.encode_utf16().count() as i64;
                 generated_column_offset_line = line;
               }
               pos = end_pos;
@@ -636,9 +625,8 @@ impl StreamChunks for ReplaceSource {
                   original.source_index,
                   original.original_line,
                   original.original_column,
-                  &chunk.byte_slice(
-                    chunk_pos as usize..(chunk_pos + offset as u32) as usize,
-                  ),
+                  &chunk
+                    [chunk_pos as usize..(chunk_pos + offset as u32) as usize],
                 )
               })
             {
@@ -659,9 +647,16 @@ impl StreamChunks for ReplaceSource {
         // Emit remaining chunk
         if (chunk_pos as usize) < chunk.len() {
           let chunk_slice = if chunk_pos == 0 {
-            chunk
+            chunk.clone()
           } else {
-            chunk.byte_slice(chunk_pos as usize..chunk.len())
+            match &chunk {
+              Cow::Borrowed(s) => {
+                Cow::Borrowed(&s[chunk_pos as usize..chunk.len()])
+              }
+              Cow::Owned(s) => {
+                Cow::Owned(s[chunk_pos as usize..chunk.len()].to_string())
+              }
+            }
           };
           let line = mapping.generated_line as i64 + generated_line_offset;
           on_chunk(
@@ -712,18 +707,18 @@ impl StreamChunks for ReplaceSource {
     );
 
     // Handle remaining replacements
-    let mut remainder = Rope::new();
+    let mut remainder = String::new();
     while i < repls.len() {
-      remainder.add(&repls[i].content);
+      remainder.push_str(&repls[i].content);
       i += 1;
     }
 
     // Insert remaining replacements content split into chunks by lines
     let mut line = result.generated_line as i64 + generated_line_offset;
-    let matches: Vec<Rope> = split_into_lines(&remainder).collect();
+    let matches: Vec<&str> = split_into_lines(&remainder).collect();
     for (m, content_line) in matches.iter().enumerate() {
       on_chunk(
-        Some(content_line.clone()),
+        Some(Cow::Owned(content_line.to_string())),
         Mapping {
           generated_line: line as u32,
           generated_column: ((result.generated_column as i64)
@@ -738,9 +733,9 @@ impl StreamChunks for ReplaceSource {
 
       if m == matches.len() - 1 && !content_line.ends_with('\n') {
         if generated_column_offset_line == line {
-          generated_column_offset += content_line.utf16_len() as i64;
+          generated_column_offset += content_line.encode_utf16().count() as i64;
         } else {
-          generated_column_offset = content_line.utf16_len() as i64;
+          generated_column_offset = content_line.encode_utf16().count() as i64;
           generated_column_offset_line = line;
         }
       } else {
@@ -760,6 +755,12 @@ impl StreamChunks for ReplaceSource {
           0
         }) as u32,
     }
+  }
+}
+
+impl StreamChunks for ReplaceSource {
+  fn stream_chunks<'a>(&'a self) -> Box<dyn Chunks + 'a> {
+    Box::new(ReplaceSourceChunks::new(self))
   }
 }
 
