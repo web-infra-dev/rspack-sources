@@ -18,7 +18,9 @@ use rspack_sources::{
 };
 
 use bench_complex_replace_source::{
-  benchmark_complex_replace_source_map, benchmark_complex_replace_source_size,
+  benchmark_complex_replace_source_map,
+  benchmark_complex_replace_source_map_cached_source_stream_chunks,
+  benchmark_complex_replace_source_size,
   benchmark_complex_replace_source_source,
 };
 use bench_source_map::{
@@ -27,7 +29,6 @@ use bench_source_map::{
 
 use benchmark_repetitive_react_components::{
   benchmark_repetitive_react_components_map,
-  benchmark_repetitive_react_components_map_with_cached_source,
   benchmark_repetitive_react_components_source,
 };
 
@@ -161,6 +162,11 @@ fn bench_rspack_sources(criterion: &mut Criterion) {
   );
 
   group.bench_function(
+    "complex_replace_source_map_cached_source_stream_chunks",
+    benchmark_complex_replace_source_map_cached_source_stream_chunks,
+  );
+
+  group.bench_function(
     "complex_replace_source_source",
     benchmark_complex_replace_source_source,
   );
@@ -180,11 +186,6 @@ fn bench_rspack_sources(criterion: &mut Criterion) {
   group.bench_function(
     "repetitive_react_components_map",
     benchmark_repetitive_react_components_map,
-  );
-
-  group.bench_function(
-    "repetitive_react_components_map_with_cached_source",
-    benchmark_repetitive_react_components_map_with_cached_source,
   );
 
   group.bench_function(

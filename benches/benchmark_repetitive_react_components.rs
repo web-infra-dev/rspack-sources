@@ -3509,19 +3509,6 @@ pub fn benchmark_repetitive_react_components_map(b: &mut Bencher) {
   });
 }
 
-pub fn benchmark_repetitive_react_components_map_with_cached_source(
-  b: &mut Bencher,
-) {
-  let source = REPETITIVE_1K_REACT_COMPONENTS_SOURCE.clone();
-
-  b.iter(|| {
-    let cached_soruce = CachedSource::new(source.clone());
-    black_box(
-      cached_soruce.map(&ObjectPool::default(), &MapOptions::default()),
-    );
-  });
-}
-
 pub fn benchmark_repetitive_react_components_source(b: &mut Bencher) {
   let source = REPETITIVE_1K_REACT_COMPONENTS_SOURCE.clone();
 
