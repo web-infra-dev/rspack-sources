@@ -66,7 +66,18 @@ pub fn get_map<'a>(
     .then(|| SourceMap::new(mappings, sources, sources_content, names))
 }
 
+/// A trait for processing source code chunks and generating source maps.
+///
+/// This trait provides the core functionality for streaming through source code chunks
+/// while building source map information. It's designed to handle the transformation
+/// of source code into mappings that connect generated code positions to original
+/// source positions.
 pub trait Chunks {
+  /// Streams through source code chunks and generates source map information.
+  ///
+  /// This method processes the source code in chunks, calling the provided callbacks
+  /// for each chunk, source reference, and name reference encountered. It's the core
+  /// method for building source maps during code transformation.
   fn stream<'a>(
     &'a self,
     object_pool: &'a ObjectPool,
@@ -195,7 +206,7 @@ impl<'a> Iterator for PotentialTokens<'a> {
 }
 
 // /[^\n;{}]+[;{} \r\t]*\n?|[;{} \r\t]+\n?|\n/g
-pub fn split_into_potential_tokens<'a>(source: &'a str) -> PotentialTokens<'a> {
+pub fn split_into_potential_tokens(source: &str) -> PotentialTokens {
   PotentialTokens {
     bytes: source.as_bytes(),
     source,
@@ -237,7 +248,7 @@ pub fn split_into_lines(source: &str) -> impl Iterator<Item = &str> {
   split(source, b'\n')
 }
 
-pub fn get_generated_source_info<'a>(source: &'a str) -> GeneratedInfo {
+pub fn get_generated_source_info(source: &str) -> GeneratedInfo {
   let (generated_line, generated_column) = if source.ends_with('\n') {
     (split_into_lines(source).count() + 1, 0)
   } else {
@@ -270,7 +281,7 @@ pub fn stream_chunks_of_raw_source<'a>(
 
   let mut line = 1;
   let mut last_line = None;
-  for l in split_into_lines(&source) {
+  for l in split_into_lines(source) {
     on_chunk(
       Some(Cow::Borrowed(l)),
       Mapping {
@@ -611,7 +622,7 @@ fn stream_chunks_of_source_map_lines_full<'a>(
   on_source: OnSource<'_, 'a>,
   _on_name: OnName,
 ) -> GeneratedInfo {
-  let lines: Vec<&str> = split_into_lines(&source).collect();
+  let lines: Vec<&str> = split_into_lines(source).collect();
   if lines.is_empty() {
     return GeneratedInfo {
       generated_line: 1,

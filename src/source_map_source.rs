@@ -186,7 +186,7 @@ impl std::fmt::Debug for SourceMapSource {
 
 struct SourceMapSourceChunks<'source>(&'source SourceMapSource);
 
-impl<'source> Chunks for SourceMapSourceChunks<'source> {
+impl Chunks for SourceMapSourceChunks<'_> {
   fn stream<'a>(
     &'a self,
     object_pool: &'a ObjectPool,
@@ -199,7 +199,7 @@ impl<'source> Chunks for SourceMapSourceChunks<'source> {
       stream_chunks_of_combined_source_map(
         options,
         object_pool,
-        &*self.0.value,
+        &self.0.value,
         &self.0.source_map,
         &self.0.name,
         self.0.original_source.as_ref(),

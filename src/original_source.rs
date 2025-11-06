@@ -109,13 +109,13 @@ impl std::fmt::Debug for OriginalSource {
 
 struct OriginalSourceChunks<'a>(&'a OriginalSource);
 
-impl<'a> OriginalSourceChunks<'a> {
-  pub fn new(source: &'a OriginalSource) -> Self {
+impl<'source> OriginalSourceChunks<'source> {
+  pub fn new(source: &'source OriginalSource) -> Self {
     Self(source)
   }
 }
 
-impl<'a> Chunks for OriginalSourceChunks<'a> {
+impl Chunks for OriginalSourceChunks<'_> {
   fn stream<'b>(
     &'b self,
     _object_pool: &'b ObjectPool,
@@ -211,7 +211,7 @@ impl<'a> Chunks for OriginalSourceChunks<'a> {
       // we need to split source by lines
       let mut line = 1;
       let mut last_line = None;
-      for l in split_into_lines(&self.0.value.as_ref()) {
+      for l in split_into_lines(self.0.value.as_ref()) {
         on_chunk(
           (!options.final_source).then_some(Cow::Borrowed(l)),
           Mapping {

@@ -228,12 +228,12 @@ impl PartialEq for ConcatSource {
 }
 impl Eq for ConcatSource {}
 
-struct ConcatSourceChunks<'a> {
-  children_chunks: Vec<Box<dyn Chunks + 'a>>,
+struct ConcatSourceChunks<'source> {
+  children_chunks: Vec<Box<dyn Chunks + 'source>>,
 }
 
-impl<'a> ConcatSourceChunks<'a> {
-  fn new(concat_source: &'a ConcatSource) -> Self {
+impl<'source> ConcatSourceChunks<'source> {
+  fn new(concat_source: &'source ConcatSource) -> Self {
     let children = concat_source.optimized_children();
     let children_chunks = children
       .iter()
@@ -243,7 +243,7 @@ impl<'a> ConcatSourceChunks<'a> {
   }
 }
 
-impl<'a> Chunks for ConcatSourceChunks<'a> {
+impl Chunks for ConcatSourceChunks<'_> {
   fn stream<'b>(
     &'b self,
     object_pool: &'b ObjectPool,

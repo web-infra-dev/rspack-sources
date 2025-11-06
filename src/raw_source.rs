@@ -105,7 +105,7 @@ impl Hash for RawStringSource {
 
 struct RawStringChunks<'source>(&'source RawStringSource);
 
-impl<'source> Chunks for RawStringChunks<'source> {
+impl Chunks for RawStringChunks<'_> {
   fn stream<'a>(
     &'a self,
     _object_pool: &'a ObjectPool,
@@ -243,7 +243,7 @@ impl Hash for RawBufferSource {
 
 struct RawBufferSourceChunks<'a>(&'a RawBufferSource);
 
-impl<'source> Chunks for RawBufferSourceChunks<'source> {
+impl Chunks for RawBufferSourceChunks<'_> {
   fn stream<'a>(
     &'a self,
     _object_pool: &'a ObjectPool,

@@ -325,7 +325,7 @@ impl<'a> ReplaceSourceChunks<'a> {
   }
 }
 
-impl<'source> Chunks for ReplaceSourceChunks<'source> {
+impl Chunks for ReplaceSourceChunks<'_> {
   fn stream<'a>(
     &'a self,
     object_pool: &'a ObjectPool,
@@ -515,7 +515,7 @@ impl<'source> Chunks for ReplaceSourceChunks<'source> {
           let repl = &repls[i];
 
           let lines =
-            split_into_lines(&repl.content.as_str()).collect::<Vec<_>>();
+            split_into_lines(repl.content.as_str()).collect::<Vec<_>>();
           let mut replacement_name_index = mapping
             .original
             .as_ref()

@@ -139,7 +139,7 @@ impl<'a> CachedSourceChunks<'a> {
   }
 }
 
-impl<'source> Chunks for CachedSourceChunks<'source> {
+impl Chunks for CachedSourceChunks<'_> {
   fn stream<'a>(
     &'a self,
     object_pool: &'a ObjectPool,
