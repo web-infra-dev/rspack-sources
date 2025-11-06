@@ -9,7 +9,8 @@ pub use criterion::*;
 pub use codspeed_criterion_compat::*;
 
 use rspack_sources::{
-  BoxSource, MapOptions, ObjectPool, OriginalSource, ReplaceSource, SourceExt,
+  stream_chunks::StreamChunks, BoxSource, CachedSource, MapOptions, ObjectPool,
+  OriginalSource, ReplaceSource, Source, SourceExt,
 };
 
 static LARGE_REPLACE_SOURCE: LazyLock<BoxSource> = LazyLock::new(|| {
@@ -36725,6 +36726,24 @@ pub fn benchmark_complex_replace_source_map(b: &mut Bencher) {
 
   b.iter(|| {
     black_box(source.map(&ObjectPool::default(), &MapOptions::default()));
+  });
+}
+
+pub fn benchmark_complex_replace_source_map_cached_source_stream_chunks(
+  b: &mut Bencher,
+) {
+  let source = LARGE_REPLACE_SOURCE.clone();
+  let cached_source = CachedSource::new(source);
+  cached_source.map(&ObjectPool::default(), &MapOptions::default());
+
+  b.iter(|| {
+    black_box(cached_source.stream_chunks().stream(
+      &ObjectPool::default(),
+      &MapOptions::default(),
+      &mut |_chunk, _mapping| {},
+      &mut |_source_index, _source, _source_content| {},
+      &mut |_name_index, _name| {},
+    ));
   });
 }
 

@@ -240,8 +240,8 @@ impl Source for ReplaceSource {
     if replacements.is_empty() {
       return self.inner.map(&ObjectPool::default(), options);
     }
-    let chunsk = self.stream_chunks();
-    get_map(&ObjectPool::default(), chunsk.as_ref(), options)
+    let chunks = self.stream_chunks();
+    get_map(&ObjectPool::default(), chunks.as_ref(), options)
   }
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
