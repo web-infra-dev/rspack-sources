@@ -444,14 +444,16 @@ impl Chunks for ReplaceSourceChunks<'_> {
             original.original_column += chunk_pos;
           }
           pos += chunk_pos;
+          let chunk_utf16_pos =
+            chunk[..chunk_pos as usize].encode_utf16().count();
           let line = mapping.generated_line as i64 + generated_line_offset;
           if generated_column_offset_line == line {
-            generated_column_offset -= chunk_pos as i64;
+            generated_column_offset -= chunk_utf16_pos as i64;
           } else {
-            generated_column_offset = -(chunk_pos as i64);
+            generated_column_offset = -(chunk_utf16_pos as i64);
             generated_column_offset_line = line;
           }
-          mapping.generated_column += chunk_pos;
+          mapping.generated_column += chunk_utf16_pos as u32;
         }
 
         // Is a replacement in the chunk?
@@ -462,17 +464,11 @@ impl Chunks for ReplaceSourceChunks<'_> {
           if next_replacement_pos > pos {
             // Emit chunk until replacement
             let offset = next_replacement_pos - pos;
-            let chunk_slice = match &chunk {
-              Cow::Borrowed(s) => Cow::Borrowed(
-                &s[chunk_pos as usize..(chunk_pos + offset) as usize],
-              ),
-              Cow::Owned(s) => Cow::Owned(
-                s[chunk_pos as usize..(chunk_pos + offset) as usize]
-                  .to_string(),
-              ),
-            };
+            let chunk_slice =
+              &chunk[chunk_pos as usize..(chunk_pos + offset) as usize];
+            let utf8_offset = chunk_slice.encode_utf16().count() as u32;
             on_chunk(
-              Some(chunk_slice.clone()),
+              Some(chunk_slice),
               Mapping {
                 generated_line: line as u32,
                 generated_column: ((mapping.generated_column as i64)
@@ -493,7 +489,7 @@ impl Chunks for ReplaceSourceChunks<'_> {
                 }),
               },
             );
-            mapping.generated_column += offset;
+            mapping.generated_column += utf8_offset;
             chunk_pos += offset;
             pos = next_replacement_pos;
             if let Some(original) =
@@ -502,11 +498,12 @@ impl Chunks for ReplaceSourceChunks<'_> {
                   original.source_index,
                   original.original_line,
                   original.original_column,
-                  &chunk_slice,
+                  chunk_slice,
                 )
               })
             {
-              original.original_column += chunk_slice.len() as u32;
+              original.original_column +=
+                chunk_slice.encode_utf16().count() as u32;
             }
           }
           // Insert replacement content split into chunks by lines
@@ -535,7 +532,7 @@ impl Chunks for ReplaceSourceChunks<'_> {
           }
           for (m, content_line) in lines.iter().enumerate() {
             on_chunk(
-              Some(Cow::Borrowed(content_line)),
+              Some(content_line),
               Mapping {
                 generated_line: line as u32,
                 generated_column: ((mapping.generated_column as i64)
@@ -606,11 +603,12 @@ impl Chunks for ReplaceSourceChunks<'_> {
                   generated_column_offset += mapping.generated_column as i64;
                 }
               } else if generated_column_offset_line == line {
-                generated_column_offset -=
-                  chunk.encode_utf16().count() as i64 - chunk_pos as i64;
+                let remaining_chunk_utf16_len =
+                  chunk[chunk_pos as usize..].encode_utf16().count() as i64;
+                generated_column_offset -= remaining_chunk_utf16_len;
               } else {
                 generated_column_offset =
-                  chunk_pos as i64 - chunk.encode_utf16().count() as i64;
+                  -(chunk[chunk_pos as usize..].encode_utf16().count() as i64);
                 generated_column_offset_line = line;
               }
               pos = end_pos;
@@ -632,31 +630,30 @@ impl Chunks for ReplaceSourceChunks<'_> {
             {
               original.original_column += offset as u32;
             }
+
+            let utf16_offest = chunk
+              [chunk_pos as usize..(chunk_pos + offset as u32) as usize]
+              .encode_utf16()
+              .count() as i64;
             chunk_pos += offset as u32;
             pos += offset as u32;
+
             if generated_column_offset_line == line {
-              generated_column_offset -= offset;
+              generated_column_offset -= utf16_offest;
             } else {
-              generated_column_offset = -offset;
+              generated_column_offset = -utf16_offest;
               generated_column_offset_line = line;
             }
-            mapping.generated_column += offset as u32;
+            mapping.generated_column += utf16_offest as u32;
           }
         }
 
         // Emit remaining chunk
         if (chunk_pos as usize) < chunk.len() {
           let chunk_slice = if chunk_pos == 0 {
-            chunk.clone()
+            chunk
           } else {
-            match &chunk {
-              Cow::Borrowed(s) => {
-                Cow::Borrowed(&s[chunk_pos as usize..chunk.len()])
-              }
-              Cow::Owned(s) => {
-                Cow::Owned(s[chunk_pos as usize..chunk.len()].to_string())
-              }
-            }
+            &chunk[chunk_pos as usize..chunk.len()]
           };
           let line = mapping.generated_line as i64 + generated_line_offset;
           on_chunk(
@@ -706,44 +703,48 @@ impl Chunks for ReplaceSourceChunks<'_> {
       },
     );
 
-    // Handle remaining replacements
-    let mut remainder = String::new();
-    while i < repls.len() {
-      remainder.push_str(&repls[i].content);
-      i += 1;
-    }
-
-    // Insert remaining replacements content split into chunks by lines
+    // Handle remaining replacements one by one
     let mut line = result.generated_line as i64 + generated_line_offset;
-    let matches: Vec<&str> = split_into_lines(&remainder).collect();
-    for (m, content_line) in matches.iter().enumerate() {
-      on_chunk(
-        Some(Cow::Owned(content_line.to_string())),
-        Mapping {
-          generated_line: line as u32,
-          generated_column: ((result.generated_column as i64)
-            + if line == generated_column_offset_line {
-              generated_column_offset
-            } else {
-              0
-            }) as u32,
-          original: None,
-        },
-      );
+    while i < repls.len() {
+      let content = &repls[i].content;
+      let lines: Vec<&str> = split_into_lines(content).collect();
 
-      if m == matches.len() - 1 && !content_line.ends_with('\n') {
-        if generated_column_offset_line == line {
-          generated_column_offset += content_line.encode_utf16().count() as i64;
+      for (line_idx, content_line) in lines.iter().enumerate() {
+        on_chunk(
+          Some(content_line),
+          Mapping {
+            generated_line: line as u32,
+            generated_column: ((result.generated_column as i64)
+              + if line == generated_column_offset_line {
+                generated_column_offset
+              } else {
+                0
+              }) as u32,
+            original: None,
+          },
+        );
+
+        // Handle line and column offset updates
+        if line_idx == lines.len() - 1 && !content_line.ends_with('\n') {
+          // Last line of current replacement doesn't end with newline
+          if generated_column_offset_line == line {
+            generated_column_offset +=
+              content_line.encode_utf16().count() as i64;
+          } else {
+            generated_column_offset =
+              content_line.encode_utf16().count() as i64;
+            generated_column_offset_line = line;
+          }
         } else {
-          generated_column_offset = content_line.encode_utf16().count() as i64;
+          // Line ends with newline or not the last line
+          generated_line_offset += 1;
+          line += 1;
+          generated_column_offset = -(result.generated_column as i64);
           generated_column_offset_line = line;
         }
-      } else {
-        generated_line_offset += 1;
-        line += 1;
-        generated_column_offset = -(result.generated_column as i64);
-        generated_column_offset_line = line;
       }
+
+      i += 1;
     }
 
     GeneratedInfo {
@@ -1269,7 +1270,7 @@ return <div>{data.foo}</div>
         .unwrap()
         .to_json()
         .unwrap(),
-      r#"{"version":3,"sources":["file.css"],"sourcesContent":["\n\"abc\"; url(__PUBLIC_PATH__logo.png);\n\"ヒラギノ角ゴ\"; url(__PUBLIC_PATH__logo.png);\n\"游ゴシック体\"; url(__PUBLIC_PATH__logo.png);\n\"🤪\"; url(__PUBLIC_PATH__logo.png);\n\"👨‍👩‍👧‍👧\"; url(__PUBLIC_PATH__logo.png);\n"],"names":[],"mappings":";AACA,OAAO,IAAI,GAAe;AAC1B,sBAAsB;AACtB,sBAAsB;AACtB,QAAQ;AACR,6BAA6B"}"#,
+      r#"{"version":3,"sources":["file.css"],"sourcesContent":["\n\"abc\"; url(__PUBLIC_PATH__logo.png);\n\"ヒラギノ角ゴ\"; url(__PUBLIC_PATH__logo.png);\n\"游ゴシック体\"; url(__PUBLIC_PATH__logo.png);\n\"🤪\"; url(__PUBLIC_PATH__logo.png);\n\"👨‍👩‍👧‍👧\"; url(__PUBLIC_PATH__logo.png);\n"],"names":[],"mappings":";AACA,OAAO,IAAI,GAAe;AAC1B,UAAU,IAAI,GAAe;AAC7B,UAAU,IAAI,GAAe;AAC7B,MAAM,IAAI,GAAe;AACzB,eAAe,IAAI,GAAe"}"#,
     );
   }
 
@@ -1454,5 +1455,98 @@ return <div>{data.foo}</div>
           "sourcesContent": ["var i18n = JSON.parse('{\"魑魅魍魉\":{\"en-US\":\"Evil spirits\",\"zh-CN\":\"魑魅魍魉\"}}');\nvar __webpack_exports___ = i18n[\"魑魅魍魉\"];\nexport { __webpack_exports___ as 魑魅魍魉 };\n"]
         }"#
     ).unwrap());
+  }
+
+  #[test]
+  fn test_replace_source_handle_remaining_replacements() {
+    let mut source =
+      ReplaceSource::new(OriginalSource::new("สวัสดี ชาวโลก!", "test.txt"));
+    source.replace(0, 19, "hello, ", None);
+    source.replace(19, 38, "world!", None);
+    source.replace(100, 200, "\n", None);
+    source.replace(200, 300, "你好，世界！\n", None);
+    source.replace(300, 400, "こんにちは、世界！\n안녕하세요, 세계! \n", None);
+
+    assert_eq!(
+      source.source().into_string_lossy(),
+      "hello, world!\n你好，世界！\nこんにちは、世界！\n안녕하세요, 세계! \n"
+    );
+
+    let mut chunks = vec![];
+    let object_pool = ObjectPool::default();
+    let handle = source.stream_chunks();
+    handle.stream(
+      &object_pool,
+      &MapOptions::default(),
+      &mut |chunk, mapping| {
+        chunks.push((chunk.unwrap(), mapping));
+      },
+      &mut |_source_index, _source, _source_content| {},
+      &mut |_name_index, _name| {},
+    );
+
+    assert_eq!(
+      chunks,
+      vec![
+        (
+          "hello, ",
+          Mapping {
+            generated_line: 1,
+            generated_column: 0,
+            original: Some(OriginalLocation {
+              source_index: 0,
+              original_line: 1,
+              original_column: 0,
+              name_index: None
+            })
+          }
+        ),
+        (
+          "world!",
+          Mapping {
+            generated_line: 1,
+            generated_column: 7,
+            original: Some(OriginalLocation {
+              source_index: 0,
+              original_line: 1,
+              original_column: 19,
+              name_index: None
+            })
+          }
+        ),
+        (
+          "\n",
+          Mapping {
+            generated_line: 1,
+            generated_column: 13,
+            original: None
+          }
+        ),
+        (
+          "你好，世界！\n",
+          Mapping {
+            generated_line: 2,
+            generated_column: 0,
+            original: None
+          }
+        ),
+        (
+          "こんにちは、世界！\n",
+          Mapping {
+            generated_line: 3,
+            generated_column: 0,
+            original: None
+          }
+        ),
+        (
+          "안녕하세요, 세계! \n",
+          Mapping {
+            generated_line: 4,
+            generated_column: 0,
+            original: None
+          }
+        )
+      ]
+    );
   }
 }

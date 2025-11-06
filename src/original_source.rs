@@ -134,7 +134,7 @@ impl Chunks for OriginalSourceChunks<'_> {
         if is_end_of_line && token.len() == 1 {
           if !options.final_source {
             on_chunk(
-              Some(Cow::Borrowed(token)),
+              Some(token),
               Mapping {
                 generated_line: line,
                 generated_column: column,
@@ -144,7 +144,7 @@ impl Chunks for OriginalSourceChunks<'_> {
           }
         } else {
           on_chunk(
-            (!options.final_source).then_some(Cow::Borrowed(token)),
+            (!options.final_source).then_some(token),
             Mapping {
               generated_line: line,
               generated_column: column,
@@ -161,7 +161,7 @@ impl Chunks for OriginalSourceChunks<'_> {
           line += 1;
           column = 0;
         } else {
-          column += token.len() as u32;
+          column += token.encode_utf16().count() as u32;
         }
       }
       GeneratedInfo {
@@ -213,7 +213,7 @@ impl Chunks for OriginalSourceChunks<'_> {
       let mut last_line = None;
       for l in split_into_lines(self.0.value.as_ref()) {
         on_chunk(
-          (!options.final_source).then_some(Cow::Borrowed(l)),
+          (!options.final_source).then_some(l),
           Mapping {
             generated_line: line,
             generated_column: 0,
@@ -233,7 +233,7 @@ impl Chunks for OriginalSourceChunks<'_> {
       {
         GeneratedInfo {
           generated_line: line - 1,
-          generated_column: last_line.len() as u32,
+          generated_column: last_line.encode_utf16().count() as u32,
         }
       } else {
         GeneratedInfo {
@@ -342,7 +342,7 @@ mod tests {
   #[test]
   fn fix_rspack_issue_6793() {
     let code1 = "hello\n\n";
-    let source1 = OriginalSource::new(code1, "hello.txt");
+    let source1 = OriginalSource::new(code1, "test.txt");
     let source1 = ReplaceSource::new(source1);
 
     let code2 = "world";
@@ -353,5 +353,127 @@ mod tests {
       .map(&ObjectPool::default(), &MapOptions::new(false))
       .unwrap();
     assert_eq!(map.mappings(), "AAAA;AACA;ACDA",);
+  }
+
+  #[test]
+  fn test_potential_tokens_multi_unit_utf16() {
+    let code = "var i18n = JSON.parse('{\"魑魅魍魉\":{\"en-US\":\"Evil spirits\",\"zh-CN\":\"魑魅魍魉\"}}');\nvar __webpack_exports___ = i18n[\"魑魅魍魉\"];\nexport { __webpack_exports___ as 魑魅魍魉 };";
+    let source = OriginalSource::new(code, "test.js");
+    let mut chunks = vec![];
+    let object_pool = ObjectPool::default();
+    let handle = source.stream_chunks();
+    let generated_info = handle.stream(
+      &object_pool,
+      &MapOptions::default(),
+      &mut |chunk, mapping| {
+        chunks.push((chunk.unwrap(), mapping));
+      },
+      &mut |_source_index, _source, _source_content| {},
+      &mut |_name_index, _name| {},
+    );
+
+    assert_eq!(
+      generated_info,
+      GeneratedInfo {
+        generated_line: 3,
+        generated_column: 40
+      }
+    );
+    assert_eq!(
+      chunks,
+      vec![
+        (
+          "var i18n = JSON.parse('{",
+          Mapping {
+            generated_line: 1,
+            generated_column: 0,
+            original: Some(OriginalLocation {
+              source_index: 0,
+              original_line: 1,
+              original_column: 0,
+              name_index: None
+            })
+          }
+        ),
+        (
+          "\"魑魅魍魉\":{",
+          Mapping {
+            generated_line: 1,
+            generated_column: 24,
+            original: Some(OriginalLocation {
+              source_index: 0,
+              original_line: 1,
+              original_column: 24,
+              name_index: None
+            })
+          }
+        ),
+        (
+          "\"en-US\":\"Evil spirits\",\"zh-CN\":\"魑魅魍魉\"}}",
+          Mapping {
+            generated_line: 1,
+            generated_column: 32,
+            original: Some(OriginalLocation {
+              source_index: 0,
+              original_line: 1,
+              original_column: 32,
+              name_index: None
+            })
+          }
+        ),
+        (
+          "');\n",
+          Mapping {
+            generated_line: 1,
+            generated_column: 71,
+            original: Some(OriginalLocation {
+              source_index: 0,
+              original_line: 1,
+              original_column: 71,
+              name_index: None
+            })
+          }
+        ),
+        (
+          "var __webpack_exports___ = i18n[\"魑魅魍魉\"];\n",
+          Mapping {
+            generated_line: 2,
+            generated_column: 0,
+            original: Some(OriginalLocation {
+              source_index: 0,
+              original_line: 2,
+              original_column: 0,
+              name_index: None
+            })
+          }
+        ),
+        (
+          "export { ",
+          Mapping {
+            generated_line: 3,
+            generated_column: 0,
+            original: Some(OriginalLocation {
+              source_index: 0,
+              original_line: 3,
+              original_column: 0,
+              name_index: None
+            })
+          }
+        ),
+        (
+          "__webpack_exports___ as 魑魅魍魉 };",
+          Mapping {
+            generated_line: 3,
+            generated_column: 9,
+            original: Some(OriginalLocation {
+              source_index: 0,
+              original_line: 3,
+              original_column: 9,
+              name_index: None
+            })
+          }
+        )
+      ]
+    )
   }
 }
