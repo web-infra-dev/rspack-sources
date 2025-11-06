@@ -18,7 +18,9 @@ use rspack_sources::{
 };
 
 use bench_complex_replace_source::{
-  benchmark_complex_replace_source_map, benchmark_complex_replace_source_size,
+  benchmark_complex_replace_source_map,
+  benchmark_complex_replace_source_map_cached_source_stream_chunks,
+  benchmark_complex_replace_source_size,
   benchmark_complex_replace_source_source,
 };
 use bench_source_map::{
@@ -157,6 +159,11 @@ fn bench_rspack_sources(criterion: &mut Criterion) {
   group.bench_function(
     "complex_replace_source_map",
     benchmark_complex_replace_source_map,
+  );
+
+  group.bench_function(
+    "complex_replace_source_map_cached_source_stream_chunks",
+    benchmark_complex_replace_source_map_cached_source_stream_chunks,
   );
 
   group.bench_function(
