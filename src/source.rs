@@ -17,7 +17,7 @@ use crate::{
 };
 
 /// An alias for `Box<dyn Source>`.
-pub type BoxSource = Box<dyn Source>;
+pub type BoxSource = Arc<dyn Source>;
 
 /// A unified representation for source content that can be either text or binary data.
 ///
@@ -238,7 +238,7 @@ impl<T: Source + 'static> SourceExt for T {
     if let Some(source) = self.as_any().downcast_ref::<BoxSource>() {
       return source.clone();
     }
-    Box::new(self)
+    Arc::new(self)
   }
 }
 

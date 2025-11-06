@@ -103,7 +103,13 @@ impl Hash for RawStringSource {
   }
 }
 
-struct RawStringChunks<'source>(&'source RawStringSource);
+struct RawStringChunks<'source>(&'source str);
+
+impl<'source> RawStringChunks<'source> {
+  pub fn new(source: &'source RawStringSource) -> Self {
+    RawStringChunks(&source.0)
+  }
+}
 
 impl Chunks for RawStringChunks<'_> {
   fn stream<'a>(
@@ -114,19 +120,17 @@ impl Chunks for RawStringChunks<'_> {
     on_source: crate::helpers::OnSource<'_, 'a>,
     on_name: crate::helpers::OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {
-    let source = self.0;
-    let code = source.0.as_ref();
     if options.final_source {
-      get_generated_source_info(code)
+      get_generated_source_info(self.0)
     } else {
-      stream_chunks_of_raw_source(code, options, on_chunk, on_source, on_name)
+      stream_chunks_of_raw_source(self.0, options, on_chunk, on_source, on_name)
     }
   }
 }
 
 impl StreamChunks for RawStringSource {
   fn stream_chunks<'a>(&'a self) -> Box<dyn Chunks + 'a> {
-    Box::new(RawStringChunks(self))
+    Box::new(RawStringChunks::new(self))
   }
 }
 
