@@ -21,8 +21,8 @@ use crate::{
 struct CachedData {
   hash: OnceLock<u64>,
   size: OnceLock<usize>,
-  line_only_map: OnceLock<Option<SourceMap>>,
   columns_map: OnceLock<Option<SourceMap>>,
+  line_only_map: OnceLock<Option<SourceMap>>,
 }
 
 /// It tries to reused cached results from other methods to avoid calculations,
