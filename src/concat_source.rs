@@ -175,15 +175,19 @@ impl Source for ConcatSource {
     }
   }
 
-  fn rope(&self) -> Vec<&str> {
+  fn rope(&self) -> (Vec<&str>, usize) {
     let children = self.optimized_children();
     if children.len() == 1 {
       children[0].rope()
     } else {
-      children
-        .iter()
-        .flat_map(|child| child.rope())
-        .collect::<Vec<_>>()
+      let mut merged_chunks = vec![];
+      let mut merged_len = 0;
+      for child in children {
+        let (chunks, len) = child.rope();
+        merged_chunks.extend(chunks);
+        merged_len += len;
+      }
+      (merged_chunks, merged_len)
     }
   }
 

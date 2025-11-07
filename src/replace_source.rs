@@ -161,12 +161,12 @@ impl ReplaceSource {
 
 impl Source for ReplaceSource {
   fn source(&self) -> SourceValue {
-    let rope = self.rope();
-    if rope.len() == 1 {
-      SourceValue::String(Cow::Borrowed(rope[0]))
+    let (chunks, len) = self.rope();
+    if chunks.len() == 1 {
+      SourceValue::String(Cow::Borrowed(chunks[0]))
     } else {
-      let mut string = String::with_capacity(rope.iter().map(|c| c.len()).sum());
-      for chunk in rope {
+      let mut string = String::with_capacity(len);
+      for chunk in chunks {
         string.push_str(chunk);
       }
       SourceValue::String(Cow::Owned(string))
@@ -174,10 +174,11 @@ impl Source for ReplaceSource {
   }
 
   #[allow(unsafe_code)]
-  fn rope(&self) -> Vec<&str> {
-    let inner_rope = self.inner.rope();
-    let mut rope: Vec<&str> =
-      Vec::with_capacity(inner_rope.len() + self.replacements.len() * 2);
+  fn rope(&self) -> (Vec<&str>, usize) {
+    let (inner_chunks, _) = self.inner.rope();
+    let mut chunks: Vec<&str> =
+      Vec::with_capacity(inner_chunks.len() + self.replacements.len() * 2);
+    let mut len: usize = 0;
 
     let mut pos: usize = 0;
     let mut replacement_idx: usize = 0;
@@ -186,7 +187,7 @@ impl Source for ReplaceSource {
       < self.replacements.len())
     .then(|| self.replacements[replacement_idx].start as usize);
 
-    'chunk_loop: for chunk in inner_rope {
+    'chunk_loop: for chunk in inner_chunks {
       let mut chunk_pos = 0;
       let end_pos = pos + chunk.len();
 
@@ -213,14 +214,16 @@ impl Source for ReplaceSource {
           let offset = next_replacement_pos - pos;
           let chunk_slice =
             unsafe { &chunk.get_unchecked(chunk_pos..(chunk_pos + offset)) };
-          rope.push(chunk_slice);
+          chunks.push(chunk_slice);
+          len += chunk_slice.len();
           chunk_pos += offset;
           pos = next_replacement_pos;
         }
         // Insert replacement content split into chunks by lines
         let replacement =
           unsafe { &self.replacements.get_unchecked(replacement_idx) };
-        rope.push(&replacement.content);
+        chunks.push(&replacement.content);
+        len += replacement.content.len();
 
         // Remove replaced content by settings this variable
         replacement_end = if let Some(replacement_end) = replacement_end {
@@ -260,7 +263,9 @@ impl Source for ReplaceSource {
 
       // Emit remaining chunk
       if chunk_pos < chunk.len() {
-        rope.push(unsafe { &chunk.get_unchecked(chunk_pos..) });
+        let chunk = unsafe { &chunk.get_unchecked(chunk_pos..) };
+        chunks.push(chunk);
+        len += chunk.len();
       }
       pos = end_pos;
     }
@@ -269,11 +274,12 @@ impl Source for ReplaceSource {
     while replacement_idx < self.replacements.len() {
       let content =
         unsafe { &self.replacements.get_unchecked(replacement_idx).content };
-      rope.push(content);
+      chunks.push(content);
+      len += content.len();
       replacement_idx += 1;
     }
 
-    rope
+    (chunks, len)
   }
 
   fn buffer(&self) -> Cow<[u8]> {
@@ -334,13 +340,13 @@ impl Source for ReplaceSource {
   }
 
   fn write_to_string(&self, string: &mut String) {
-    for chunk in self.rope() {
+    for chunk in self.rope().0 {
       string.push_str(chunk);
     }
   }
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
-    for text in self.rope() {
+    for text in self.rope().0 {
       writer.write_all(text.as_bytes())?;
     }
     Ok(())

@@ -94,8 +94,8 @@ impl Source for SourceMapSource {
     SourceValue::String(Cow::Borrowed(&self.value))
   }
 
-  fn rope(&self) -> Vec<&str> {
-    vec![self.value.as_ref()]
+  fn rope(&self) -> (Vec<&str>, usize) {
+    (vec![self.value.as_ref()], self.value.len())
   }
 
   fn buffer(&self) -> Cow<[u8]> {
