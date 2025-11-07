@@ -170,141 +170,100 @@ impl Source for ReplaceSource {
   }
 
   fn rope(&self) -> Vec<&str> {
-    let inner_source_code = self.inner.rope();
+    let inner_rope = self.inner.rope();
+    let mut rope =
+      Vec::with_capacity(inner_rope.len() + self.replacements.len() * 2);
 
-    if self.replacements.is_empty() {
-      return inner_source_code;
-    }
+    let mut pos: usize = 0;
+    let mut replacement_idx: usize = 0;
+    let mut replacement_end: Option<usize> = None;
+    let mut next_replacement: Option<usize> = (replacement_idx
+      < self.replacements.len())
+    .then(|| self.replacements[replacement_idx].start as usize);
 
-    let mut result = Vec::new();
-    let mut pos: u32 = 0;
-    let mut chunk_index = 0;
-    let mut chunk_pos = 0; // Position within current chunk
-    let mut replacement_index = 0;
+    'chunk_loop: for chunk in self.inner.rope() {
+      let mut chunk_pos = 0;
+      let end_pos = pos + chunk.len();
 
-    // Calculate total length to determine positions
-    let mut chunk_start_positions = Vec::new();
-    let mut total_pos = 0;
-    for chunk in &inner_source_code {
-      chunk_start_positions.push(total_pos);
-      total_pos += chunk.len() as u32;
-    }
+      // Skip over when it has been replaced
+      if let Some(replacement_end) =
+        replacement_end.filter(|replacement_end| *replacement_end > pos)
+      {
+        // Skip over the whole chunk
+        if replacement_end >= end_pos {
+          pos = end_pos;
+          continue;
+        }
+        // Partially skip over chunk
+        chunk_pos = replacement_end - pos;
+        pos += chunk_pos;
+      }
 
-    while replacement_index < self.replacements.len()
-      || chunk_index < inner_source_code.len()
-    {
-      let next_replacement = self.replacements.get(replacement_index);
+      // Is a replacement in the chunk?
+      while let Some(next_replacement_pos) = next_replacement
+        .filter(|next_replacement_pos| *next_replacement_pos < end_pos)
+      {
+        if next_replacement_pos > pos {
+          // Emit chunk until replacement
+          let offset = next_replacement_pos - pos;
+          let chunk_slice = &chunk[chunk_pos..(chunk_pos + offset)];
+          rope.push(chunk_slice);
+          chunk_pos += offset;
+          pos = next_replacement_pos;
+        }
+        // Insert replacement content split into chunks by lines
+        let replacement = &self.replacements[replacement_idx];
+        rope.push(&replacement.content);
 
-      // Process chunks until we hit a replacement or finish
-      while chunk_index < inner_source_code.len() {
-        let chunk = inner_source_code[chunk_index];
-        let chunk_start = chunk_start_positions[chunk_index];
-        let chunk_end = chunk_start + chunk.len() as u32;
+        // Remove replaced content by settings this variable
+        replacement_end = if let Some(replacement_end) = replacement_end {
+          Some(replacement_end.max(replacement.end as usize))
+        } else {
+          Some(replacement.end as usize)
+        };
 
-        // Check if there's a replacement that starts within this chunk
-        if let Some(replacement) = next_replacement {
-          if replacement.start >= chunk_start && replacement.start < chunk_end {
-            // Replacement starts within this chunk
-            let offset_in_chunk = (replacement.start - chunk_start) as usize;
+        // Move to next replacement
+        replacement_idx += 1;
+        next_replacement = if replacement_idx < self.replacements.len() {
+          Some(self.replacements[replacement_idx].start as usize)
+        } else {
+          None
+        };
 
-            // Add the part of chunk before replacement
-            if offset_in_chunk > chunk_pos {
-              result.push(&chunk[chunk_pos..offset_in_chunk]);
-            }
-
-            // Add replacement content
-            result.push(&replacement.content);
-
-            // Update positions
-            pos = replacement.end;
-            replacement_index += 1;
-
-            // Find where to continue after replacement
-            let mut found_continue_pos = false;
-            for (idx, &chunk_start_pos) in
-              chunk_start_positions.iter().enumerate()
-            {
-              let chunk_end_pos =
-                chunk_start_pos + inner_source_code[idx].len() as u32;
-
-              if pos >= chunk_start_pos && pos < chunk_end_pos {
-                // Continue from within this chunk
-                chunk_index = idx;
-                chunk_pos = (pos - chunk_start_pos) as usize;
-                found_continue_pos = true;
-                break;
-              } else if pos <= chunk_start_pos {
-                // Continue from the start of this chunk
-                chunk_index = idx;
-                chunk_pos = 0;
-                found_continue_pos = true;
-                break;
-              }
-            }
-
-            if !found_continue_pos {
-              // Replacement goes beyond all chunks
-              chunk_index = inner_source_code.len();
-            }
-
-            break;
-          } else if replacement.start < chunk_start {
-            // Replacement starts before this chunk
-            result.push(&replacement.content);
-            replacement_index += 1;
-
-            // Skip chunks that are replaced
-            pos = replacement.end;
-            while chunk_index < inner_source_code.len() {
-              let current_chunk_start = chunk_start_positions[chunk_index];
-              let current_chunk_end = current_chunk_start
-                + inner_source_code[chunk_index].len() as u32;
-
-              if pos <= current_chunk_start {
-                // Start from beginning of this chunk
-                chunk_pos = 0;
-                break;
-              } else if pos < current_chunk_end {
-                // Start from middle of this chunk
-                chunk_pos = (pos - current_chunk_start) as usize;
-                break;
-              } else {
-                // Skip this entire chunk
-                chunk_index += 1;
-              }
-            }
-            break;
+        // Skip over when it has been replaced
+        let offset = chunk.len() as i64 - end_pos as i64
+          + replacement_end.unwrap() as i64
+          - chunk_pos as i64;
+        if offset > 0 {
+          // Skip over whole chunk
+          if replacement_end
+            .is_some_and(|replacement_end| replacement_end >= end_pos)
+          {
+            pos = end_pos;
+            continue 'chunk_loop;
           }
-        }
 
-        // No replacement affecting this chunk, add the remaining part
-        if chunk_pos == 0
-          && (next_replacement.is_none()
-            || next_replacement.unwrap().start > chunk_end)
-        {
-          // Add entire chunk
-          result.push(chunk);
-        } else if chunk_pos < chunk.len() {
-          // Add remaining part of chunk
-          result.push(&chunk[chunk_pos..]);
+          // Partially skip over chunk
+          chunk_pos += offset as usize;
+          pos += offset as usize;
         }
-
-        chunk_index += 1;
-        chunk_pos = 0;
-        pos = chunk_end;
       }
 
-      // Handle remaining replacements that are beyond all chunks
-      while replacement_index < self.replacements.len() {
-        let replacement = &self.replacements[replacement_index];
-        if replacement.start >= pos {
-          result.push(&replacement.content);
-        }
-        replacement_index += 1;
+      // Emit remaining chunk
+      if chunk_pos < chunk.len() {
+        rope.push(&chunk[chunk_pos..]);
       }
+      pos = end_pos;
     }
 
-    result
+    // Handle remaining replacements one by one
+    while replacement_idx < self.replacements.len() {
+      let content = &self.replacements[replacement_idx].content;
+      rope.push(content);
+      replacement_idx += 1;
+    }
+
+    rope
   }
 
   fn buffer(&self) -> Cow<[u8]> {
@@ -365,7 +324,10 @@ impl Source for ReplaceSource {
   }
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
-    writer.write_all(self.source().as_bytes())
+    for text in self.rope() {
+      writer.write_all(text.as_bytes())?;
+    }
+    Ok(())
   }
 }
 
