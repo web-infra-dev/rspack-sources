@@ -167,11 +167,9 @@ impl Source for ConcatSource {
     if children.len() == 1 {
       children[0].source()
     } else {
-      let mut buf = String::with_capacity(self.size());
-      for child in children {
-        buf.push_str(&child.source().into_string_lossy());
-      }
-      SourceValue::String(Cow::Owned(buf))
+      let mut string = String::with_capacity(self.size());
+      self.write_to_string(&mut string);
+      SourceValue::String(Cow::Owned(string))
     }
   }
 
@@ -204,6 +202,12 @@ impl Source for ConcatSource {
     let chunks = self.stream_chunks();
     let result = get_map(object_pool, chunks.as_ref(), options);
     result
+  }
+
+  fn write_to_string(&self, string: &mut String) {
+    for child in self.optimized_children() {
+      child.write_to_string(string);
+    }
   }
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {

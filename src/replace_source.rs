@@ -244,6 +244,10 @@ impl Source for ReplaceSource {
     get_map(&ObjectPool::default(), chunks.as_ref(), options)
   }
 
+  fn write_to_string(&self, string: &mut String) {
+    string.push_str(&self.source().into_string_lossy());
+  }
+
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
     writer.write_all(self.source().as_bytes())
   }
