@@ -93,7 +93,11 @@ impl Source for CachedSource {
         std::mem::transmute::<Vec<&str>, Vec<&'static str>>(self.rope())
       }
     });
-    SourceValue::String(Cow::Owned(rope.join("")))
+    let mut string = String::with_capacity(self.size());
+    for segment in rope {
+        string.push_str(segment);
+    }
+    SourceValue::String(Cow::Owned(string))
   }
 
   fn rope(&self) -> Vec<&str> {

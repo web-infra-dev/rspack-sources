@@ -169,9 +169,10 @@ impl Source for ReplaceSource {
     }
   }
 
+  #[allow(unsafe_code)]
   fn rope(&self) -> Vec<&str> {
     let inner_rope = self.inner.rope();
-    let mut rope =
+    let mut rope: Vec<&str> =
       Vec::with_capacity(inner_rope.len() + self.replacements.len() * 2);
 
     let mut pos: usize = 0;
@@ -206,13 +207,15 @@ impl Source for ReplaceSource {
         if next_replacement_pos > pos {
           // Emit chunk until replacement
           let offset = next_replacement_pos - pos;
-          let chunk_slice = &chunk[chunk_pos..(chunk_pos + offset)];
+          let chunk_slice =
+            unsafe { &chunk.get_unchecked(chunk_pos..(chunk_pos + offset)) };
           rope.push(chunk_slice);
           chunk_pos += offset;
           pos = next_replacement_pos;
         }
         // Insert replacement content split into chunks by lines
-        let replacement = &self.replacements[replacement_idx];
+        let replacement =
+          unsafe { &self.replacements.get_unchecked(replacement_idx) };
         rope.push(&replacement.content);
 
         // Remove replaced content by settings this variable
@@ -225,7 +228,9 @@ impl Source for ReplaceSource {
         // Move to next replacement
         replacement_idx += 1;
         next_replacement = if replacement_idx < self.replacements.len() {
-          Some(self.replacements[replacement_idx].start as usize)
+          Some(unsafe {
+            self.replacements.get_unchecked(replacement_idx).start as usize
+          })
         } else {
           None
         };
@@ -251,14 +256,15 @@ impl Source for ReplaceSource {
 
       // Emit remaining chunk
       if chunk_pos < chunk.len() {
-        rope.push(&chunk[chunk_pos..]);
+        rope.push(unsafe { &chunk.get_unchecked(chunk_pos..) });
       }
       pos = end_pos;
     }
 
     // Handle remaining replacements one by one
     while replacement_idx < self.replacements.len() {
-      let content = &self.replacements[replacement_idx].content;
+      let content =
+        unsafe { &self.replacements.get_unchecked(replacement_idx).content };
       rope.push(content);
       replacement_idx += 1;
     }
