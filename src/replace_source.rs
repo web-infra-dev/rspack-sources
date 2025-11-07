@@ -211,6 +211,10 @@ impl Source for ReplaceSource {
       if inner_pos < replacement.start {
         // This content is already counted in inner_source_size, so no change needed
       }
+      if replacement.start as usize >= inner_source_size {
+        size += replacement.content.len();
+        continue;
+      }
 
       // Handle the replacement itself
       let original_length = replacement
@@ -1421,6 +1425,7 @@ return <div>{data.foo}</div>
       None,
       ReplacementEnforce::Post,
     );
+    source.replace(10000000, 20000000, "// end line", None);
 
     assert_eq!(source.size(), source.source().into_string_lossy().len());
   }
