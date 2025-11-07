@@ -180,6 +180,8 @@ impl Source for ConcatSource {
     if children.len() == 1 {
       children[0].buffer()
     } else {
+      // Use to_writer to avoid multiple heap allocations that would occur
+      // when concatenating nested ConcatSource instances directly
       let mut buffer = Vec::with_capacity(self.size());
       self.to_writer(&mut buffer).unwrap();
       Cow::Owned(buffer)
