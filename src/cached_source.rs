@@ -87,9 +87,7 @@ impl Source for CachedSource {
   }
 
   fn buffer(&self) -> Cow<[u8]> {
-    let mut buffer = vec![];
-    self.to_writer(&mut buffer).unwrap();
-    Cow::Owned(buffer)
+    self.inner.buffer()
   }
 
   fn size(&self) -> usize {
@@ -114,6 +112,10 @@ impl Source for CachedSource {
         .get_or_init(|| self.inner.map(object_pool, options))
         .clone()
     }
+  }
+
+  fn write_to_string(&self, string: &mut String) {
+    self.inner.write_to_string(string);
   }
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {

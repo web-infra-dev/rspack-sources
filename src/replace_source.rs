@@ -12,8 +12,8 @@ use crate::{
   linear_map::LinearMap,
   object_pool::ObjectPool,
   source_content_lines::SourceContentLines,
-  BoxSource, MapOptions, Mapping, OriginalLocation, Source, SourceExt,
-  SourceMap, SourceValue,
+  BoxSource, MapOptions, Mapping, OriginalLocation, OriginalSource, Source,
+  SourceExt, SourceMap, SourceValue,
 };
 
 /// Decorates a Source with replacements and insertions of source code,
@@ -244,6 +244,10 @@ impl Source for ReplaceSource {
     get_map(&ObjectPool::default(), chunks.as_ref(), options)
   }
 
+  fn write_to_string(&self, string: &mut String) {
+    string.push_str(&self.source().into_string_lossy());
+  }
+
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
     writer.write_all(self.source().as_bytes())
   }
@@ -312,13 +316,17 @@ fn check_content_at_position(
 }
 
 struct ReplaceSourceChunks<'a> {
+  is_original_source: bool,
   chunks: Box<dyn Chunks + 'a>,
   replacements: &'a [Replacement],
 }
 
 impl<'a> ReplaceSourceChunks<'a> {
   pub fn new(source: &'a ReplaceSource) -> Self {
+    let is_original_source =
+      source.inner.as_ref().as_any().is::<OriginalSource>();
     Self {
+      is_original_source,
       chunks: source.inner.stream_chunks(),
       replacements: &source.replacements,
     }
@@ -378,6 +386,13 @@ impl Chunks for ReplaceSourceChunks<'_> {
     // webpack-sources also have this function, refer https://github.com/webpack/webpack-sources/blob/main/lib/ReplaceSource.js#L158
     let check_original_content =
       |source_index: u32, line: u32, column: u32, expected_chunk: &str| {
+        // Performance optimization: Skip content validation for OriginalSourceChunks.
+        // Since OriginalSourceChunks guarantees that the source content matches the actual source,
+        // we can safely bypass the expensive content checking process.
+        if self.is_original_source {
+          return true;
+        }
+
         if let Some(Some(source_content)) =
           source_content_lines.borrow_mut().get_mut(&source_index)
         {
