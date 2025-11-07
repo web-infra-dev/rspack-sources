@@ -33,16 +33,31 @@ impl<'object_pool, 'text> WithUtf16<'object_pool, 'text> {
 
     let utf16_byte_indices = self.utf16_byte_indices.get_or_init(|| {
       let mut vec = self.object_pool.pull(self.line.len());
-      for (byte_index, ch) in self.line.char_indices() {
-        match ch.len_utf16() {
-          1 => vec.push(byte_index),
-          2 => {
-            vec.push(byte_index);
-            vec.push(byte_index);
-          }
-          _ => unreachable!(),
+
+      let bytes = self.line.as_bytes();
+      let mut byte_pos = 0;
+      while byte_pos < bytes.len() {
+        let byte = unsafe { *bytes.get_unchecked(byte_pos) };
+        if byte < 0x80 {
+          // ASCII: 1 byte = 1 UTF-16 unit
+          vec.push(byte_pos);
+          byte_pos += 1;
+        } else if byte < 0xE0 {
+          // 2-byte UTF-8 = 1 UTF-16 unit
+          vec.push(byte_pos);
+          byte_pos += 2;
+        } else if byte < 0xF0 {
+          // 3-byte UTF-8 = 1 UTF-16 unit
+          vec.push(byte_pos);
+          byte_pos += 3;
+        } else {
+          // 4-byte UTF-8 = 2 UTF-16 units (surrogate pair)
+          vec.push(byte_pos);
+          vec.push(byte_pos);
+          byte_pos += 4;
         }
       }
+
       if vec.len() == self.line.len() {
         // Optimization: UTF-16 length equals UTF-8 length, indicating no surrogate pairs.
         // Return None to release the vector back to the object pool for better memory efficiency.
