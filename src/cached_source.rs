@@ -128,6 +128,10 @@ impl Source for CachedSource {
     }
   }
 
+  fn write_to_string(&self, string: &mut String) {
+    self.inner.write_to_string(string);
+  }
+
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
     self.inner.to_writer(writer)
   }

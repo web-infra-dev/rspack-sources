@@ -181,7 +181,7 @@ impl Source for ReplaceSource {
       < self.replacements.len())
     .then(|| self.replacements[replacement_idx].start as usize);
 
-    'chunk_loop: for chunk in self.inner.rope() {
+    'chunk_loop: for chunk in inner_rope {
       let mut chunk_pos = 0;
       let end_pos = pos + chunk.len();
 
@@ -321,6 +321,12 @@ impl Source for ReplaceSource {
     }
     let chunks = self.stream_chunks();
     get_map(&ObjectPool::default(), chunks.as_ref(), options)
+  }
+
+  fn write_to_string(&self, string: &mut String) {
+    for chunk in self.rope() {
+      string.push_str(chunk);
+    }
   }
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
