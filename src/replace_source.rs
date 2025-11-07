@@ -161,34 +161,150 @@ impl ReplaceSource {
 
 impl Source for ReplaceSource {
   fn source(&self) -> SourceValue {
-    let inner_source_code = self.inner.source().into_string_lossy();
+    let rope = self.rope();
+    if rope.len() == 1 {
+      SourceValue::String(Cow::Borrowed(rope[0]))
+    } else {
+      SourceValue::String(Cow::Owned(rope.join("")))
+    }
+  }
 
-    // mut_string_push_str is faster that vec join
-    // concatenate strings benchmark, see https://github.com/hoodie/concatenation_benchmarks-rs
+  fn rope(&self) -> Vec<&str> {
+    let inner_source_code = self.inner.rope();
+
     if self.replacements.is_empty() {
-      return SourceValue::String(inner_source_code);
+      return inner_source_code;
     }
-    let capacity = self.size();
-    let mut source_code = String::with_capacity(capacity);
-    let mut inner_pos = 0;
-    for replacement in &self.replacements {
-      if inner_pos < replacement.start {
-        let end_pos = (replacement.start as usize).min(inner_source_code.len());
-        source_code.push_str(&inner_source_code[inner_pos as usize..end_pos]);
-      }
-      source_code.push_str(&replacement.content);
-      #[allow(clippy::manual_clamp)]
-      {
-        inner_pos = inner_pos
-          .max(replacement.end)
-          .min(inner_source_code.len() as u32);
-      }
-    }
-    source_code.push_str(
-      &inner_source_code[inner_pos as usize..inner_source_code.len()],
-    );
 
-    SourceValue::String(Cow::Owned(source_code))
+    let mut result = Vec::new();
+    let mut pos: u32 = 0;
+    let mut chunk_index = 0;
+    let mut chunk_pos = 0; // Position within current chunk
+    let mut replacement_index = 0;
+
+    // Calculate total length to determine positions
+    let mut chunk_start_positions = Vec::new();
+    let mut total_pos = 0;
+    for chunk in &inner_source_code {
+      chunk_start_positions.push(total_pos);
+      total_pos += chunk.len() as u32;
+    }
+
+    while replacement_index < self.replacements.len()
+      || chunk_index < inner_source_code.len()
+    {
+      let next_replacement = self.replacements.get(replacement_index);
+
+      // Process chunks until we hit a replacement or finish
+      while chunk_index < inner_source_code.len() {
+        let chunk = inner_source_code[chunk_index];
+        let chunk_start = chunk_start_positions[chunk_index];
+        let chunk_end = chunk_start + chunk.len() as u32;
+
+        // Check if there's a replacement that starts within this chunk
+        if let Some(replacement) = next_replacement {
+          if replacement.start >= chunk_start && replacement.start < chunk_end {
+            // Replacement starts within this chunk
+            let offset_in_chunk = (replacement.start - chunk_start) as usize;
+
+            // Add the part of chunk before replacement
+            if offset_in_chunk > chunk_pos {
+              result.push(&chunk[chunk_pos..offset_in_chunk]);
+            }
+
+            // Add replacement content
+            result.push(&replacement.content);
+
+            // Update positions
+            pos = replacement.end;
+            replacement_index += 1;
+
+            // Find where to continue after replacement
+            let mut found_continue_pos = false;
+            for (idx, &chunk_start_pos) in
+              chunk_start_positions.iter().enumerate()
+            {
+              let chunk_end_pos =
+                chunk_start_pos + inner_source_code[idx].len() as u32;
+
+              if pos >= chunk_start_pos && pos < chunk_end_pos {
+                // Continue from within this chunk
+                chunk_index = idx;
+                chunk_pos = (pos - chunk_start_pos) as usize;
+                found_continue_pos = true;
+                break;
+              } else if pos <= chunk_start_pos {
+                // Continue from the start of this chunk
+                chunk_index = idx;
+                chunk_pos = 0;
+                found_continue_pos = true;
+                break;
+              }
+            }
+
+            if !found_continue_pos {
+              // Replacement goes beyond all chunks
+              chunk_index = inner_source_code.len();
+            }
+
+            break;
+          } else if replacement.start < chunk_start {
+            // Replacement starts before this chunk
+            result.push(&replacement.content);
+            replacement_index += 1;
+
+            // Skip chunks that are replaced
+            pos = replacement.end;
+            while chunk_index < inner_source_code.len() {
+              let current_chunk_start = chunk_start_positions[chunk_index];
+              let current_chunk_end = current_chunk_start
+                + inner_source_code[chunk_index].len() as u32;
+
+              if pos <= current_chunk_start {
+                // Start from beginning of this chunk
+                chunk_pos = 0;
+                break;
+              } else if pos < current_chunk_end {
+                // Start from middle of this chunk
+                chunk_pos = (pos - current_chunk_start) as usize;
+                break;
+              } else {
+                // Skip this entire chunk
+                chunk_index += 1;
+              }
+            }
+            break;
+          }
+        }
+
+        // No replacement affecting this chunk, add the remaining part
+        if chunk_pos == 0
+          && (next_replacement.is_none()
+            || next_replacement.unwrap().start > chunk_end)
+        {
+          // Add entire chunk
+          result.push(chunk);
+        } else if chunk_pos < chunk.len() {
+          // Add remaining part of chunk
+          result.push(&chunk[chunk_pos..]);
+        }
+
+        chunk_index += 1;
+        chunk_pos = 0;
+        pos = chunk_end;
+      }
+
+      // Handle remaining replacements that are beyond all chunks
+      while replacement_index < self.replacements.len() {
+        let replacement = &self.replacements[replacement_index];
+        if replacement.start >= pos {
+          result.push(&replacement.content);
+        }
+        replacement_index += 1;
+      }
+    }
+
+    result
   }
 
   fn buffer(&self) -> Cow<[u8]> {
@@ -246,10 +362,6 @@ impl Source for ReplaceSource {
     }
     let chunks = self.stream_chunks();
     get_map(&ObjectPool::default(), chunks.as_ref(), options)
-  }
-
-  fn write_to_string(&self, string: &mut String) {
-    string.push_str(&self.source().into_string_lossy());
   }
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {

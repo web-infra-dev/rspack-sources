@@ -167,11 +167,19 @@ impl Source for ConcatSource {
     if children.len() == 1 {
       children[0].source()
     } else {
-      // Use to_writer to avoid multiple heap allocations that would occur
-      // when concatenating nested ConcatSource instances directly
-      let mut string = String::with_capacity(self.size());
-      self.write_to_string(&mut string);
-      SourceValue::String(Cow::Owned(string))
+      SourceValue::String(Cow::Owned(self.rope().join("")))
+    }
+  }
+
+  fn rope(&self) -> Vec<&str> {
+    let children = self.optimized_children();
+    if children.len() == 1 {
+      children[0].rope()
+    } else {
+      children
+        .iter()
+        .flat_map(|child| child.rope())
+        .collect::<Vec<_>>()
     }
   }
 
@@ -204,12 +212,6 @@ impl Source for ConcatSource {
     let chunks = self.stream_chunks();
     let result = get_map(object_pool, chunks.as_ref(), options);
     result
-  }
-
-  fn write_to_string(&self, string: &mut String) {
-    for child in self.optimized_children() {
-      child.write_to_string(string);
-    }
   }
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
