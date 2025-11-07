@@ -7,7 +7,7 @@ pub struct WithUtf16<'object_pool, 'text> {
   /// line is a string reference
   pub line: &'text str,
   /// the byte position of each `char` in `line` string slice .
-  pub utf16_byte_indices: OnceCell<Pooled<'object_pool>>,
+  pub utf16_byte_indices: OnceCell<Option<Pooled<'object_pool>>>,
   object_pool: &'object_pool ObjectPool,
 }
 
@@ -21,8 +21,13 @@ impl<'object_pool, 'text> WithUtf16<'object_pool, 'text> {
   }
 
   /// substring::SubString with cache
-  pub fn substring(&self, start_index: usize, end_index: usize) -> &'text str {
-    if end_index <= start_index {
+  #[allow(unsafe_code)]
+  pub fn substring(
+    &self,
+    start_utf16_index: usize,
+    end_utf16_index: usize,
+  ) -> &'text str {
+    if end_utf16_index <= start_utf16_index {
       return "";
     }
 
@@ -38,14 +43,30 @@ impl<'object_pool, 'text> WithUtf16<'object_pool, 'text> {
           _ => unreachable!(),
         }
       }
-      vec
+      if vec.len() == self.line.len() {
+        // Optimization: UTF-16 length equals UTF-8 length, indicating no surrogate pairs.
+        // Return None to release the vector back to the object pool for better memory efficiency.
+        None
+      } else {
+        Some(vec)
+      }
     });
 
-    let str_len = self.line.len();
-    let start = *utf16_byte_indices.get(start_index).unwrap_or(&str_len);
-    let end = *utf16_byte_indices.get(end_index).unwrap_or(&str_len);
+    let utf8_len = self.line.len();
 
-    #[allow(unsafe_code)]
+    let Some(utf16_byte_indices) = utf16_byte_indices else {
+      let start_utf16_index = start_utf16_index.min(utf8_len);
+      let end_utf16_index = end_utf16_index.min(utf8_len);
+      return unsafe {
+        self.line.get_unchecked(start_utf16_index..end_utf16_index)
+      };
+    };
+
+    let start = *utf16_byte_indices
+      .get(start_utf16_index)
+      .unwrap_or(&utf8_len);
+    let end = *utf16_byte_indices.get(end_utf16_index).unwrap_or(&utf8_len);
+
     unsafe {
       // SAFETY: Since `indices` iterates over the `CharIndices` of `self`, we can guarantee
       // that the indices obtained from it will always be within the bounds of `self` and they
