@@ -153,14 +153,21 @@ pub fn encode_mappings(mappings: impl Iterator<Item = Mapping>) -> String {
   encoder.drain()
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub struct Token<'a> {
+  pub text: &'a str,
+  pub utf16_len: usize,
+}
+
 pub struct PotentialTokens<'a> {
   bytes: &'a [u8],
   text: &'a str,
   index: usize,
+  utf16_len: usize,
 }
 
 impl<'a> Iterator for PotentialTokens<'a> {
-  type Item = &'a str;
+  type Item = Token<'a>;
 
   #[allow(unsafe_code)]
   fn next(&mut self) -> Option<Self::Item> {
@@ -171,11 +178,33 @@ impl<'a> Iterator for PotentialTokens<'a> {
     let start = self.index;
     let mut c = self.bytes[self.index];
     while c != b'\n' && c != b';' && c != b'{' && c != b'}' {
-      self.index += 1;
+      // Determine character boundaries based on UTF-8 bytes and calculate UTF-16 length
+      if c < 0x80 {
+        // ASCII character: 1 byte -> 1 UTF-16 code unit
+        self.utf16_len += 1;
+        self.index += 1;
+      } else if c < 0xE0 {
+        // 2-byte UTF-8 sequence -> 1 UTF-16 code unit
+        self.utf16_len += 1;
+        self.index += 2;
+      } else if c < 0xF0 {
+        // 3-byte UTF-8 sequence -> 1 UTF-16 code unit
+        self.utf16_len += 1;
+        self.index += 3;
+      } else {
+        // 4-byte UTF-8 sequence -> 2 UTF-16 code units (surrogate pair)
+        self.utf16_len += 2;
+        self.index += 4;
+      }
+
       if self.index < self.bytes.len() {
         c = self.bytes[self.index];
       } else {
-        return Some(unsafe { self.text.get_unchecked(start..) });
+        let text = unsafe { self.text.get_unchecked(start..) };
+        return Some(Token {
+          text,
+          utf16_len: self.utf16_len,
+        });
       }
     }
 
@@ -183,15 +212,25 @@ impl<'a> Iterator for PotentialTokens<'a> {
       match self.bytes[self.index] {
         b';' | b' ' | b'{' | b'}' | b'\r' | b'\t' => {
           self.index += 1;
+          self.utf16_len += 1;
         }
         b'\n' => {
           self.index += 1;
+          self.utf16_len += 1;
           break;
         }
-        _ => break,
+        _ => {
+          break;
+        }
       }
     }
-    Some(unsafe { self.text.get_unchecked(start..self.index) })
+    let text = unsafe { self.text.get_unchecked(start..self.index) };
+    let token = Token {
+      text,
+      utf16_len: self.utf16_len,
+    };
+    self.utf16_len = 0;
+    Some(token)
   }
 }
 
@@ -201,6 +240,7 @@ pub fn split_into_potential_tokens(text: &str) -> PotentialTokens {
     bytes: text.as_bytes(),
     text,
     index: 0,
+    utf16_len: 0,
   }
 }
 
@@ -1251,7 +1291,9 @@ mod tests {
     stream_chunks_of_source_map_full, stream_chunks_of_source_map_lines_final,
     stream_chunks_of_source_map_lines_full, GeneratedInfo,
   };
-  use crate::{Mapping, ObjectPool, OriginalLocation, SourceMap};
+  use crate::{
+    helpers::Token, Mapping, ObjectPool, OriginalLocation, SourceMap,
+  };
 
   const UTF16_SOURCE: &'static str = "var i18n = JSON.parse('{\"魑魅魍魉\":{\"en-US\":\"Evil spirits\",\"zh-CN\":\"魑魅魍魉\"}}');\nvar __webpack_exports___ = i18n[\"魑魅魍魉\"];\nexport { __webpack_exports___ as 魑魅魍魉 };";
 
@@ -1377,17 +1419,38 @@ mod tests {
 
   #[test]
   fn test_split_into_potential_tokens() {
-    let tokens = split_into_potential_tokens("var i18n = JSON.parse('{\"魑魅魍魉\":{\"en-US\":\"Evil spirits\",\"zh-CN\":\"魑魅魍魉\"}}');\nvar __webpack_exports___ = i18n[\"魑魅魍魉\"];\nexport { __webpack_exports___ as 魑魅魍魉 };").collect::<Vec<&str>>();
+    let tokens = split_into_potential_tokens("var i18n = JSON.parse('{\"魑魅魍魉\":{\"en-US\":\"Evil spirits\",\"zh-CN\":\"魑魅魍魉\"}}');\nvar __webpack_exports___ = i18n[\"魑魅魍魉\"];\nexport { __webpack_exports___ as 魑魅魍魉 };").collect::<Vec<_>>();
     assert_eq!(
       tokens,
       vec![
-        "var i18n = JSON.parse('{",
-        "\"魑魅魍魉\":{",
-        "\"en-US\":\"Evil spirits\",\"zh-CN\":\"魑魅魍魉\"}}",
-        "');\n",
-        "var __webpack_exports___ = i18n[\"魑魅魍魉\"];\n",
-        "export { ",
-        "__webpack_exports___ as 魑魅魍魉 };"
+        Token {
+          text: "var i18n = JSON.parse('{",
+          utf16_len: 24,
+        },
+        Token {
+          text: "\"魑魅魍魉\":{",
+          utf16_len: 8,
+        },
+        Token {
+          text: "\"en-US\":\"Evil spirits\",\"zh-CN\":\"魑魅魍魉\"}}",
+          utf16_len: 39,
+        },
+        Token {
+          text: "');\n",
+          utf16_len: 4,
+        },
+        Token {
+          text: "var __webpack_exports___ = i18n[\"魑魅魍魉\"];\n",
+          utf16_len: 41,
+        },
+        Token {
+          text: "export { ",
+          utf16_len: 9,
+        },
+        Token {
+          text: "__webpack_exports___ as 魑魅魍魉 };",
+          utf16_len: 31,
+        },
       ]
     );
   }
