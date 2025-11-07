@@ -167,6 +167,8 @@ impl Source for ConcatSource {
     if children.len() == 1 {
       children[0].source()
     } else {
+      // Use to_writer to avoid multiple heap allocations that would occur
+      // when concatenating nested ConcatSource instances directly
       let mut string = String::with_capacity(self.size());
       self.write_to_string(&mut string);
       SourceValue::String(Cow::Owned(string))
