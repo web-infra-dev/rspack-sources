@@ -90,12 +90,14 @@ impl Source for CachedSource {
       // so transmuting Vec<&str> to Vec<&'static str> is safe in this context.
       // This allows us to store string slices in the cache without additional allocations.
       unsafe {
-        std::mem::transmute::<(Vec<&str>, usize), (Vec<&'static str>, usize)>(self.rope())
+        std::mem::transmute::<(Vec<&str>, usize), (Vec<&'static str>, usize)>(
+          self.rope(),
+        )
       }
     });
     let mut string = String::with_capacity(*len);
     for chunk in chunks {
-        string.push_str(chunk);
+      string.push_str(chunk);
     }
     SourceValue::String(Cow::Owned(string))
   }

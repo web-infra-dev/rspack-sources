@@ -161,14 +161,11 @@ impl ReplaceSource {
 
 impl Source for ReplaceSource {
   fn source(&self) -> SourceValue {
-    let (chunks, len) = self.rope();
-    if chunks.len() == 1 {
-      SourceValue::String(Cow::Borrowed(chunks[0]))
+    if self.replacements.len() == 0 {
+      self.inner.source()
     } else {
-      let mut string = String::with_capacity(len);
-      for chunk in chunks {
-        string.push_str(chunk);
-      }
+      let mut string = String::with_capacity(self.size());
+      self.write_to_string(&mut string);
       SourceValue::String(Cow::Owned(string))
     }
   }
@@ -339,9 +336,103 @@ impl Source for ReplaceSource {
     get_map(&ObjectPool::default(), chunks.as_ref(), options)
   }
 
+  #[allow(unsafe_code)]
   fn write_to_string(&self, string: &mut String) {
-    for chunk in self.rope().0 {
-      string.push_str(chunk);
+    let (inner_chunks, _) = self.inner.rope();
+
+    let mut pos: usize = 0;
+    let mut replacement_idx: usize = 0;
+    let mut replacement_end: Option<usize> = None;
+    let mut next_replacement: Option<usize> = (replacement_idx
+      < self.replacements.len())
+    .then(|| self.replacements[replacement_idx].start as usize);
+
+    'chunk_loop: for chunk in inner_chunks {
+      let mut chunk_pos = 0;
+      let end_pos = pos + chunk.len();
+
+      // Skip over when it has been replaced
+      if let Some(replacement_end) =
+        replacement_end.filter(|replacement_end| *replacement_end > pos)
+      {
+        // Skip over the whole chunk
+        if replacement_end >= end_pos {
+          pos = end_pos;
+          continue;
+        }
+        // Partially skip over chunk
+        chunk_pos = replacement_end - pos;
+        pos += chunk_pos;
+      }
+
+      // Is a replacement in the chunk?
+      while let Some(next_replacement_pos) = next_replacement
+        .filter(|next_replacement_pos| *next_replacement_pos < end_pos)
+      {
+        if next_replacement_pos > pos {
+          // Emit chunk until replacement
+          let offset = next_replacement_pos - pos;
+          let chunk_slice =
+            unsafe { &chunk.get_unchecked(chunk_pos..(chunk_pos + offset)) };
+          string.push_str(chunk_slice);
+          chunk_pos += offset;
+          pos = next_replacement_pos;
+        }
+        // Insert replacement content split into chunks by lines
+        let replacement =
+          unsafe { &self.replacements.get_unchecked(replacement_idx) };
+        string.push_str(&replacement.content);
+
+        // Remove replaced content by settings this variable
+        replacement_end = if let Some(replacement_end) = replacement_end {
+          Some(replacement_end.max(replacement.end as usize))
+        } else {
+          Some(replacement.end as usize)
+        };
+
+        // Move to next replacement
+        replacement_idx += 1;
+        next_replacement = if replacement_idx < self.replacements.len() {
+          Some(unsafe {
+            self.replacements.get_unchecked(replacement_idx).start as usize
+          })
+        } else {
+          None
+        };
+
+        // Skip over when it has been replaced
+        let offset = chunk.len() as i64 - end_pos as i64
+          + replacement_end.unwrap() as i64
+          - chunk_pos as i64;
+        if offset > 0 {
+          // Skip over whole chunk
+          if replacement_end
+            .is_some_and(|replacement_end| replacement_end >= end_pos)
+          {
+            pos = end_pos;
+            continue 'chunk_loop;
+          }
+
+          // Partially skip over chunk
+          chunk_pos += offset as usize;
+          pos += offset as usize;
+        }
+      }
+
+      // Emit remaining chunk
+      if chunk_pos < chunk.len() {
+        let chunk = unsafe { &chunk.get_unchecked(chunk_pos..) };
+        string.push_str(chunk);
+      }
+      pos = end_pos;
+    }
+
+    // Handle remaining replacements one by one
+    while replacement_idx < self.replacements.len() {
+      let content =
+        unsafe { &self.replacements.get_unchecked(replacement_idx).content };
+      string.push_str(content);
+      replacement_idx += 1;
     }
   }
 
