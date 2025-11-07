@@ -631,7 +631,7 @@ impl Chunks for ReplaceSourceChunks<'_> {
               original.original_column += offset as u32;
             }
 
-            let utf16_offest = chunk
+            let utf16_offset = chunk
               [chunk_pos as usize..(chunk_pos + offset as u32) as usize]
               .encode_utf16()
               .count() as i64;
@@ -639,12 +639,12 @@ impl Chunks for ReplaceSourceChunks<'_> {
             pos += offset as u32;
 
             if generated_column_offset_line == line {
-              generated_column_offset -= utf16_offest;
+              generated_column_offset -= utf16_offset;
             } else {
-              generated_column_offset = -utf16_offest;
+              generated_column_offset = -utf16_offset;
               generated_column_offset_line = line;
             }
-            mapping.generated_column += utf16_offest as u32;
+            mapping.generated_column += utf16_offset as u32;
           }
         }
 
