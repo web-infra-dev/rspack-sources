@@ -165,7 +165,11 @@ impl Source for ReplaceSource {
     if rope.len() == 1 {
       SourceValue::String(Cow::Borrowed(rope[0]))
     } else {
-      SourceValue::String(Cow::Owned(rope.join("")))
+      let mut string = String::with_capacity(rope.iter().map(|c| c.len()).sum());
+      for chunk in rope {
+        string.push_str(chunk);
+      }
+      SourceValue::String(Cow::Owned(string))
     }
   }
 
