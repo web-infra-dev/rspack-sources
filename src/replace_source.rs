@@ -906,13 +906,6 @@ impl PartialEq for ReplaceSource {
 
 impl Eq for ReplaceSource {}
 
-enum IteratorState {
-  ProcessingChunk,
-  EmittingReplacement,
-  FinalReplacements,
-  Done,
-}
-
 /// Iterator for ReplaceSource rope that applies replacements on the fly
 pub struct ReplaceSourceRopeIterator<'a> {
   inner_chunks: Box<dyn Iterator<Item = &'a str> + 'a>,
@@ -924,7 +917,6 @@ pub struct ReplaceSourceRopeIterator<'a> {
   current_chunk: Option<&'a str>,
   current_chunk_start: usize,
   current_chunk_pos: usize,
-  state: IteratorState,
 }
 
 impl<'a> ReplaceSourceRopeIterator<'a> {
@@ -932,7 +924,7 @@ impl<'a> ReplaceSourceRopeIterator<'a> {
     inner_chunks: Box<dyn Iterator<Item = &'a str> + 'a>,
     replacements: &'a [Replacement],
   ) -> Self {
-    let mut iter = Self {
+    Self {
       inner_chunks,
       replacements,
       pos: 0,
@@ -942,128 +934,6 @@ impl<'a> ReplaceSourceRopeIterator<'a> {
       current_chunk: None,
       current_chunk_start: 0,
       current_chunk_pos: 0,
-      state: IteratorState::ProcessingChunk,
-    };
-
-    iter.load_next_chunk();
-    iter
-  }
-
-  fn load_next_chunk(&mut self) {
-    self.current_chunk = self.inner_chunks.next();
-    self.current_chunk_pos = 0;
-    if self.current_chunk.is_some() {
-      self.current_chunk_start = self.pos;
-    } else {
-      self.state = IteratorState::FinalReplacements;
-    }
-  }
-
-  fn skip_replaced_content(&mut self) -> bool {
-    if let Some(replacement_end) = self.replacement_end {
-      if replacement_end > self.pos {
-        let chunk_end =
-          self.current_chunk_start + self.current_chunk.unwrap().len();
-
-        // Skip the entire chunk
-        if replacement_end >= chunk_end {
-          self.pos = chunk_end;
-          self.load_next_chunk();
-          return true;
-        }
-
-       // Partially skip the chunk
-        let skip_len = replacement_end - self.pos;
-        self.current_chunk_pos += skip_len;
-        self.pos += skip_len;
-      }
-    }
-    false
-  }
-
-  fn process_current_chunk(&mut self) -> Option<&'a str> {
-    let chunk = self.current_chunk?;
-    let chunk_end = self.current_chunk_start + chunk.len();
-
-    // Check if there are replacements in the current chunk
-    while let Some(next_repl_pos) =
-      self.next_replacement.filter(|&pos| pos < chunk_end)
-    {
-      if next_repl_pos > self.pos {
-        // Return content before replacement
-        let offset = next_repl_pos - self.pos;
-        let result =
-          &chunk[self.current_chunk_pos..self.current_chunk_pos + offset];
-        self.current_chunk_pos += offset;
-        self.pos = next_repl_pos;
-        return Some(result);
-      }
-
-      // Prepare to return replacement content
-      self.state = IteratorState::EmittingReplacement;
-      return None;
-    }
-
-     // Return remaining content of the chunk
-    if self.current_chunk_pos < chunk.len() {
-      let result = &chunk[self.current_chunk_pos..];
-      self.pos = chunk_end;
-      self.load_next_chunk();
-      Some(result)
-    } else {
-      self.load_next_chunk();
-      None
-    }
-  }
-
-  fn emit_replacement(&mut self) -> Option<&'a str> {
-    let replacement = &self.replacements[self.replacement_idx];
-    let content = &replacement.content;
-
-   // Update replacement state
-    self.replacement_end = Some(
-      self
-        .replacement_end
-        .map_or(replacement.end as usize, |end| {
-          end.max(replacement.end as usize)
-        }),
-    );
-
-    self.replacement_idx += 1;
-    self.next_replacement = self
-      .replacements
-      .get(self.replacement_idx)
-      .map(|r| r.start as usize);
-
-    // Check if we need to skip replaced content
-    if let Some(replacement_end) = self.replacement_end {
-      if replacement_end > self.pos {
-        self.pos = replacement_end;
-
-        // If current chunk needs to be skipped, reload it
-        if let Some(chunk) = self.current_chunk {
-          let chunk_end = self.current_chunk_start + chunk.len();
-          if replacement_end >= chunk_end {
-            self.load_next_chunk();
-          } else {
-            self.current_chunk_pos = replacement_end - self.current_chunk_start;
-          }
-        }
-      }
-    }
-
-    self.state = IteratorState::ProcessingChunk;
-    Some(content)
-  }
-
-  fn emit_final_replacements(&mut self) -> Option<&'a str> {
-    if self.replacement_idx < self.replacements.len() {
-      let content = &self.replacements[self.replacement_idx].content;
-      self.replacement_idx += 1;
-      Some(content)
-    } else {
-      self.state = IteratorState::Done;
-      None
     }
   }
 }
@@ -1071,37 +941,116 @@ impl<'a> ReplaceSourceRopeIterator<'a> {
 impl<'a> Iterator for ReplaceSourceRopeIterator<'a> {
   type Item = &'a str;
 
+  #[allow(unsafe_code)]
   fn next(&mut self) -> Option<Self::Item> {
     loop {
-      match self.state {
-        IteratorState::ProcessingChunk => {
-          if self.skip_replaced_content() {
-            continue;
-          }
-
-          if let Some(result) = self.process_current_chunk() {
-            return Some(result);
-          }
-
-          if self.current_chunk.is_none() {
-            self.state = IteratorState::FinalReplacements;
-          }
+      // Load next chunk (if needed)
+      if self.current_chunk.is_none() {
+        self.current_chunk = self.inner_chunks.next();
+        self.current_chunk_pos = 0;
+        if self.current_chunk.is_some() {
+          self.current_chunk_start = self.pos;
+        } else {
+          // No more chunks, handle remaining replacements
+          return if self.replacement_idx < self.replacements.len() {
+            let content = unsafe {
+              &self
+                .replacements
+                .get_unchecked(self.replacement_idx)
+                .content
+            };
+            self.replacement_idx += 1;
+            Some(content)
+          } else {
+            None
+          };
         }
-
-        IteratorState::EmittingReplacement => {
-          if let Some(result) = self.emit_replacement() {
-            return Some(result);
-          }
-        }
-
-        IteratorState::FinalReplacements => {
-          if let Some(result) = self.emit_final_replacements() {
-            return Some(result);
-          }
-        }
-
-        IteratorState::Done => return None,
       }
+
+      let chunk = self.current_chunk.unwrap();
+      let chunk_end = self.current_chunk_start + chunk.len();
+
+      // Skip replaced content
+      if let Some(replacement_end) = self.replacement_end {
+        if replacement_end > self.pos {
+          if replacement_end >= chunk_end {
+            // Skip entire chunk
+            self.pos = chunk_end;
+            self.current_chunk = None;
+            continue;
+          } else {
+            // Partially skip chunk
+            let skip_len = replacement_end - self.pos;
+            self.current_chunk_pos += skip_len;
+            self.pos += skip_len;
+          }
+        }
+      }
+
+      // Check if there are replacements in the current chunk
+      if let Some(next_repl_pos) =
+        self.next_replacement.filter(|&pos| pos < chunk_end)
+      {
+        if next_repl_pos > self.pos {
+          // Return content before replacement
+          let offset = next_repl_pos - self.pos;
+          let result = unsafe {
+            chunk.get_unchecked(
+              self.current_chunk_pos..self.current_chunk_pos + offset,
+            )
+          };
+          self.current_chunk_pos += offset;
+          self.pos = next_repl_pos;
+          return Some(result);
+        }
+
+        // Process replacement
+        let replacement =
+          unsafe { self.replacements.get_unchecked(self.replacement_idx) };
+        let content = &replacement.content;
+
+        // Move to next replacement
+        self.replacement_end = Some(
+          self
+            .replacement_end
+            .map_or(replacement.end as usize, |end| {
+              end.max(replacement.end as usize)
+            }),
+        );
+
+        // Update position (skip replaced content)
+        self.replacement_idx += 1;
+        self.next_replacement = self
+          .replacements
+          .get(self.replacement_idx)
+          .map(|r| r.start as usize);
+
+        // Update position (skip replaced content)
+        if let Some(replacement_end) = self.replacement_end {
+          if replacement_end > self.pos {
+            self.pos = replacement_end;
+            // If current chunk needs to be skipped, reset it
+            if replacement_end >= chunk_end {
+              self.current_chunk = None;
+            } else {
+              self.current_chunk_pos =
+                replacement_end - self.current_chunk_start;
+            }
+          }
+        }
+
+        return Some(content);
+      }
+
+      // Return remaining chunk content
+      if self.current_chunk_pos < chunk.len() {
+        let result = unsafe { chunk.get_unchecked(self.current_chunk_pos..) };
+        self.pos = chunk_end;
+        self.current_chunk = None;
+        return Some(result);
+      }
+
+      self.current_chunk = None;
     }
   }
 }
