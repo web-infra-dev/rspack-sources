@@ -135,14 +135,6 @@ pub trait Source:
     self.dyn_hash(state);
   }
 
-  /// Appends the source content to the provided string buffer.
-  ///
-  /// This method efficiently writes the source content directly into an existing
-  /// string buffer, avoiding additional memory allocations when the buffer has
-  /// sufficient capacity. This is particularly useful for concatenating multiple
-  /// sources or building larger strings incrementally.
-  fn write_to_string(&self, string: &mut String);
-
   /// Writes the source into a writer, preferably a `std::io::BufWriter<std::io::Write>`.
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()>;
 }
@@ -170,10 +162,6 @@ impl Source for BoxSource {
     options: &MapOptions,
   ) -> Option<SourceMap> {
     self.as_ref().map(object_pool, options)
-  }
-
-  fn write_to_string(&self, string: &mut String) {
-    self.as_ref().write_to_string(string)
   }
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {

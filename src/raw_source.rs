@@ -80,10 +80,6 @@ impl Source for RawStringSource {
     None
   }
 
-  fn write_to_string(&self, string: &mut String) {
-    string.push_str(self.0.as_ref());
-  }
-
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
     writer.write_all(self.0.as_bytes())
   }
@@ -228,10 +224,6 @@ impl Source for RawBufferSource {
 
   fn map(&self, _: &ObjectPool, _: &MapOptions) -> Option<SourceMap> {
     None
-  }
-
-  fn write_to_string(&self, string: &mut String) {
-    string.push_str(self.get_or_init_value_as_string());
   }
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
