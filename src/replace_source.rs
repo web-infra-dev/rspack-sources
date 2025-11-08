@@ -1053,6 +1053,14 @@ impl<'a> Iterator for ReplaceSourceRopeIterator<'a> {
       self.current_chunk = None;
     }
   }
+
+  fn size_hint(&self) -> (usize, Option<usize>) {
+    let (lower, upper) = self.inner_chunks.size_hint();
+    (
+      lower + self.replacements.len(),
+      upper.map(|size| size + self.replacements.len() * 2),
+    )
+  }
 }
 
 #[cfg(test)]

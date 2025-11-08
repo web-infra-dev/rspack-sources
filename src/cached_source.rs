@@ -1,6 +1,5 @@
 use std::{
   borrow::Cow,
-  cell::OnceCell,
   hash::{Hash, Hasher},
   sync::{Arc, OnceLock},
 };
@@ -95,6 +94,9 @@ impl Source for CachedSource {
         )
       }
     });
+    if chunks.len() == 1 {
+      return SourceValue::String(Cow::Borrowed(chunks[0]));
+    }
     let mut string = String::with_capacity(self.size());
     for chunk in chunks {
       string.push_str(chunk);
@@ -146,17 +148,17 @@ impl Source for CachedSource {
 struct CachedSourceChunks<'source> {
   chunks: Box<dyn Chunks + 'source>,
   cache: Arc<CachedData>,
-  inner: &'source dyn Source,
-  source: OnceCell<Cow<'source, str>>,
+  source: Cow<'source, str>,
 }
 
 impl<'a> CachedSourceChunks<'a> {
   fn new(cache_source: &'a CachedSource) -> Self {
+    let source = cache_source.source().into_string_lossy();
+
     Self {
       chunks: cache_source.inner.stream_chunks(),
       cache: cache_source.cache.clone(),
-      inner: &cache_source.inner,
-      source: OnceCell::new(),
+      source,
     }
   }
 }
@@ -177,14 +179,11 @@ impl Chunks for CachedSourceChunks<'_> {
     };
     match cell.get() {
       Some(map) => {
-        let source = self
-          .source
-          .get_or_init(|| self.inner.source().into_string_lossy());
         if let Some(map) = map {
           stream_chunks_of_source_map(
             options,
             object_pool,
-            source.as_ref(),
+            self.source.as_ref(),
             map,
             on_chunk,
             on_source,
@@ -192,7 +191,7 @@ impl Chunks for CachedSourceChunks<'_> {
           )
         } else {
           stream_chunks_of_raw_source(
-            source.as_ref(),
+            self.source.as_ref(),
             options,
             on_chunk,
             on_source,
