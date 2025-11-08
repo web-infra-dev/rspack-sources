@@ -13,7 +13,7 @@ use crate::{
   },
   object_pool::ObjectPool,
   source::SourceValue,
-  BoxSource, MapOptions, Rope, Source, SourceExt, SourceMap,
+  BoxSource, MapOptions, Source, SourceExt, SourceMap,
 };
 
 #[derive(Default)]
@@ -82,11 +82,10 @@ impl CachedSource {
 
   fn get_or_init_chunks(&self) -> &[&str] {
     self.cache.chunks.get_or_init(|| {
-      let rope = self.inner.rope();
-      let chunks = match rope {
-        Rope::Light(s) => vec![s],
-        Rope::Full(iter) => iter.collect::<Vec<_>>(),
-      };
+      let mut chunks = Vec::new();
+      self.inner.rope(&mut |chunk| {
+        chunks.push(chunk);
+      });
       #[allow(unsafe_code)]
       // SAFETY: CachedSource guarantees that the underlying source outlives the cache,
       // so transmuting Vec<&str> to Vec<&'static str> is safe in this context.
@@ -108,9 +107,9 @@ impl Source for CachedSource {
     SourceValue::String(Cow::Owned(string))
   }
 
-  fn rope(&self) -> Rope {
+  fn rope<'a>(&'a self, on_chunk: &mut dyn FnMut(&'a str)) {
     let chunks = self.get_or_init_chunks();
-    Rope::Full(Box::new(chunks.iter().cloned()))
+    chunks.iter().for_each(|chunk| on_chunk(chunk));
   }
 
   fn buffer(&self) -> Cow<[u8]> {

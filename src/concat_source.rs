@@ -12,7 +12,7 @@ use crate::{
   linear_map::LinearMap,
   object_pool::ObjectPool,
   source::{Mapping, OriginalLocation},
-  BoxSource, MapOptions, RawStringSource, Rope, Source, SourceExt, SourceMap,
+  BoxSource, MapOptions, RawStringSource, Source, SourceExt, SourceMap,
   SourceValue,
 };
 
@@ -169,31 +169,19 @@ impl Source for ConcatSource {
     }
 
     let mut string = String::with_capacity(self.size());
-    for child in children {
-      match child.rope() {
-        Rope::Light(s) => string.push_str(s),
-        Rope::Full(chunks) => {
-          for chunk in chunks {
-            string.push_str(chunk);
-          }
-        }
-      }
-    }
+    children.iter().for_each(|child| {
+      child.rope(&mut |chunk| {
+        string.push_str(chunk);
+      });
+    });
     SourceValue::String(Cow::Owned(string))
   }
 
-  fn rope(&self) -> Rope {
+  fn rope<'a>(&'a self, on_chunk: &mut dyn FnMut(&'a str)) {
     let children = self.optimized_children();
-    if children.len() == 1 {
-      children[0].rope()
-    } else {
-      Rope::Full(Box::new(children.iter().flat_map(
-        |child| match child.rope() {
-          Rope::Light(s) => Box::new(std::iter::once(s)),
-          Rope::Full(iter) => iter,
-        },
-      )))
-    }
+    children.iter().for_each(|child| {
+      child.rope(on_chunk);
+    });
   }
 
   fn buffer(&self) -> Cow<[u8]> {

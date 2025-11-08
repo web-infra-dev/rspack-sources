@@ -10,7 +10,7 @@ use crate::{
     Chunks, StreamChunks,
   },
   object_pool::ObjectPool,
-  MapOptions, Rope, Source, SourceMap, SourceValue,
+  MapOptions, Source, SourceMap, SourceValue,
 };
 
 /// Options for [SourceMapSource::new].
@@ -94,8 +94,8 @@ impl Source for SourceMapSource {
     SourceValue::String(Cow::Borrowed(&self.value))
   }
 
-  fn rope(&self) -> Rope {
-    Rope::Light(&self.value)
+  fn rope<'a>(&'a self, on_chunk: &mut dyn FnMut(&'a str)) {
+    on_chunk(&self.value)
   }
 
   fn buffer(&self) -> Cow<[u8]> {

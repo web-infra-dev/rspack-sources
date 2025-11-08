@@ -11,7 +11,7 @@ use crate::{
   },
   object_pool::ObjectPool,
   source::{Mapping, OriginalLocation},
-  MapOptions, Rope, Source, SourceMap, SourceValue,
+  MapOptions, Source, SourceMap, SourceValue,
 };
 
 /// Represents source code, it will create source map for the source code,
@@ -56,8 +56,8 @@ impl Source for OriginalSource {
     SourceValue::String(Cow::Borrowed(&self.value))
   }
 
-  fn rope(&self) -> Rope {
-    Rope::Light(self.value.as_ref())
+  fn rope<'a>(&'a self, on_chunk: &mut dyn FnMut(&'a str)) {
+    on_chunk(self.value.as_ref())
   }
 
   fn buffer(&self) -> Cow<[u8]> {
