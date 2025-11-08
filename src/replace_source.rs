@@ -853,6 +853,7 @@ impl<'a> Iterator for ReplaceSourceRopeIterator<'a> {
   type Item = &'a str;
 
   #[allow(unsafe_code)]
+  #[inline]
   fn next(&mut self) -> Option<Self::Item> {
     loop {
       // Load next chunk (if needed)
