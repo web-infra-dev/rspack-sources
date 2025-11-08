@@ -56,7 +56,6 @@ impl Source for OriginalSource {
     SourceValue::String(Cow::Borrowed(&self.value))
   }
 
-  #[inline]
   fn rope<'a>(&'a self, on_chunk: &mut dyn FnMut(&'a str)) {
     on_chunk(self.value.as_ref())
   }

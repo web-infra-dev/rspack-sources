@@ -172,7 +172,6 @@ impl Source for ReplaceSource {
     SourceValue::String(Cow::Owned(string))
   }
 
-  #[inline]
   #[allow(unsafe_code)]
   fn rope<'a>(&'a self, on_chunk: &mut dyn FnMut(&'a str)) {
     if self.replacements.is_empty() {
