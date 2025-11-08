@@ -169,10 +169,11 @@ impl Source for ConcatSource {
     }
 
     let mut string = String::with_capacity(self.size());
+    let mut on_chunk = |chunk| {
+      string.push_str(chunk);
+    };
     children.iter().for_each(|child| {
-      child.rope(&mut |chunk| {
-        string.push_str(chunk);
-      });
+      child.rope(&mut on_chunk);
     });
     SourceValue::String(Cow::Owned(string))
   }
