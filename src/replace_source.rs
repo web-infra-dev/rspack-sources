@@ -172,6 +172,8 @@ impl Source for ReplaceSource {
     SourceValue::String(Cow::Owned(string))
   }
 
+  #[inline]
+  #[allow(unsafe_code)]
   fn rope<'a>(&'a self, on_chunk: &mut dyn FnMut(&'a str)) {
     if self.replacements.is_empty() {
       return self.inner.rope(on_chunk);
@@ -180,9 +182,10 @@ impl Source for ReplaceSource {
     let mut pos: usize = 0;
     let mut replacement_idx: usize = 0;
     let mut replacement_end: Option<usize> = None;
-    let mut next_replacement: Option<usize> = (replacement_idx
-      < self.replacements.len())
-    .then(|| self.replacements[replacement_idx].start as usize);
+    let mut next_replacement: Option<usize> = self
+      .replacements
+      .get(replacement_idx)
+      .map(|repl| repl.start as usize);
 
     self.inner.rope(&mut |chunk| {
       let mut chunk_pos = 0;
@@ -209,13 +212,15 @@ impl Source for ReplaceSource {
         if next_replacement_pos > pos {
           // Emit chunk until replacement
           let offset = next_replacement_pos - pos;
-          let chunk_slice = &chunk[chunk_pos..(chunk_pos + offset)];
+          let chunk_slice =
+            unsafe { chunk.get_unchecked(chunk_pos..(chunk_pos + offset)) };
           on_chunk(chunk_slice);
           chunk_pos += offset;
           pos = next_replacement_pos;
         }
         // Insert replacement content split into chunks by lines
-        let replacement = &self.replacements[replacement_idx];
+        let replacement =
+          unsafe { self.replacements.get_unchecked(replacement_idx) };
         on_chunk(&replacement.content);
 
         // Remove replaced content by settings this variable
@@ -227,11 +232,10 @@ impl Source for ReplaceSource {
 
         // Move to next replacement
         replacement_idx += 1;
-        next_replacement = if replacement_idx < self.replacements.len() {
-          Some(self.replacements[replacement_idx].start as usize)
-        } else {
-          None
-        };
+        next_replacement = self
+          .replacements
+          .get(replacement_idx)
+          .map(|repl| repl.start as usize);
 
         // Skip over when it has been replaced
         let offset = chunk.len() as i64 - end_pos as i64
@@ -254,14 +258,16 @@ impl Source for ReplaceSource {
 
       // Emit remaining chunk
       if chunk_pos < chunk.len() {
-        on_chunk(&chunk[chunk_pos..]);
+        on_chunk(unsafe { chunk.get_unchecked(chunk_pos..) });
       }
       pos = end_pos;
     });
 
     // Handle remaining replacements one by one
     while replacement_idx < self.replacements.len() {
-      let content = &self.replacements[replacement_idx].content;
+      let replacement =
+        unsafe { self.replacements.get_unchecked(replacement_idx) };
+      let content = &replacement.content;
       on_chunk(content);
       replacement_idx += 1;
     }
