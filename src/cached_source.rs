@@ -20,7 +20,7 @@ use crate::{
 struct CachedData {
   hash: OnceLock<u64>,
   size: OnceLock<usize>,
-  source: OnceLock<Vec<&'static str>>,
+  chunks: OnceLock<Vec<&'static str>>,
   columns_map: OnceLock<Option<SourceMap>>,
   line_only_map: OnceLock<Option<SourceMap>>,
 }
@@ -79,11 +79,9 @@ impl CachedSource {
       cache: Arc::new(CachedData::default()),
     }
   }
-}
 
-impl Source for CachedSource {
-  fn source(&self) -> SourceValue {
-    let chunks = self.cache.source.get_or_init(|| {
+  fn get_or_init_chunks(&self) -> &[&str] {
+    self.cache.chunks.get_or_init(|| {
       #[allow(unsafe_code)]
       // SAFETY: CachedSource guarantees that the underlying source outlives the cache,
       // so transmuting Vec<&str> to Vec<&'static str> is safe in this context.
@@ -93,7 +91,13 @@ impl Source for CachedSource {
           self.rope().collect(),
         )
       }
-    });
+    })
+  }
+}
+
+impl Source for CachedSource {
+  fn source(&self) -> SourceValue {
+    let chunks = self.get_or_init_chunks();
     if chunks.len() == 1 {
       return SourceValue::String(Cow::Borrowed(chunks[0]));
     }
@@ -105,7 +109,8 @@ impl Source for CachedSource {
   }
 
   fn rope(&self) -> Box<dyn Iterator<Item = &str> + '_> {
-    self.inner.rope()
+    let chunks = self.get_or_init_chunks();
+    Box::new(chunks.iter().cloned())
   }
 
   fn buffer(&self) -> Cow<[u8]> {
@@ -113,6 +118,9 @@ impl Source for CachedSource {
   }
 
   fn size(&self) -> usize {
+    if let Some(chunks) = self.cache.chunks.get() {
+      return chunks.iter().map(|chunk| chunk.len()).sum();
+    }
     *self.cache.size.get_or_init(|| self.inner.size())
   }
 
