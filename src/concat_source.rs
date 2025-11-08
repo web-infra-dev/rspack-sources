@@ -12,7 +12,7 @@ use crate::{
   linear_map::LinearMap,
   object_pool::ObjectPool,
   source::{Mapping, OriginalLocation},
-  BoxSource, MapOptions, RawStringSource, Source, SourceExt, SourceMap,
+  BoxSource, MapOptions, RawStringSource, Rope, Source, SourceExt, SourceMap,
   SourceValue,
 };
 
@@ -165,22 +165,34 @@ impl Source for ConcatSource {
   fn source(&self) -> SourceValue {
     let children = self.optimized_children();
     if children.len() == 1 {
-      children[0].source()
-    } else {
-      let mut string = String::with_capacity(self.size());
-      for chunk in self.rope() {
-        string.push_str(chunk);
-      }
-      SourceValue::String(Cow::Owned(string))
+      return children[0].source();
     }
+
+    let mut string = String::with_capacity(self.size());
+    for child in children {
+      match child.rope() {
+        Rope::Light(s) => string.push_str(s),
+        Rope::Full(chunks) => {
+          for chunk in chunks {
+            string.push_str(chunk);
+          }
+        }
+      }
+    }
+    SourceValue::String(Cow::Owned(string))
   }
 
-  fn rope(&self) -> Box<dyn Iterator<Item = &str> + '_> {
+  fn rope(&self) -> Rope {
     let children = self.optimized_children();
     if children.len() == 1 {
       children[0].rope()
     } else {
-      Box::new(children.iter().flat_map(|child| child.rope()))
+      Rope::Full(Box::new(children.iter().flat_map(
+        |child| match child.rope() {
+          Rope::Light(s) => Box::new(std::iter::once(s)),
+          Rope::Full(iter) => iter,
+        },
+      )))
     }
   }
 

@@ -9,9 +9,9 @@ pub use criterion::*;
 pub use codspeed_criterion_compat::*;
 
 use rspack_sources::{
-  BoxSource, CachedSource, ConcatSource, MapOptions, ObjectPool,
-  OriginalSource, RawStringSource, ReplaceSource, ReplacementEnforce, Source,
-  SourceExt, SourceMap, SourceMapSource, SourceMapSourceOptions,
+  BoxSource, ConcatSource, MapOptions, ObjectPool, OriginalSource,
+  RawStringSource, ReplaceSource, ReplacementEnforce, Source, SourceExt,
+  SourceMap, SourceMapSource, SourceMapSourceOptions,
 };
 
 static REPETITIVE_1K_REACT_COMPONENTS_SOURCE: LazyLock<BoxSource> =

@@ -10,7 +10,7 @@ use crate::{
     GeneratedInfo, StreamChunks,
   },
   object_pool::ObjectPool,
-  MapOptions, Source, SourceMap, SourceValue,
+  MapOptions, Rope, Source, SourceMap, SourceValue,
 };
 
 /// A string variant of [RawStringSource].
@@ -64,8 +64,8 @@ impl Source for RawStringSource {
     SourceValue::String(Cow::Borrowed(&self.0))
   }
 
-  fn rope(&self) -> Box<dyn Iterator<Item = &str> + '_> {
-    Box::new(std::iter::once(self.0.as_ref()))
+  fn rope(&self) -> Rope {
+    Rope::Light(self.0.as_ref())
   }
 
   fn buffer(&self) -> Cow<[u8]> {
@@ -210,8 +210,8 @@ impl Source for RawBufferSource {
     SourceValue::Buffer(Cow::Borrowed(&self.value))
   }
 
-  fn rope(&self) -> Box<dyn Iterator<Item = &str> + '_> {
-    Box::new(std::iter::once(self.get_or_init_value_as_string()))
+  fn rope(&self) -> Rope {
+    Rope::Light(self.get_or_init_value_as_string())
   }
 
   fn buffer(&self) -> Cow<[u8]> {

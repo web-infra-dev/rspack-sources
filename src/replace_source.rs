@@ -12,8 +12,8 @@ use crate::{
   linear_map::LinearMap,
   object_pool::ObjectPool,
   source_content_lines::SourceContentLines,
-  BoxSource, MapOptions, Mapping, OriginalLocation, OriginalSource, Source,
-  SourceExt, SourceMap, SourceValue,
+  BoxSource, MapOptions, Mapping, OriginalLocation, OriginalSource, Rope,
+  Source, SourceExt, SourceMap, SourceValue,
 };
 
 /// Decorates a Source with replacements and insertions of source code,
@@ -161,24 +161,30 @@ impl ReplaceSource {
 
 impl Source for ReplaceSource {
   fn source(&self) -> SourceValue {
-    if self.replacements.is_empty() {
-      return self.inner.source();
+    match self.rope() {
+      Rope::Light(s) => SourceValue::String(Cow::Borrowed(s)),
+      Rope::Full(iter) => {
+        let mut string = String::with_capacity(self.size());
+        for chunk in iter {
+          string.push_str(chunk);
+        }
+        SourceValue::String(Cow::Owned(string))
+      }
     }
-    let mut string = String::with_capacity(self.size());
-    for chunk in self.rope() {
-      string.push_str(chunk);
-    }
-    SourceValue::String(Cow::Owned(string))
   }
 
-  fn rope(&self) -> Box<dyn Iterator<Item = &str> + '_> {
+  fn rope(&self) -> Rope {
     if self.replacements.is_empty() {
       return self.inner.rope();
     }
-    Box::new(ReplaceSourceRopeIterator::new(
-      self.inner.rope(),
+    let inner_chunks = match self.inner.rope() {
+      Rope::Light(s) => Box::new(std::iter::once(s)),
+      Rope::Full(iter) => iter,
+    };
+    Rope::Full(Box::new(ReplaceSourceRopeIterator::new(
+      inner_chunks,
       &self.replacements,
-    ))
+    )))
   }
 
   fn buffer(&self) -> Cow<[u8]> {
@@ -239,8 +245,13 @@ impl Source for ReplaceSource {
   }
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
-    for text in self.rope() {
-      writer.write_all(text.as_bytes())?;
+    match self.rope() {
+      Rope::Light(s) => writer.write_all(s.as_bytes())?,
+      Rope::Full(iter) => {
+        for chunk in iter {
+          writer.write_all(chunk.as_bytes())?
+        }
+      }
     }
     Ok(())
   }

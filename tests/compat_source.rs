@@ -7,8 +7,8 @@ use rspack_sources::stream_chunks::{
   StreamChunks,
 };
 use rspack_sources::{
-  ConcatSource, MapOptions, ObjectPool, RawStringSource, Source, SourceExt,
-  SourceMap, SourceValue,
+  ConcatSource, MapOptions, ObjectPool, RawStringSource, Rope, Source,
+  SourceExt, SourceMap, SourceValue,
 };
 
 #[derive(Debug, Eq)]
@@ -19,8 +19,8 @@ impl Source for CompatSource {
     SourceValue::String(Cow::Borrowed(self.0))
   }
 
-  fn rope(&self) -> Box<dyn Iterator<Item = &str> + '_> {
-    Box::new(std::iter::once(self.0))
+  fn rope(&self) -> Rope {
+    Rope::Light(self.0)
   }
 
   fn buffer(&self) -> Cow<[u8]> {

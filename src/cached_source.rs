@@ -13,7 +13,7 @@ use crate::{
   },
   object_pool::ObjectPool,
   source::SourceValue,
-  BoxSource, MapOptions, Source, SourceExt, SourceMap,
+  BoxSource, MapOptions, Rope, Source, SourceExt, SourceMap,
 };
 
 #[derive(Default)]
@@ -82,14 +82,17 @@ impl CachedSource {
 
   fn get_or_init_chunks(&self) -> &[&str] {
     self.cache.chunks.get_or_init(|| {
+      let rope = self.inner.rope();
+      let chunks = match rope {
+        Rope::Light(s) => vec![s],
+        Rope::Full(iter) => iter.collect::<Vec<_>>(),
+      };
       #[allow(unsafe_code)]
       // SAFETY: CachedSource guarantees that the underlying source outlives the cache,
       // so transmuting Vec<&str> to Vec<&'static str> is safe in this context.
       // This allows us to store string slices in the cache without additional allocations.
       unsafe {
-        std::mem::transmute::<Vec<&str>, Vec<&'static str>>(
-          self.rope().collect(),
-        )
+        std::mem::transmute::<Vec<&str>, Vec<&'static str>>(chunks)
       }
     })
   }
@@ -98,9 +101,6 @@ impl CachedSource {
 impl Source for CachedSource {
   fn source(&self) -> SourceValue {
     let chunks = self.get_or_init_chunks();
-    if chunks.len() == 1 {
-      return SourceValue::String(Cow::Borrowed(chunks[0]));
-    }
     let mut string = String::with_capacity(self.size());
     for chunk in chunks {
       string.push_str(chunk);
@@ -108,9 +108,9 @@ impl Source for CachedSource {
     SourceValue::String(Cow::Owned(string))
   }
 
-  fn rope(&self) -> Box<dyn Iterator<Item = &str> + '_> {
+  fn rope(&self) -> Rope {
     let chunks = self.get_or_init_chunks();
-    Box::new(chunks.iter().cloned())
+    Rope::Full(Box::new(chunks.iter().cloned()))
   }
 
   fn buffer(&self) -> Cow<[u8]> {

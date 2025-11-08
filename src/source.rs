@@ -107,6 +107,19 @@ impl<'a> SourceValue<'a> {
   }
 }
 
+/// A lightweight representation of source content as string slices.
+///
+/// `Rope` provides an efficient way to represent source content that may consist
+/// of either a single string slice or multiple string segments. This abstraction
+/// is particularly useful for build tools and bundlers that need to process
+/// and manipulate source code without unnecessary string allocations.
+pub enum Rope<'a> {
+  /// A single borrowed string slice representing contiguous source content.
+  Light(&'a str),
+  /// An iterator over multiple string slices representing segmented source content.
+  Full(Box<dyn Iterator<Item = &'a str> + 'a>),
+}
+
 /// [Source] abstraction, [webpack-sources docs](https://github.com/webpack/webpack-sources/#source).
 pub trait Source:
   StreamChunks + DynHash + AsAny + DynEq + DynClone + fmt::Debug + Sync + Send
@@ -115,7 +128,7 @@ pub trait Source:
   fn source(&self) -> SourceValue;
 
   /// Return a lightweight "rope" view of the source as borrowed string slices.
-  fn rope(&self) -> Box<dyn Iterator<Item = &str> + '_>;
+  fn rope(&self) -> Rope;
 
   /// Get the source buffer.
   fn buffer(&self) -> Cow<[u8]>;
@@ -144,7 +157,7 @@ impl Source for BoxSource {
     self.as_ref().source()
   }
 
-  fn rope(&self) -> Box<dyn Iterator<Item = &str> + '_> {
+  fn rope(&self) -> Rope {
     self.as_ref().rope()
   }
 
