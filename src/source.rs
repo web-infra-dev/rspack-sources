@@ -140,22 +140,27 @@ pub trait Source:
 }
 
 impl Source for BoxSource {
+  #[inline]
   fn source(&self) -> SourceValue {
     self.as_ref().source()
   }
 
+  #[inline]
   fn rope<'a>(&'a self, on_chunk: &mut dyn FnMut(&'a str)) {
     self.as_ref().rope(on_chunk)
   }
 
+  #[inline]
   fn buffer(&self) -> Cow<[u8]> {
     self.as_ref().buffer()
   }
 
+  #[inline]
   fn size(&self) -> usize {
     self.as_ref().size()
   }
 
+  #[inline]
   fn map(
     &self,
     object_pool: &ObjectPool,
@@ -164,6 +169,7 @@ impl Source for BoxSource {
     self.as_ref().map(object_pool, options)
   }
 
+  #[inline]
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
     self.as_ref().to_writer(writer)
   }

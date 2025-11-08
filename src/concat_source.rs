@@ -177,6 +177,7 @@ impl Source for ConcatSource {
     SourceValue::String(Cow::Owned(string))
   }
 
+  #[inline]
   fn rope<'a>(&'a self, on_chunk: &mut dyn FnMut(&'a str)) {
     let children = self.optimized_children();
     children.iter().for_each(|child| {
