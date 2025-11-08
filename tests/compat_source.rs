@@ -19,8 +19,8 @@ impl Source for CompatSource {
     SourceValue::String(Cow::Borrowed(self.0))
   }
 
-  fn rope(&self) -> Vec<&str> {
-    vec![self.0]
+  fn rope(&self) -> Box<dyn Iterator<Item = &str> + '_> {
+    Box::new(std::iter::once(self.0))
   }
 
   fn buffer(&self) -> Cow<[u8]> {

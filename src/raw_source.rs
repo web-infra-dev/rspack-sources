@@ -64,8 +64,8 @@ impl Source for RawStringSource {
     SourceValue::String(Cow::Borrowed(&self.0))
   }
 
-  fn rope(&self) -> (Vec<&str>, usize) {
-    (vec![self.0.as_ref()], self.0.len())
+  fn rope(&self) -> Box<dyn Iterator<Item = &str> + '_> {
+    Box::new(std::iter::once(self.0.as_ref()))
   }
 
   fn buffer(&self) -> Cow<[u8]> {
@@ -214,9 +214,8 @@ impl Source for RawBufferSource {
     SourceValue::Buffer(Cow::Borrowed(&self.value))
   }
 
-  fn rope(&self) -> (Vec<&str>, usize) {
-    let s = self.get_or_init_value_as_string();
-    (vec![s], s.len())
+  fn rope(&self) -> Box<dyn Iterator<Item = &str> + '_> {
+    Box::new(std::iter::once(self.get_or_init_value_as_string()))
   }
 
   fn buffer(&self) -> Cow<[u8]> {

@@ -21,7 +21,7 @@ use crate::{
 struct CachedData {
   hash: OnceLock<u64>,
   size: OnceLock<usize>,
-  source: OnceLock<(Vec<&'static str>, usize)>,
+  source: OnceLock<Vec<&'static str>>,
   columns_map: OnceLock<Option<SourceMap>>,
   line_only_map: OnceLock<Option<SourceMap>>,
 }
@@ -84,25 +84,25 @@ impl CachedSource {
 
 impl Source for CachedSource {
   fn source(&self) -> SourceValue {
-    let (chunks, len) = self.cache.source.get_or_init(|| {
+    let chunks = self.cache.source.get_or_init(|| {
       #[allow(unsafe_code)]
       // SAFETY: CachedSource guarantees that the underlying source outlives the cache,
       // so transmuting Vec<&str> to Vec<&'static str> is safe in this context.
       // This allows us to store string slices in the cache without additional allocations.
       unsafe {
-        std::mem::transmute::<(Vec<&str>, usize), (Vec<&'static str>, usize)>(
-          self.rope(),
+        std::mem::transmute::<Vec<&str>, Vec<&'static str>>(
+          self.rope().collect(),
         )
       }
     });
-    let mut string = String::with_capacity(*len);
+    let mut string = String::with_capacity(self.size());
     for chunk in chunks {
       string.push_str(chunk);
     }
     SourceValue::String(Cow::Owned(string))
   }
 
-  fn rope(&self) -> (Vec<&str>, usize) {
+  fn rope(&self) -> Box<dyn Iterator<Item = &str> + '_> {
     self.inner.rope()
   }
 

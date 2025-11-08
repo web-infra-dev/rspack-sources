@@ -115,7 +115,7 @@ pub trait Source:
   fn source(&self) -> SourceValue;
 
   /// Return a lightweight "rope" view of the source as borrowed string slices.
-  fn rope(&self) -> (Vec<&str>, usize);
+  fn rope(&self) -> Box<dyn Iterator<Item = &str> + '_>;
 
   /// Get the source buffer.
   fn buffer(&self) -> Cow<[u8]>;
@@ -152,7 +152,7 @@ impl Source for BoxSource {
     self.as_ref().source()
   }
 
-  fn rope(&self) -> (Vec<&str>, usize) {
+  fn rope(&self) -> Box<dyn Iterator<Item = &str> + '_> {
     self.as_ref().rope()
   }
 
