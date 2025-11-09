@@ -117,10 +117,12 @@ impl Source for CachedSource {
   }
 
   fn size(&self) -> usize {
-    if let Some(chunks) = self.cache.chunks.get() {
-      return chunks.iter().map(|chunk| chunk.len()).sum();
-    }
-    *self.cache.size.get_or_init(|| self.inner.size())
+    *self.cache.size.get_or_init(|| {
+      if let Some(chunks) = self.cache.chunks.get() {
+        return chunks.iter().fold(0, |acc, chunk| acc + chunk.len());
+      }
+      self.inner.size()
+    })
   }
 
   fn map(
