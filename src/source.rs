@@ -114,6 +114,9 @@ pub trait Source:
   /// Get the source code.
   fn source(&self) -> SourceValue;
 
+  /// Return a lightweight "rope" view of the source as borrowed string slices.
+  fn rope<'a>(&'a self, on_chunk: &mut dyn FnMut(&'a str));
+
   /// Get the source buffer.
   fn buffer(&self) -> Cow<[u8]>;
 
@@ -132,31 +135,32 @@ pub trait Source:
     self.dyn_hash(state);
   }
 
-  /// Appends the source content to the provided string buffer.
-  ///
-  /// This method efficiently writes the source content directly into an existing
-  /// string buffer, avoiding additional memory allocations when the buffer has
-  /// sufficient capacity. This is particularly useful for concatenating multiple
-  /// sources or building larger strings incrementally.
-  fn write_to_string(&self, string: &mut String);
-
   /// Writes the source into a writer, preferably a `std::io::BufWriter<std::io::Write>`.
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()>;
 }
 
 impl Source for BoxSource {
+  #[inline]
   fn source(&self) -> SourceValue {
     self.as_ref().source()
   }
 
+  #[inline]
+  fn rope<'a>(&'a self, on_chunk: &mut dyn FnMut(&'a str)) {
+    self.as_ref().rope(on_chunk)
+  }
+
+  #[inline]
   fn buffer(&self) -> Cow<[u8]> {
     self.as_ref().buffer()
   }
 
+  #[inline]
   fn size(&self) -> usize {
     self.as_ref().size()
   }
 
+  #[inline]
   fn map(
     &self,
     object_pool: &ObjectPool,
@@ -165,10 +169,7 @@ impl Source for BoxSource {
     self.as_ref().map(object_pool, options)
   }
 
-  fn write_to_string(&self, string: &mut String) {
-    self.as_ref().write_to_string(string)
-  }
-
+  #[inline]
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
     self.as_ref().to_writer(writer)
   }

@@ -460,10 +460,9 @@ fn stream_chunks_of_source_map_full<'a>(
   on_source: OnSource<'_, 'a>,
   on_name: OnName<'_, 'a>,
 ) -> GeneratedInfo {
-  let a = split_into_lines(source);
-  let lines: Vec<WithUtf16<'a, 'a>> = a
+  let lines = split_into_lines(source)
     .map(|line| WithUtf16::new(object_pool, line))
-    .collect::<Vec<_>>();
+    .collect::<Vec<WithUtf16<'a, 'a>>>();
 
   if lines.is_empty() {
     return GeneratedInfo {

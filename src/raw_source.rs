@@ -64,6 +64,10 @@ impl Source for RawStringSource {
     SourceValue::String(Cow::Borrowed(&self.0))
   }
 
+  fn rope<'a>(&'a self, on_chunk: &mut dyn FnMut(&'a str)) {
+    on_chunk(self.0.as_ref())
+  }
+
   fn buffer(&self) -> Cow<[u8]> {
     Cow::Borrowed(self.0.as_bytes())
   }
@@ -74,10 +78,6 @@ impl Source for RawStringSource {
 
   fn map(&self, _: &ObjectPool, _: &MapOptions) -> Option<SourceMap> {
     None
-  }
-
-  fn write_to_string(&self, string: &mut String) {
-    string.push_str(self.0.as_ref());
   }
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
@@ -210,6 +210,10 @@ impl Source for RawBufferSource {
     SourceValue::Buffer(Cow::Borrowed(&self.value))
   }
 
+  fn rope<'a>(&'a self, on_chunk: &mut dyn FnMut(&'a str)) {
+    on_chunk(self.get_or_init_value_as_string())
+  }
+
   fn buffer(&self) -> Cow<[u8]> {
     Cow::Borrowed(&self.value)
   }
@@ -220,10 +224,6 @@ impl Source for RawBufferSource {
 
   fn map(&self, _: &ObjectPool, _: &MapOptions) -> Option<SourceMap> {
     None
-  }
-
-  fn write_to_string(&self, string: &mut String) {
-    string.push_str(self.get_or_init_value_as_string());
   }
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {

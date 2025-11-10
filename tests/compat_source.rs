@@ -19,6 +19,10 @@ impl Source for CompatSource {
     SourceValue::String(Cow::Borrowed(self.0))
   }
 
+  fn rope<'a>(&'a self, on_chunk: &mut dyn FnMut(&'a str)) {
+    on_chunk(self.0)
+  }
+
   fn buffer(&self) -> Cow<[u8]> {
     Cow::Borrowed(self.0.as_bytes())
   }
@@ -33,10 +37,6 @@ impl Source for CompatSource {
     _options: &MapOptions,
   ) -> Option<SourceMap> {
     self.1.clone()
-  }
-
-  fn write_to_string(&self, string: &mut String) {
-    string.push_str(self.0.as_ref())
   }
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {

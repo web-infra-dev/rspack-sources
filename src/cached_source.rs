@@ -1,6 +1,5 @@
 use std::{
   borrow::Cow,
-  cell::OnceCell,
   hash::{Hash, Hasher},
   sync::{Arc, OnceLock},
 };
@@ -21,6 +20,7 @@ use crate::{
 struct CachedData {
   hash: OnceLock<u64>,
   size: OnceLock<usize>,
+  chunks: OnceLock<Vec<&'static str>>,
   columns_map: OnceLock<Option<SourceMap>>,
   line_only_map: OnceLock<Option<SourceMap>>,
 }
@@ -79,11 +79,37 @@ impl CachedSource {
       cache: Arc::new(CachedData::default()),
     }
   }
+
+  fn get_or_init_chunks(&self) -> &[&str] {
+    self.cache.chunks.get_or_init(|| {
+      let mut chunks = Vec::new();
+      self.inner.rope(&mut |chunk| {
+        chunks.push(chunk);
+      });
+      #[allow(unsafe_code)]
+      // SAFETY: CachedSource guarantees that the underlying source outlives the cache,
+      // so transmuting Vec<&str> to Vec<&'static str> is safe in this context.
+      // This allows us to store string slices in the cache without additional allocations.
+      unsafe {
+        std::mem::transmute::<Vec<&str>, Vec<&'static str>>(chunks)
+      }
+    })
+  }
 }
 
 impl Source for CachedSource {
   fn source(&self) -> SourceValue {
-    self.inner.source()
+    let chunks = self.get_or_init_chunks();
+    let mut string = String::with_capacity(self.size());
+    for chunk in chunks {
+      string.push_str(chunk);
+    }
+    SourceValue::String(Cow::Owned(string))
+  }
+
+  fn rope<'a>(&'a self, on_chunk: &mut dyn FnMut(&'a str)) {
+    let chunks = self.get_or_init_chunks();
+    chunks.iter().for_each(|chunk| on_chunk(chunk));
   }
 
   fn buffer(&self) -> Cow<[u8]> {
@@ -91,7 +117,12 @@ impl Source for CachedSource {
   }
 
   fn size(&self) -> usize {
-    *self.cache.size.get_or_init(|| self.inner.size())
+    *self.cache.size.get_or_init(|| {
+      if let Some(chunks) = self.cache.chunks.get() {
+        return chunks.iter().fold(0, |acc, chunk| acc + chunk.len());
+      }
+      self.inner.size()
+    })
   }
 
   fn map(
@@ -114,10 +145,6 @@ impl Source for CachedSource {
     }
   }
 
-  fn write_to_string(&self, string: &mut String) {
-    self.inner.write_to_string(string);
-  }
-
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
     self.inner.to_writer(writer)
   }
@@ -126,17 +153,17 @@ impl Source for CachedSource {
 struct CachedSourceChunks<'source> {
   chunks: Box<dyn Chunks + 'source>,
   cache: Arc<CachedData>,
-  inner: &'source dyn Source,
-  source: OnceCell<Cow<'source, str>>,
+  source: Cow<'source, str>,
 }
 
 impl<'a> CachedSourceChunks<'a> {
   fn new(cache_source: &'a CachedSource) -> Self {
+    let source = cache_source.source().into_string_lossy();
+
     Self {
       chunks: cache_source.inner.stream_chunks(),
       cache: cache_source.cache.clone(),
-      inner: &cache_source.inner,
-      source: OnceCell::new(),
+      source,
     }
   }
 }
@@ -157,14 +184,11 @@ impl Chunks for CachedSourceChunks<'_> {
     };
     match cell.get() {
       Some(map) => {
-        let source = self
-          .source
-          .get_or_init(|| self.inner.source().into_string_lossy());
         if let Some(map) = map {
           stream_chunks_of_source_map(
             options,
             object_pool,
-            source.as_ref(),
+            self.source.as_ref(),
             map,
             on_chunk,
             on_source,
@@ -172,7 +196,7 @@ impl Chunks for CachedSourceChunks<'_> {
           )
         } else {
           stream_chunks_of_raw_source(
-            source.as_ref(),
+            self.source.as_ref(),
             options,
             on_chunk,
             on_source,

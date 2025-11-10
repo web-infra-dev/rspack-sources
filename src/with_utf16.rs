@@ -7,7 +7,7 @@ pub struct WithUtf16<'object_pool, 'text> {
   /// line is a string reference
   pub line: &'text str,
   /// the byte position of each `char` in `line` string slice .
-  pub utf16_byte_indices: OnceCell<Pooled<'object_pool>>,
+  pub utf16_byte_indices: OnceCell<Option<Pooled<'object_pool>>>,
   object_pool: &'object_pool ObjectPool,
 }
 
@@ -21,31 +21,63 @@ impl<'object_pool, 'text> WithUtf16<'object_pool, 'text> {
   }
 
   /// substring::SubString with cache
-  pub fn substring(&self, start_index: usize, end_index: usize) -> &'text str {
-    if end_index <= start_index {
+  #[allow(unsafe_code)]
+  pub fn substring(
+    &self,
+    start_utf16_index: usize,
+    end_utf16_index: usize,
+  ) -> &'text str {
+    if end_utf16_index <= start_utf16_index {
       return "";
     }
 
     let utf16_byte_indices = self.utf16_byte_indices.get_or_init(|| {
+      if self.line.is_ascii() {
+        return None;
+      }
+
       let mut vec = self.object_pool.pull(self.line.len());
-      for (byte_index, ch) in self.line.char_indices() {
-        match ch.len_utf16() {
-          1 => vec.push(byte_index),
-          2 => {
-            vec.push(byte_index);
-            vec.push(byte_index);
-          }
-          _ => unreachable!(),
+      let bytes = self.line.as_bytes();
+      let mut byte_pos = 0;
+      while byte_pos < bytes.len() {
+        let byte = unsafe { *bytes.get_unchecked(byte_pos) };
+        if byte < 0x80 {
+          // ASCII: 1 byte = 1 UTF-16 unit
+          vec.push(byte_pos);
+          byte_pos += 1;
+        } else if byte < 0xE0 {
+          // 2-byte UTF-8 = 1 UTF-16 unit
+          vec.push(byte_pos);
+          byte_pos += 2;
+        } else if byte < 0xF0 {
+          // 3-byte UTF-8 = 1 UTF-16 unit
+          vec.push(byte_pos);
+          byte_pos += 3;
+        } else {
+          // 4-byte UTF-8 = 2 UTF-16 units (surrogate pair)
+          vec.push(byte_pos);
+          vec.push(byte_pos);
+          byte_pos += 4;
         }
       }
-      vec
+      Some(vec)
     });
 
-    let str_len = self.line.len();
-    let start = *utf16_byte_indices.get(start_index).unwrap_or(&str_len);
-    let end = *utf16_byte_indices.get(end_index).unwrap_or(&str_len);
+    let utf8_len = self.line.len();
 
-    #[allow(unsafe_code)]
+    let Some(utf16_byte_indices) = utf16_byte_indices else {
+      let start_utf16_index = start_utf16_index.min(utf8_len);
+      let end_utf16_index = end_utf16_index.min(utf8_len);
+      return unsafe {
+        self.line.get_unchecked(start_utf16_index..end_utf16_index)
+      };
+    };
+
+    let start = *utf16_byte_indices
+      .get(start_utf16_index)
+      .unwrap_or(&utf8_len);
+    let end = *utf16_byte_indices.get(end_utf16_index).unwrap_or(&utf8_len);
+
     unsafe {
       // SAFETY: Since `indices` iterates over the `CharIndices` of `self`, we can guarantee
       // that the indices obtained from it will always be within the bounds of `self` and they

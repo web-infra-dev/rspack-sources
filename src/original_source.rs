@@ -56,6 +56,10 @@ impl Source for OriginalSource {
     SourceValue::String(Cow::Borrowed(&self.value))
   }
 
+  fn rope<'a>(&'a self, on_chunk: &mut dyn FnMut(&'a str)) {
+    on_chunk(self.value.as_ref())
+  }
+
   fn buffer(&self) -> Cow<[u8]> {
     Cow::Borrowed(self.value.as_bytes())
   }
@@ -71,10 +75,6 @@ impl Source for OriginalSource {
   ) -> Option<SourceMap> {
     let chunks = self.stream_chunks();
     get_map(object_pool, chunks.as_ref(), options)
-  }
-
-  fn write_to_string(&self, string: &mut String) {
-    string.push_str(self.value.as_ref());
   }
 
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {

@@ -161,34 +161,115 @@ impl ReplaceSource {
 
 impl Source for ReplaceSource {
   fn source(&self) -> SourceValue {
-    let inner_source_code = self.inner.source().into_string_lossy();
-
-    // mut_string_push_str is faster that vec join
-    // concatenate strings benchmark, see https://github.com/hoodie/concatenation_benchmarks-rs
     if self.replacements.is_empty() {
-      return SourceValue::String(inner_source_code);
+      return self.inner.source();
     }
-    let capacity = self.size();
-    let mut source_code = String::with_capacity(capacity);
-    let mut inner_pos = 0;
-    for replacement in &self.replacements {
-      if inner_pos < replacement.start {
-        let end_pos = (replacement.start as usize).min(inner_source_code.len());
-        source_code.push_str(&inner_source_code[inner_pos as usize..end_pos]);
-      }
-      source_code.push_str(&replacement.content);
-      #[allow(clippy::manual_clamp)]
-      {
-        inner_pos = inner_pos
-          .max(replacement.end)
-          .min(inner_source_code.len() as u32);
-      }
-    }
-    source_code.push_str(
-      &inner_source_code[inner_pos as usize..inner_source_code.len()],
-    );
 
-    SourceValue::String(Cow::Owned(source_code))
+    let mut string = String::with_capacity(self.size());
+    self.rope(&mut |chunk| {
+      string.push_str(chunk);
+    });
+    SourceValue::String(Cow::Owned(string))
+  }
+
+  #[allow(unsafe_code)]
+  fn rope<'a>(&'a self, on_chunk: &mut dyn FnMut(&'a str)) {
+    if self.replacements.is_empty() {
+      return self.inner.rope(on_chunk);
+    }
+
+    let mut pos: usize = 0;
+    let mut replacement_idx: usize = 0;
+    let mut replacement_end: Option<usize> = None;
+    let mut next_replacement: Option<usize> = self
+      .replacements
+      .get(replacement_idx)
+      .map(|repl| repl.start as usize);
+
+    self.inner.rope(&mut |chunk| {
+      let mut chunk_pos = 0;
+      let end_pos = pos + chunk.len();
+
+      // Skip over when it has been replaced
+      if let Some(replacement_end) =
+        replacement_end.filter(|replacement_end| *replacement_end > pos)
+      {
+        // Skip over the whole chunk
+        if replacement_end >= end_pos {
+          pos = end_pos;
+          return;
+        }
+        // Partially skip over chunk
+        chunk_pos = replacement_end - pos;
+        pos += chunk_pos;
+      }
+
+      // Is a replacement in the chunk?
+      while let Some(next_replacement_pos) = next_replacement
+        .filter(|next_replacement_pos| *next_replacement_pos < end_pos)
+      {
+        if next_replacement_pos > pos {
+          // Emit chunk until replacement
+          let offset = next_replacement_pos - pos;
+          let chunk_slice =
+            unsafe { chunk.get_unchecked(chunk_pos..(chunk_pos + offset)) };
+          on_chunk(chunk_slice);
+          chunk_pos += offset;
+          pos = next_replacement_pos;
+        }
+        // Insert replacement content split into chunks by lines
+        let replacement =
+          unsafe { self.replacements.get_unchecked(replacement_idx) };
+        on_chunk(&replacement.content);
+
+        // Remove replaced content by settings this variable
+        replacement_end = if let Some(replacement_end) = replacement_end {
+          Some(replacement_end.max(replacement.end as usize))
+        } else {
+          Some(replacement.end as usize)
+        };
+
+        // Move to next replacement
+        replacement_idx += 1;
+        next_replacement = self
+          .replacements
+          .get(replacement_idx)
+          .map(|repl| repl.start as usize);
+
+        // Skip over when it has been replaced
+        let offset = chunk.len() as i64 - end_pos as i64
+          + replacement_end.unwrap() as i64
+          - chunk_pos as i64;
+        if offset > 0 {
+          // Skip over whole chunk
+          if replacement_end
+            .is_some_and(|replacement_end| replacement_end >= end_pos)
+          {
+            pos = end_pos;
+            return;
+          }
+
+          // Partially skip over chunk
+          chunk_pos += offset as usize;
+          pos += offset as usize;
+        }
+      }
+
+      // Emit remaining chunk
+      if chunk_pos < chunk.len() {
+        on_chunk(unsafe { chunk.get_unchecked(chunk_pos..) });
+      }
+      pos = end_pos;
+    });
+
+    // Handle remaining replacements one by one
+    while replacement_idx < self.replacements.len() {
+      let replacement =
+        unsafe { self.replacements.get_unchecked(replacement_idx) };
+      let content = &replacement.content;
+      on_chunk(content);
+      replacement_idx += 1;
+    }
   }
 
   fn buffer(&self) -> Cow<[u8]> {
@@ -210,6 +291,10 @@ impl Source for ReplaceSource {
       // Add original content before replacement
       if inner_pos < replacement.start {
         // This content is already counted in inner_source_size, so no change needed
+      }
+      if replacement.start as usize >= inner_source_size {
+        size += replacement.content.len();
+        continue;
       }
 
       // Handle the replacement itself
@@ -244,12 +329,15 @@ impl Source for ReplaceSource {
     get_map(&ObjectPool::default(), chunks.as_ref(), options)
   }
 
-  fn write_to_string(&self, string: &mut String) {
-    string.push_str(&self.source().into_string_lossy());
-  }
-
   fn to_writer(&self, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
-    writer.write_all(self.source().as_bytes())
+    let mut result = Ok(());
+    self.rope(&mut |chunk| {
+      if result.is_err() {
+        return;
+      }
+      result = writer.write_all(chunk.as_bytes());
+    });
+    result
   }
 }
 
@@ -1421,6 +1509,7 @@ return <div>{data.foo}</div>
       None,
       ReplacementEnforce::Post,
     );
+    source.replace(10000000, 20000000, "// end line", None);
 
     assert_eq!(source.size(), source.source().into_string_lossy().len());
   }
