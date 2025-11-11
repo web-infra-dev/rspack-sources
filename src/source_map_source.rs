@@ -90,7 +90,7 @@ impl SourceMapSource {
 }
 
 impl Source for SourceMapSource {
-  fn source(&self) -> SourceValue {
+  fn source(&self) -> SourceValue<'_> {
     SourceValue::String(Cow::Borrowed(&self.value))
   }
 
@@ -98,7 +98,7 @@ impl Source for SourceMapSource {
     on_chunk(&self.value)
   }
 
-  fn buffer(&self) -> Cow<[u8]> {
+  fn buffer(&self) -> Cow<'_, [u8]> {
     Cow::Borrowed(self.value.as_bytes())
   }
 

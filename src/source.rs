@@ -112,13 +112,13 @@ pub trait Source:
   StreamChunks + DynHash + AsAny + DynEq + DynClone + fmt::Debug + Sync + Send
 {
   /// Get the source code.
-  fn source(&self) -> SourceValue;
+  fn source(&self) -> SourceValue<'_>;
 
   /// Return a lightweight "rope" view of the source as borrowed string slices.
   fn rope<'a>(&'a self, on_chunk: &mut dyn FnMut(&'a str));
 
   /// Get the source buffer.
-  fn buffer(&self) -> Cow<[u8]>;
+  fn buffer(&self) -> Cow<'_, [u8]>;
 
   /// Get the size of the source.
   fn size(&self) -> usize;
@@ -141,7 +141,7 @@ pub trait Source:
 
 impl Source for BoxSource {
   #[inline]
-  fn source(&self) -> SourceValue {
+  fn source(&self) -> SourceValue<'_> {
     self.as_ref().source()
   }
 
@@ -151,7 +151,7 @@ impl Source for BoxSource {
   }
 
   #[inline]
-  fn buffer(&self) -> Cow<[u8]> {
+  fn buffer(&self) -> Cow<'_, [u8]> {
     self.as_ref().buffer()
   }
 

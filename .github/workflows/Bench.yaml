@@ -29,7 +29,7 @@ jobs:
       - name: Install codspeed
         uses: taiki-e/install-action@v2
         with:
-          tool: cargo-codspeed@4.0.5
+          tool: cargo-codspeed
 
       - name: Build Benchmark
         run: cargo codspeed build --features codspeed

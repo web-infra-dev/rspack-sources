@@ -17,7 +17,7 @@ pub struct ObjectPool {
 
 impl ObjectPool {
   /// Retrieves a reusable `T` from the pool with at least the requested capacity.
-  pub fn pull(&self, requested_capacity: usize) -> Pooled {
+  pub fn pull<'a>(&'a self, requested_capacity: usize) -> Pooled<'a> {
     if requested_capacity < MIN_POOL_CAPACITY
       || self.objects.borrow().is_empty()
     {

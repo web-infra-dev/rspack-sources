@@ -160,7 +160,7 @@ impl ReplaceSource {
 }
 
 impl Source for ReplaceSource {
-  fn source(&self) -> SourceValue {
+  fn source(&self) -> SourceValue<'_> {
     if self.replacements.is_empty() {
       return self.inner.source();
     }
@@ -272,7 +272,7 @@ impl Source for ReplaceSource {
     }
   }
 
-  fn buffer(&self) -> Cow<[u8]> {
+  fn buffer(&self) -> Cow<'_, [u8]> {
     self.source().into_bytes()
   }
 

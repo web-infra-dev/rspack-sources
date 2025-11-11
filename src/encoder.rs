@@ -188,7 +188,7 @@ impl MappingsEncoder for LinesOnlyMappingsEncoder {
       if line_delta > 0 {
         self
           .mappings
-          .extend(std::iter::repeat(b';').take(line_delta as usize));
+          .extend(std::iter::repeat_n(b';', line_delta as usize));
       }
 
       self.current_line = mapping.generated_line;

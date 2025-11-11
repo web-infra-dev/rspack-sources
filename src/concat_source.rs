@@ -162,7 +162,7 @@ impl ConcatSource {
 }
 
 impl Source for ConcatSource {
-  fn source(&self) -> SourceValue {
+  fn source(&self) -> SourceValue<'_> {
     let children = self.optimized_children();
     if children.len() == 1 {
       return children[0].source();
@@ -185,7 +185,7 @@ impl Source for ConcatSource {
     });
   }
 
-  fn buffer(&self) -> Cow<[u8]> {
+  fn buffer(&self) -> Cow<'_, [u8]> {
     let children = self.optimized_children();
     if children.len() == 1 {
       children[0].buffer()
