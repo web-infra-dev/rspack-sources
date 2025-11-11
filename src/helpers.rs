@@ -235,7 +235,7 @@ impl<'a> Iterator for PotentialTokens<'a> {
 }
 
 // /[^\n;{}]+[;{} \r\t]*\n?|[;{} \r\t]+\n?|\n/g
-pub fn split_into_potential_tokens(text: &str) -> PotentialTokens {
+pub fn split_into_potential_tokens<'a>(text: &'a str) -> PotentialTokens<'a> {
   PotentialTokens {
     bytes: text.as_bytes(),
     text,
@@ -388,10 +388,8 @@ fn get_source<'a>(source_map: &SourceMap, source: &'a str) -> Cow<'a, str> {
   let source_root = source_map.source_root();
   match source_root {
     Some("") => Cow::Borrowed(source),
-    Some(root) if root.ends_with('/') => {
-      Cow::Owned(format!("{}{}", root, source))
-    }
-    Some(root) => Cow::Owned(format!("{}/{}", root, source)),
+    Some(root) if root.ends_with('/') => Cow::Owned(format!("{root}{source}")),
+    Some(root) => Cow::Owned(format!("{root}/{source}")),
     None => Cow::Borrowed(source),
   }
 }

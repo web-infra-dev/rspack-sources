@@ -15,7 +15,7 @@ use rspack_sources::{
 struct CompatSource(&'static str, Option<SourceMap>);
 
 impl Source for CompatSource {
-  fn source(&self) -> SourceValue {
+  fn source(&self) -> SourceValue<'_> {
     SourceValue::String(Cow::Borrowed(self.0))
   }
 
@@ -23,7 +23,7 @@ impl Source for CompatSource {
     on_chunk(self.0)
   }
 
-  fn buffer(&self) -> Cow<[u8]> {
+  fn buffer(&self) -> Cow<'_, [u8]> {
     Cow::Borrowed(self.0.as_bytes())
   }
 

@@ -25,3 +25,5 @@ pub fn benchmark_source_map_clone(b: &mut Bencher) {
     let _ = black_box(source.clone());
   })
 }
+
+fn main() {}

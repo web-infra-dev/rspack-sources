@@ -98,7 +98,7 @@ impl CachedSource {
 }
 
 impl Source for CachedSource {
-  fn source(&self) -> SourceValue {
+  fn source(&self) -> SourceValue<'_> {
     let chunks = self.get_or_init_chunks();
     let mut string = String::with_capacity(self.size());
     for chunk in chunks {
@@ -112,7 +112,7 @@ impl Source for CachedSource {
     chunks.iter().for_each(|chunk| on_chunk(chunk));
   }
 
-  fn buffer(&self) -> Cow<[u8]> {
+  fn buffer(&self) -> Cow<'_, [u8]> {
     self.inner.buffer()
   }
 

@@ -60,7 +60,7 @@ impl From<&str> for RawStringSource {
 }
 
 impl Source for RawStringSource {
-  fn source(&self) -> SourceValue {
+  fn source(&self) -> SourceValue<'_> {
     SourceValue::String(Cow::Borrowed(&self.0))
   }
 
@@ -68,7 +68,7 @@ impl Source for RawStringSource {
     on_chunk(self.0.as_ref())
   }
 
-  fn buffer(&self) -> Cow<[u8]> {
+  fn buffer(&self) -> Cow<'_, [u8]> {
     Cow::Borrowed(self.0.as_bytes())
   }
 
@@ -206,7 +206,7 @@ impl From<&[u8]> for RawBufferSource {
 }
 
 impl Source for RawBufferSource {
-  fn source(&self) -> SourceValue {
+  fn source(&self) -> SourceValue<'_> {
     SourceValue::Buffer(Cow::Borrowed(&self.value))
   }
 
@@ -214,7 +214,7 @@ impl Source for RawBufferSource {
     on_chunk(self.get_or_init_value_as_string())
   }
 
-  fn buffer(&self) -> Cow<[u8]> {
+  fn buffer(&self) -> Cow<'_, [u8]> {
     Cow::Borrowed(&self.value)
   }
 

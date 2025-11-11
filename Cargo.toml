@@ -1,6 +1,6 @@
 [package]
 name = "rspack_sources"
-version = "0.4.15"
+version = "0.4.16"
 edition = "2021"
 authors = ["h-a-n-a <andywangsy@gmail.com>", "ahabhgk <ahabhgk@gmail.com>"]
 resolver = "2"
@@ -26,7 +26,18 @@ print_stderr = "warn"
 
 [[bench]]
 name = "bench"
-path = "benches/bench.rs"
+harness = false
+
+[[bench]]
+name = "benchmark_repetitive_react_components"
+harness = false
+
+[[bench]]
+name = "bench_complex_replace_source"
+harness = false
+
+[[bench]]
+name = "bench_source_map"
 harness = false
 
 [dependencies]
@@ -36,9 +47,9 @@ dyn-clone = "1.0.17"
 rustc-hash = "2.1.0"
 memchr = "2.7.4"
 
-codspeed-criterion-compat = { version = "2.7.2", default-features = false, optional = true }
+codspeed-criterion-compat = { version = "4.1.0", default-features = false, optional = true }
 static_assertions = "1.1.0"
-simd-json = "0.14.3"
+simd-json = "0.17.0"
 
 [dev-dependencies]
 twox-hash = "2.1.0"

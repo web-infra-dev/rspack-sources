@@ -52,7 +52,7 @@ impl OriginalSource {
 }
 
 impl Source for OriginalSource {
-  fn source(&self) -> SourceValue {
+  fn source(&self) -> SourceValue<'_> {
     SourceValue::String(Cow::Borrowed(&self.value))
   }
 
@@ -60,7 +60,7 @@ impl Source for OriginalSource {
     on_chunk(self.value.as_ref())
   }
 
-  fn buffer(&self) -> Cow<[u8]> {
+  fn buffer(&self) -> Cow<'_, [u8]> {
     Cow::Borrowed(self.value.as_bytes())
   }
 
