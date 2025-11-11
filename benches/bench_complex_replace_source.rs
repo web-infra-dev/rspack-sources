@@ -36762,3 +36762,5 @@ pub fn benchmark_complex_replace_source_size(b: &mut Bencher) {
     black_box(source.size());
   });
 }
+
+fn main() {}

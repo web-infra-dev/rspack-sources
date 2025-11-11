@@ -3516,3 +3516,5 @@ pub fn benchmark_repetitive_react_components_source(b: &mut Bencher) {
     black_box(source.source());
   });
 }
+
+fn main() {}
