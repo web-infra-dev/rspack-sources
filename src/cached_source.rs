@@ -13,7 +13,7 @@ use crate::{
   },
   object_pool::ObjectPool,
   source::SourceValue,
-  BoxSource, MapOptions, Source, SourceExt, SourceMap,
+  BoxSource, MapOptions, RawBufferSource, Source, SourceExt, SourceMap,
 };
 
 #[derive(Default)]
@@ -99,6 +99,16 @@ impl CachedSource {
 
 impl Source for CachedSource {
   fn source(&self) -> SourceValue<'_> {
+    // Check if it's a RawBufferSource containing a CachedSource
+    if let Some(buffer_source) = self
+      .inner
+      .as_ref()
+      .as_any()
+      .downcast_ref::<RawBufferSource>()
+    {
+      return buffer_source.source();
+    }
+
     let chunks = self.get_or_init_chunks();
     let mut string = String::with_capacity(self.size());
     for chunk in chunks {
