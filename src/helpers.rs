@@ -94,25 +94,68 @@ pub trait StreamChunks {
   fn stream_chunks<'a>(&'a self) -> Box<dyn Chunks + 'a>;
 }
 
-/// A borrowed text span with precomputed metadata.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AsciiHit {
+  Ascii,
+  NotAscii,
+  Unknown,
+}
+
+impl AsciiHit {
+  #[inline]
+  fn from_is_ascii(is_ascii: bool) -> Self {
+    if is_ascii {
+      Self::Ascii
+    } else {
+      Self::NotAscii
+    }
+  }
+
+  #[inline]
+  fn for_subspan(self) -> Self {
+    if matches!(self, Self::Ascii) {
+      Self::Ascii
+    } else {
+      Self::Unknown
+    }
+  }
+}
+
+/// A borrowed text span with ASCII metadata.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TextSpan<'a> {
   text: &'a str,
-  is_ascii: bool,
+  ascii_hit: AsciiHit,
 }
 
 impl<'a> TextSpan<'a> {
-  /// Create a text span and compute its ASCII status.
+  /// Create a text span without computing its ASCII status.
   #[inline]
   pub fn new(text: &'a str) -> Self {
-    Self::with_ascii(text, text.is_ascii())
+    Self {
+      text,
+      ascii_hit: AsciiHit::Unknown,
+    }
   }
 
   /// Create a text span from an ASCII fast-path hint.
   #[inline]
   pub fn with_ascii(text: &'a str, is_ascii: bool) -> Self {
     debug_assert!(!is_ascii || text.is_ascii());
-    Self { text, is_ascii }
+    Self {
+      text,
+      ascii_hit: AsciiHit::from_is_ascii(is_ascii),
+    }
+  }
+
+  /// Create a text span from known ASCII status.
+  #[inline]
+  pub(crate) fn with_known(text: &'a str, is_ascii: bool) -> Self {
+    debug_assert_eq!(is_ascii, text.is_ascii());
+    Self {
+      text,
+      ascii_hit: AsciiHit::from_is_ascii(is_ascii),
+    }
   }
 
   /// Return the span text.
@@ -142,7 +185,11 @@ impl<'a> TextSpan<'a> {
   /// Return whether this span is ASCII.
   #[inline]
   pub fn is_ascii(&self) -> bool {
-    self.is_ascii || self.text.is_ascii()
+    match self.ascii_hit {
+      AsciiHit::Ascii => true,
+      AsciiHit::NotAscii => false,
+      AsciiHit::Unknown => self.text.is_ascii(),
+    }
   }
 
   /// Return the UTF-16 length of the span.
@@ -153,20 +200,28 @@ impl<'a> TextSpan<'a> {
 
   #[inline]
   pub(crate) fn subspan(&self, text: &'a str) -> Self {
-    if self.is_ascii {
-      Self::with_ascii(text, true)
-    } else {
-      Self::new(text)
+    Self {
+      text,
+      ascii_hit: self.ascii_hit.for_subspan(),
     }
   }
 
   #[inline]
   pub(crate) fn utf16_len_of(&self, text: &str) -> usize {
-    if self.is_ascii {
-      text.len()
-    } else {
-      simd_utf16_len::utf16_len(text)
+    match self.ascii_hit {
+      AsciiHit::Ascii => text.len(),
+      AsciiHit::NotAscii => utf16_len(text),
+      AsciiHit::Unknown => if text.is_ascii() {
+        text.len()
+      } else {
+        utf16_len(text)
+      },
     }
+  }
+
+  #[inline]
+  pub(crate) fn is_known_ascii(&self) -> bool {
+    matches!(self.ascii_hit, AsciiHit::Ascii)
   }
 
   /// Slice this span by byte offsets.
@@ -174,7 +229,7 @@ impl<'a> TextSpan<'a> {
   pub fn slice(&self, start: usize, end: usize) -> Self {
     Self {
       text: &self.text[start..end],
-      is_ascii: self.is_ascii,
+      ascii_hit: self.ascii_hit.for_subspan(),
     }
   }
 
@@ -183,7 +238,7 @@ impl<'a> TextSpan<'a> {
   pub fn slice_to(&self, end: usize) -> Self {
     Self {
       text: &self.text[..end],
-      is_ascii: self.is_ascii,
+      ascii_hit: self.ascii_hit.for_subspan(),
     }
   }
 
@@ -192,7 +247,7 @@ impl<'a> TextSpan<'a> {
   pub fn slice_from(&self, start: usize) -> Self {
     Self {
       text: &self.text[start..],
-      is_ascii: self.is_ascii,
+      ascii_hit: self.ascii_hit.for_subspan(),
     }
   }
 }
@@ -278,11 +333,7 @@ pub fn encode_mappings(mappings: impl Iterator<Item = Mapping>) -> String {
 /// Formula: `utf16_len = byte_length - continuation_bytes + four_byte_leaders`
 #[inline]
 pub fn utf16_len(s: &str) -> usize {
-  if s.is_ascii() {
-    s.len()
-  } else {
-    simd_utf16_len::utf16_len(s)
-  }
+  simd_utf16_len::utf16_len(s)
 }
 
 pub struct PotentialTokens<'a> {
@@ -547,7 +598,9 @@ fn stream_chunks_of_source_map_full<'a>(
   on_name: OnName<'_, 'a>,
 ) -> GeneratedInfo {
   let lines = split_into_lines(source.as_str())
-    .map(|line| WithUtf16::new(object_pool, line))
+    .map(|line| {
+      WithUtf16::with_known(object_pool, line, source.is_known_ascii())
+    })
     .collect::<Vec<WithUtf16<'a, 'a>>>();
 
   if lines.is_empty() {

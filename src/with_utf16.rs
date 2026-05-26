@@ -8,14 +8,25 @@ pub struct WithUtf16<'object_pool, 'text> {
   pub line: &'text str,
   /// the byte position of each `char` in `line` string slice .
   pub utf16_byte_indices: OnceCell<Option<Pooled<'object_pool>>>,
+  is_ascii: bool,
   object_pool: &'object_pool ObjectPool,
 }
 
 impl<'object_pool, 'text> WithUtf16<'object_pool, 'text> {
   pub fn new(object_pool: &'object_pool ObjectPool, line: &'text str) -> Self {
+    Self::with_known(object_pool, line, false)
+  }
+
+  pub fn with_known(
+    object_pool: &'object_pool ObjectPool,
+    line: &'text str,
+    is_ascii: bool,
+  ) -> Self {
+    debug_assert!(!is_ascii || line.is_ascii());
     Self {
       utf16_byte_indices: OnceCell::new(),
       line,
+      is_ascii,
       object_pool,
     }
   }
@@ -32,7 +43,7 @@ impl<'object_pool, 'text> WithUtf16<'object_pool, 'text> {
     }
 
     let utf16_byte_indices = self.utf16_byte_indices.get_or_init(|| {
-      if self.line.is_ascii() {
+      if self.is_ascii || self.line.is_ascii() {
         return None;
       }
 
