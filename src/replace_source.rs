@@ -8,7 +8,7 @@ use std::{
 use rustc_hash::FxHashMap as HashMap;
 
 use crate::{
-  helpers::{get_map, Chunks, GeneratedInfo, StreamChunk, StreamChunks},
+  helpers::{get_map, Chunks, GeneratedInfo, StreamChunks, TextSpan},
   linear_map::LinearMap,
   object_pool::ObjectPool,
   source_content_lines::SourceContentLines,
@@ -836,7 +836,7 @@ impl Chunks for ReplaceSourceChunks<'_> {
           let content_is_ascii = content.is_ascii();
           for_each_line(content, |content_line, ends_with_newline| {
             let content_chunk =
-              StreamChunk::with_ascii(content_line, content_is_ascii);
+              TextSpan::with_ascii(content_line, content_is_ascii);
             on_chunk(
               Some(content_chunk),
               Mapping {
@@ -1029,7 +1029,7 @@ impl Chunks for ReplaceSourceChunks<'_> {
 
       for_each_line(content, |content_line, ends_with_newline| {
         let content_chunk =
-          StreamChunk::with_ascii(content_line, content_is_ascii);
+          TextSpan::with_ascii(content_line, content_is_ascii);
         on_chunk(
           Some(content_chunk),
           Mapping {

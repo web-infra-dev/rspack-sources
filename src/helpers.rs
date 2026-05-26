@@ -94,71 +94,82 @@ pub trait StreamChunks {
   fn stream_chunks<'a>(&'a self) -> Box<dyn Chunks + 'a>;
 }
 
-/// A streamed source chunk with precomputed text metadata.
+/// A borrowed text span with precomputed metadata.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct StreamChunk<'a> {
+pub struct TextSpan<'a> {
   text: &'a str,
   is_ascii: bool,
 }
 
-impl<'a> StreamChunk<'a> {
-  /// Create a chunk and compute its ASCII status.
+impl<'a> TextSpan<'a> {
+  /// Create a text span and compute its ASCII status.
   #[inline]
   pub fn new(text: &'a str) -> Self {
-    Self {
-      text,
-      is_ascii: text.is_ascii(),
-    }
+    Self::with_ascii(text, text.is_ascii())
   }
 
-  /// Create a chunk from known ASCII status.
+  /// Create a text span from an ASCII fast-path hint.
   #[inline]
   pub fn with_ascii(text: &'a str, is_ascii: bool) -> Self {
     debug_assert!(!is_ascii || text.is_ascii());
     Self { text, is_ascii }
   }
 
-  /// Return the chunk text.
+  /// Return the span text.
   #[inline]
   pub fn as_str(&self) -> &'a str {
     self.text
   }
 
-  /// Return the byte length of the chunk text.
+  /// Return the byte length of the span text.
   #[inline]
   pub fn len(&self) -> usize {
     self.text.len()
   }
 
-  /// Return whether the chunk text is empty.
+  /// Return whether the span text is empty.
   #[inline]
   pub fn is_empty(&self) -> bool {
     self.text.is_empty()
   }
 
-  /// Return whether the chunk text ends with a character.
+  /// Return whether the span text ends with a character.
   #[inline]
   pub fn ends_with(&self, ch: char) -> bool {
     self.text.ends_with(ch)
   }
 
-  /// Return whether this chunk is ASCII.
+  /// Return whether this span is ASCII.
   #[inline]
   pub fn is_ascii(&self) -> bool {
-    self.is_ascii
+    self.is_ascii || self.text.is_ascii()
   }
 
-  /// Return the UTF-16 length of the chunk.
+  /// Return the UTF-16 length of the span.
   #[inline]
   pub fn utf16_len(&self) -> usize {
+    self.utf16_len_of(self.text)
+  }
+
+  #[inline]
+  pub(crate) fn subspan(&self, text: &'a str) -> Self {
     if self.is_ascii {
-      self.text.len()
+      Self::with_ascii(text, true)
     } else {
-      simd_utf16_len::utf16_len(self.text)
+      Self::new(text)
     }
   }
 
-  /// Slice this chunk by byte offsets.
+  #[inline]
+  pub(crate) fn utf16_len_of(&self, text: &str) -> usize {
+    if self.is_ascii {
+      text.len()
+    } else {
+      simd_utf16_len::utf16_len(text)
+    }
+  }
+
+  /// Slice this span by byte offsets.
   #[inline]
   pub fn slice(&self, start: usize, end: usize) -> Self {
     Self {
@@ -167,7 +178,7 @@ impl<'a> StreamChunk<'a> {
     }
   }
 
-  /// Slice this chunk from the start to a byte offset.
+  /// Slice this span from the start to a byte offset.
   #[inline]
   pub fn slice_to(&self, end: usize) -> Self {
     Self {
@@ -176,7 +187,7 @@ impl<'a> StreamChunk<'a> {
     }
   }
 
-  /// Slice this chunk from a byte offset to the end.
+  /// Slice this span from a byte offset to the end.
   #[inline]
   pub fn slice_from(&self, start: usize) -> Self {
     Self {
@@ -186,14 +197,14 @@ impl<'a> StreamChunk<'a> {
   }
 }
 
-impl AsRef<str> for StreamChunk<'_> {
+impl AsRef<str> for TextSpan<'_> {
   #[inline]
   fn as_ref(&self) -> &str {
     self.text
   }
 }
 
-impl std::ops::Deref for StreamChunk<'_> {
+impl std::ops::Deref for TextSpan<'_> {
   type Target = str;
 
   #[inline]
@@ -203,7 +214,7 @@ impl std::ops::Deref for StreamChunk<'_> {
 }
 
 /// [OnChunk] abstraction, see [webpack-sources onChunk](https://github.com/webpack/webpack-sources/blob/9f98066311d53a153fdc7c633422a1d086528027/lib/helpers/streamChunks.js#L13).
-pub type OnChunk<'a, 'b> = &'a mut dyn FnMut(Option<StreamChunk<'b>>, Mapping);
+pub type OnChunk<'a, 'b> = &'a mut dyn FnMut(Option<TextSpan<'b>>, Mapping);
 
 /// [OnSource] abstraction, see [webpack-sources onSource](https://github.com/webpack/webpack-sources/blob/9f98066311d53a153fdc7c633422a1d086528027/lib/helpers/streamChunks.js#L13).
 ///
@@ -223,6 +234,7 @@ pub fn stream_chunks_default<'a>(
   on_source: OnSource<'_, 'a>,
   on_name: OnName<'_, 'a>,
 ) -> GeneratedInfo {
+  let source = TextSpan::new(source);
   if let Some(map) = source_map {
     stream_chunks_of_source_map(
       options,
@@ -270,27 +282,6 @@ pub fn utf16_len(s: &str) -> usize {
     s.len()
   } else {
     simd_utf16_len::utf16_len(s)
-  }
-}
-
-#[inline]
-fn utf16_len_with_known_ascii(is_ascii: bool, s: &str) -> usize {
-  if is_ascii {
-    s.len()
-  } else {
-    simd_utf16_len::utf16_len(s)
-  }
-}
-
-#[inline]
-fn stream_chunk_with_known_ascii(
-  is_ascii: bool,
-  chunk: &str,
-) -> StreamChunk<'_> {
-  if is_ascii {
-    StreamChunk::with_ascii(chunk, true)
-  } else {
-    StreamChunk::new(chunk)
   }
 }
 
@@ -375,25 +366,19 @@ pub fn split_into_lines(source: &str) -> impl Iterator<Item = &str> {
   split(source, b'\n')
 }
 
-pub(crate) fn get_generated_source_info_with_known_ascii(
-  source: &str,
-  is_ascii: bool,
-) -> GeneratedInfo {
+pub(crate) fn get_generated_source_info(source: TextSpan<'_>) -> GeneratedInfo {
   let (generated_line, generated_column) = if source.ends_with('\n') {
-    (split_into_lines(source).count() + 1, 0)
+    (split_into_lines(source.as_str()).count() + 1, 0)
   } else {
     let mut line_count = 0;
     let mut last_line = "";
 
-    for line in split_into_lines(source) {
+    for line in split_into_lines(source.as_str()) {
       line_count += 1;
       last_line = line;
     }
 
-    (
-      line_count.max(1),
-      utf16_len_with_known_ascii(is_ascii, last_line),
-    )
+    (line_count.max(1), source.utf16_len_of(last_line))
   };
   GeneratedInfo {
     generated_line: generated_line as u32,
@@ -402,39 +387,21 @@ pub(crate) fn get_generated_source_info_with_known_ascii(
 }
 
 pub fn stream_chunks_of_raw_source<'a>(
-  source: &'a str,
+  source: TextSpan<'a>,
   options: &MapOptions,
-  on_chunk: OnChunk<'_, 'a>,
-  _on_source: OnSource<'_, 'a>,
-  _on_name: OnName<'_, 'a>,
-) -> GeneratedInfo {
-  stream_chunks_of_raw_source_with_known_ascii(
-    source,
-    options,
-    source.is_ascii(),
-    on_chunk,
-    _on_source,
-    _on_name,
-  )
-}
-
-pub(crate) fn stream_chunks_of_raw_source_with_known_ascii<'a>(
-  source: &'a str,
-  options: &MapOptions,
-  is_ascii: bool,
   on_chunk: OnChunk<'_, 'a>,
   _on_source: OnSource<'_, 'a>,
   _on_name: OnName<'_, 'a>,
 ) -> GeneratedInfo {
   if options.final_source {
-    return get_generated_source_info_with_known_ascii(source, is_ascii);
+    return get_generated_source_info(source);
   }
 
   let mut line = 1;
   let mut last_line = None;
-  for l in split_into_lines(source) {
+  for l in split_into_lines(source.as_str()) {
     on_chunk(
-      Some(stream_chunk_with_known_ascii(is_ascii, l)),
+      Some(source.subspan(l)),
       Mapping {
         generated_line: line,
         generated_column: 0,
@@ -462,30 +429,7 @@ pub(crate) fn stream_chunks_of_raw_source_with_known_ascii<'a>(
 pub fn stream_chunks_of_source_map<'a>(
   options: &MapOptions,
   object_pool: &'a ObjectPool,
-  source: &'a str,
-  source_map: &'a SourceMap,
-  on_chunk: OnChunk<'_, 'a>,
-  on_source: OnSource<'_, 'a>,
-  on_name: OnName<'_, 'a>,
-) -> GeneratedInfo {
-  stream_chunks_of_source_map_with_known_ascii(
-    options,
-    object_pool,
-    source,
-    source.is_ascii(),
-    source_map,
-    on_chunk,
-    on_source,
-    on_name,
-  )
-}
-
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn stream_chunks_of_source_map_with_known_ascii<'a>(
-  options: &MapOptions,
-  object_pool: &'a ObjectPool,
-  source: &'a str,
-  is_ascii: bool,
+  source: TextSpan<'a>,
   source_map: &'a SourceMap,
   on_chunk: OnChunk<'_, 'a>,
   on_source: OnSource<'_, 'a>,
@@ -497,7 +441,7 @@ pub(crate) fn stream_chunks_of_source_map_with_known_ascii<'a>(
       final_source: true,
       ..
     } => stream_chunks_of_source_map_final(
-      source, is_ascii, source_map, on_chunk, on_source, on_name,
+      source, source_map, on_chunk, on_source, on_name,
     ),
     MapOptions {
       columns: true,
@@ -506,7 +450,6 @@ pub(crate) fn stream_chunks_of_source_map_with_known_ascii<'a>(
     } => stream_chunks_of_source_map_full(
       object_pool,
       source,
-      is_ascii,
       source_map,
       on_chunk,
       on_source,
@@ -517,14 +460,14 @@ pub(crate) fn stream_chunks_of_source_map_with_known_ascii<'a>(
       final_source: true,
       ..
     } => stream_chunks_of_source_map_lines_final(
-      source, is_ascii, source_map, on_chunk, on_source, on_name,
+      source, source_map, on_chunk, on_source, on_name,
     ),
     MapOptions {
       columns: false,
       final_source: false,
       ..
     } => stream_chunks_of_source_map_lines_full(
-      source, is_ascii, source_map, on_chunk, on_source, on_name,
+      source, source_map, on_chunk, on_source, on_name,
     ),
   }
 }
@@ -540,15 +483,13 @@ fn get_source<'a>(source_map: &SourceMap, source: &'a str) -> Cow<'a, str> {
 }
 
 fn stream_chunks_of_source_map_final<'a>(
-  source: &'a str,
-  source_is_ascii: bool,
+  source: TextSpan<'a>,
   source_map: &'a SourceMap,
   on_chunk: OnChunk,
   on_source: OnSource<'_, 'a>,
   on_name: OnName<'_, 'a>,
 ) -> GeneratedInfo {
-  let result =
-    get_generated_source_info_with_known_ascii(source, source_is_ascii);
+  let result = get_generated_source_info(source);
   if result.generated_line == 1 && result.generated_column == 0 {
     return result;
   }
@@ -599,14 +540,13 @@ fn stream_chunks_of_source_map_final<'a>(
 
 fn stream_chunks_of_source_map_full<'a>(
   object_pool: &'a ObjectPool,
-  source: &'a str,
-  source_is_ascii: bool,
+  source: TextSpan<'a>,
   source_map: &'a SourceMap,
   on_chunk: OnChunk<'_, 'a>,
   on_source: OnSource<'_, 'a>,
   on_name: OnName<'_, 'a>,
 ) -> GeneratedInfo {
-  let lines = split_into_lines(source)
+  let lines = split_into_lines(source.as_str())
     .map(|line| WithUtf16::new(object_pool, line))
     .collect::<Vec<WithUtf16<'a, 'a>>>();
 
@@ -636,7 +576,7 @@ fn stream_chunks_of_source_map_full<'a>(
   let final_column: u32 = if last_new_line {
     0
   } else {
-    utf16_len_with_known_ascii(source_is_ascii, last_line)
+    source.utf16_len_of(last_line)
   } as u32;
   let mut current_generated_line: u32 = 1;
   let mut current_generated_column: u32 = 0;
@@ -662,7 +602,7 @@ fn stream_chunks_of_source_map_full<'a>(
       }
       if !chunk.is_empty() {
         on_chunk(
-          Some(stream_chunk_with_known_ascii(source_is_ascii, chunk)),
+          Some(source.subspan(chunk)),
           Mapping {
             generated_line: mapping_line,
             generated_column: mapping_column,
@@ -679,7 +619,7 @@ fn stream_chunks_of_source_map_full<'a>(
         let chunk = lines[(current_generated_line - 1) as usize]
           .substring(current_generated_column as usize, usize::MAX);
         on_chunk(
-          Some(stream_chunk_with_known_ascii(source_is_ascii, chunk)),
+          Some(source.subspan(chunk)),
           Mapping {
             generated_line: current_generated_line,
             generated_column: current_generated_column,
@@ -694,7 +634,7 @@ fn stream_chunks_of_source_map_full<'a>(
       if current_generated_line as usize <= lines.len() {
         let chunk = &lines[(current_generated_line as usize) - 1].line;
         on_chunk(
-          Some(stream_chunk_with_known_ascii(source_is_ascii, chunk)),
+          Some(source.subspan(chunk)),
           Mapping {
             generated_line: current_generated_line,
             generated_column: 0,
@@ -711,7 +651,7 @@ fn stream_chunks_of_source_map_full<'a>(
           mapping.generated_column as usize,
         );
         on_chunk(
-          Some(stream_chunk_with_known_ascii(source_is_ascii, chunk)),
+          Some(source.subspan(chunk)),
           Mapping {
             generated_line: current_generated_line,
             generated_column: current_generated_column,
@@ -746,15 +686,13 @@ fn stream_chunks_of_source_map_full<'a>(
 }
 
 fn stream_chunks_of_source_map_lines_final<'a>(
-  source: &'a str,
-  source_is_ascii: bool,
+  source: TextSpan<'a>,
   source_map: &'a SourceMap,
   on_chunk: OnChunk,
   on_source: OnSource<'_, 'a>,
   _on_name: OnName,
 ) -> GeneratedInfo {
-  let result =
-    get_generated_source_info_with_known_ascii(source, source_is_ascii);
+  let result = get_generated_source_info(source);
   if result.generated_line == 1 && result.generated_column == 0 {
     return GeneratedInfo {
       generated_line: 1,
@@ -793,14 +731,13 @@ fn stream_chunks_of_source_map_lines_final<'a>(
 }
 
 fn stream_chunks_of_source_map_lines_full<'a>(
-  source: &'a str,
-  source_is_ascii: bool,
+  source: TextSpan<'a>,
   source_map: &'a SourceMap,
   on_chunk: OnChunk<'_, 'a>,
   on_source: OnSource<'_, 'a>,
   _on_name: OnName,
 ) -> GeneratedInfo {
-  let lines: Vec<&str> = split_into_lines(source).collect();
+  let lines: Vec<&str> = split_into_lines(source.as_str()).collect();
   if lines.is_empty() {
     return GeneratedInfo {
       generated_line: 1,
@@ -826,7 +763,7 @@ fn stream_chunks_of_source_map_lines_full<'a>(
       if current_generated_line as usize <= lines.len() {
         let chunk = &lines[current_generated_line as usize - 1];
         on_chunk(
-          Some(stream_chunk_with_known_ascii(source_is_ascii, chunk)),
+          Some(source.subspan(chunk)),
           Mapping {
             generated_line: current_generated_line,
             generated_column: 0,
@@ -844,10 +781,7 @@ fn stream_chunks_of_source_map_lines_full<'a>(
       let chunk = &lines[current_generated_line as usize - 1];
       mapping.generated_column = 0;
       original.name_index = None;
-      on_chunk(
-        Some(stream_chunk_with_known_ascii(source_is_ascii, chunk)),
-        mapping,
-      );
+      on_chunk(Some(source.subspan(chunk)), mapping);
       current_generated_line += 1;
     }
   };
@@ -857,7 +791,7 @@ fn stream_chunks_of_source_map_lines_full<'a>(
   while current_generated_line as usize <= lines.len() {
     let chunk = &lines[current_generated_line as usize - 1];
     on_chunk(
-      Some(stream_chunk_with_known_ascii(source_is_ascii, chunk)),
+      Some(source.subspan(chunk)),
       Mapping {
         generated_line: current_generated_line,
         generated_column: 0,
@@ -876,7 +810,7 @@ fn stream_chunks_of_source_map_lines_full<'a>(
   let final_column = if last_new_line {
     0
   } else {
-    utf16_len_with_known_ascii(source_is_ascii, last_line)
+    source.utf16_len_of(last_line)
   } as u32;
   GeneratedInfo {
     generated_line: final_line,
@@ -887,7 +821,7 @@ fn stream_chunks_of_source_map_lines_full<'a>(
 #[derive(Debug)]
 struct SourceMapLineData<'a> {
   pub mappings_data: Vec<i64>,
-  pub chunks: Vec<StreamChunk<'a>>,
+  pub chunks: Vec<TextSpan<'a>>,
 }
 
 type InnerSourceIndexValueMapping<'a> =
@@ -961,7 +895,7 @@ pub fn stream_chunks_of_combined_source_map<'a>(
   stream_chunks_of_source_map(
     options,
     object_pool,
-    source,
+    TextSpan::new(source),
     source_map,
     &mut |chunk, mapping| {
       let source_index = mapping
@@ -1290,7 +1224,7 @@ pub fn stream_chunks_of_combined_source_map<'a>(
             final_source: false,
           },
           object_pool,
-          source_content.unwrap().as_ref(),
+          TextSpan::new(source_content.unwrap().as_ref()),
           inner_source_map,
           &mut |chunk, mapping| {
             let mut inner_source_map_line_data =
@@ -1441,7 +1375,7 @@ mod tests {
   use super::{
     split_into_potential_tokens, stream_chunks_of_source_map_final,
     stream_chunks_of_source_map_full, stream_chunks_of_source_map_lines_final,
-    stream_chunks_of_source_map_lines_full, utf16_len, GeneratedInfo,
+    stream_chunks_of_source_map_lines_full, utf16_len, GeneratedInfo, TextSpan,
   };
   use crate::{Mapping, ObjectPool, OriginalLocation, SourceMap};
 
@@ -1468,8 +1402,7 @@ mod tests {
 
     let generated_info = stream_chunks_of_source_map_full(
       &object_pool,
-      source,
-      source.is_ascii(),
+      TextSpan::new(source),
       source_map,
       &mut |chunk, mapping| {
         chunks.push((chunk.unwrap().as_str(), mapping));
@@ -1515,8 +1448,7 @@ mod tests {
     let source_map = &*UTF16_SOURCE_MAP;
 
     let generated_info = stream_chunks_of_source_map_final(
-      source,
-      source.is_ascii(),
+      TextSpan::new(source),
       source_map,
       &mut |_chunk, _mapping| {},
       &mut |_i, _source, _source_content| {},
@@ -1538,8 +1470,7 @@ mod tests {
     let source_map = &*UTF16_SOURCE_MAP;
 
     let generated_info = stream_chunks_of_source_map_lines_final(
-      source,
-      source.is_ascii(),
+      TextSpan::new(source),
       source_map,
       &mut |_chunk, _mapping| {},
       &mut |_i, _source, _source_content| {},
@@ -1561,8 +1492,7 @@ mod tests {
     let source_map = &*UTF16_SOURCE_MAP;
 
     let generated_info = stream_chunks_of_source_map_lines_full(
-      source,
-      source.is_ascii(),
+      TextSpan::new(source),
       source_map,
       &mut |_chunk, _mapping| {},
       &mut |_i, _source, _source_content| {},

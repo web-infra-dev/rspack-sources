@@ -8,10 +8,8 @@ use rustc_hash::FxHasher;
 
 use crate::{
   helpers::{
-    stream_and_get_source_and_map,
-    stream_chunks_of_raw_source_with_known_ascii,
-    stream_chunks_of_source_map_with_known_ascii, Chunks, GeneratedInfo,
-    StreamChunks,
+    stream_and_get_source_and_map, stream_chunks_of_raw_source,
+    stream_chunks_of_source_map, Chunks, GeneratedInfo, StreamChunks, TextSpan,
   },
   object_pool::ObjectPool,
   source::SourceValue,
@@ -181,19 +179,19 @@ struct CachedSourceChunks<'source> {
   chunks: Box<dyn Chunks + 'source>,
   cache: Arc<CachedData>,
   source: Cow<'source, str>,
-  source_is_ascii: bool,
+  is_ascii: bool,
 }
 
 impl<'a> CachedSourceChunks<'a> {
   fn new(cache_source: &'a CachedSource) -> Self {
     let source = cache_source.source().into_string_lossy();
-    let source_is_ascii = cache_source.is_ascii();
+    let is_ascii = cache_source.is_ascii();
 
     Self {
       chunks: cache_source.inner.stream_chunks(),
       cache: cache_source.cache.clone(),
       source,
-      source_is_ascii,
+      is_ascii,
     }
   }
 }
@@ -214,25 +212,20 @@ impl Chunks for CachedSourceChunks<'_> {
     };
     match cell.get() {
       Some(map) => {
+        let source = TextSpan::with_ascii(self.source.as_ref(), self.is_ascii);
         if let Some(map) = map {
-          stream_chunks_of_source_map_with_known_ascii(
+          stream_chunks_of_source_map(
             options,
             object_pool,
-            self.source.as_ref(),
-            self.source_is_ascii,
+            source,
             map,
             on_chunk,
             on_source,
             on_name,
           )
         } else {
-          stream_chunks_of_raw_source_with_known_ascii(
-            self.source.as_ref(),
-            options,
-            self.source_is_ascii,
-            on_chunk,
-            on_source,
-            on_name,
+          stream_chunks_of_raw_source(
+            source, options, on_chunk, on_source, on_name,
           )
         }
       }
