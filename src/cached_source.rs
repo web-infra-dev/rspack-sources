@@ -223,8 +223,7 @@ impl Chunks for CachedSourceChunks<'_> {
     };
     match cell.get() {
       Some(map) => {
-        let source =
-          TextSpan::with_known(self.source.as_ref(), self.is_ascii);
+        let source = TextSpan::with_known(self.source.as_ref(), self.is_ascii);
         if let Some(map) = map {
           stream_chunks_of_source_map(
             options,

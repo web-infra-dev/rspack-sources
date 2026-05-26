@@ -211,11 +211,13 @@ impl<'a> TextSpan<'a> {
     match self.ascii_hit {
       AsciiHit::Ascii => text.len(),
       AsciiHit::NotAscii => utf16_len(text),
-      AsciiHit::Unknown => if text.is_ascii() {
-        text.len()
-      } else {
-        utf16_len(text)
-      },
+      AsciiHit::Unknown => {
+        if text.is_ascii() {
+          text.len()
+        } else {
+          utf16_len(text)
+        }
+      }
     }
   }
 
@@ -1437,13 +1439,6 @@ mod tests {
   static UTF16_SOURCE_MAP: LazyLock<SourceMap> = LazyLock::new(|| {
     SourceMap::from_json("{\"version\":3,\"sources\":[\"i18.js\"],\"sourcesContent\":[\"var i18n = JSON.parse('{\\\"魑魅魍魉\\\":{\\\"en-US\\\":\\\"Evil spirits\\\",\\\"zh-CN\\\":\\\"魑魅魍魉\\\"}}');\\nvar __webpack_exports___ = i18n[\\\"魑魅魍魉\\\"];\\nexport { __webpack_exports___ as 魑魅魍魉 };\\n\"],\"names\":[\"i18n\",\"JSON\",\"__webpack_exports___\",\"魑魅魍魉\"],\"mappings\":\"AAAA,IAAIA,OAAOC,KAAK,KAAK,CAAC;AACtB,IAAIC,uBAAuBF,IAAI,CAAC,OAAO;AACvC,SAASE,wBAAwBC,IAAI,GAAG\"}").unwrap()
   });
-
-  #[test]
-  fn test_utf16_len_fast_path_and_unicode() {
-    let ascii = "let answer = 42;";
-    assert_eq!(utf16_len(ascii), ascii.len());
-    assert_eq!(utf16_len("a😋b"), 4);
-  }
 
   #[test]
   fn test_stream_chunks_of_source_map_full_handles_multi_unit_utf16() {

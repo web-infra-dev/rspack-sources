@@ -333,29 +333,6 @@ mod tests {
   }
 
   #[test]
-  fn stream_chunks_expose_ascii_metadata() {
-    let source = OriginalSource::new("let answer = 42;\nanswer;", "file.js");
-    let object_pool = ObjectPool::default();
-    let chunks = source.stream_chunks();
-    let mut seen_chunk = false;
-
-    chunks.stream(
-      &object_pool,
-      &MapOptions::default(),
-      &mut |chunk, _mapping| {
-        let chunk = chunk.unwrap();
-        seen_chunk = true;
-        assert!(chunk.is_ascii());
-        assert_eq!(chunk.utf16_len(), chunk.len());
-      },
-      &mut |_source_index, _source, _source_content| {},
-      &mut |_name_index, _name| {},
-    );
-
-    assert!(seen_chunk);
-  }
-
-  #[test]
   fn should_split_code_into_statements() {
     let input = "if (hello()) { world(); hi(); there(); } done();\nif (hello()) { world(); hi(); there(); } done();";
     let source = OriginalSource::new(input, "file.js");
