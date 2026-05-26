@@ -126,8 +126,19 @@ impl Source for CachedSource {
 
     let chunks = self.get_or_init_chunks();
     let mut string = String::with_capacity(self.size());
-    for chunk in chunks {
-      string.push_str(chunk);
+    if self.cache.is_ascii.get().is_none() {
+      let mut is_ascii = true;
+      for chunk in chunks {
+        if is_ascii {
+          is_ascii = chunk.is_ascii();
+        }
+        string.push_str(chunk);
+      }
+      let _ = self.cache.is_ascii.set(is_ascii);
+    } else {
+      for chunk in chunks {
+        string.push_str(chunk);
+      }
     }
     SourceValue::String(Cow::Owned(string))
   }
