@@ -7,7 +7,7 @@ use std::{
 use crate::{
   helpers::{
     get_map, stream_chunks_of_combined_source_map, stream_chunks_of_source_map,
-    Chunks, StreamChunks,
+    Chunks, StreamChunks, TextSpan,
   },
   object_pool::ObjectPool,
   MapOptions, Source, SourceMap, SourceValue,
@@ -247,7 +247,7 @@ impl Chunks for SourceMapSourceChunks<'_> {
       stream_chunks_of_source_map(
         options,
         object_pool,
-        self.0.value.as_ref(),
+        TextSpan::new(self.0.value.as_ref()),
         &self.0.source_map,
         on_chunk,
         on_source,

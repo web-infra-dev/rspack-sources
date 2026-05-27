@@ -7,8 +7,7 @@ use std::{
 use crate::{
   helpers::{
     get_generated_source_info, get_map, split_into_lines,
-    split_into_potential_tokens, utf16_len, Chunks, GeneratedInfo,
-    StreamChunks,
+    split_into_potential_tokens, Chunks, GeneratedInfo, StreamChunks, TextSpan,
   },
   object_pool::ObjectPool,
   source::{Mapping, OriginalLocation},
@@ -140,6 +139,7 @@ impl Chunks for OriginalSourceChunks<'_> {
     _on_name: crate::helpers::OnName<'_, 'b>,
   ) -> GeneratedInfo {
     on_source(0, Cow::Borrowed(&self.0.name), Some(&self.0.value));
+    let source = TextSpan::new(self.0.value.as_ref());
     if options.columns {
       // With column info we need to read all lines and split them
       let mut line = 1;
@@ -149,7 +149,7 @@ impl Chunks for OriginalSourceChunks<'_> {
         if is_end_of_line && token.len() == 1 {
           if !options.final_source {
             on_chunk(
-              Some(token),
+              Some(source.subspan(token)),
               Mapping {
                 generated_line: line,
                 generated_column: column,
@@ -159,7 +159,7 @@ impl Chunks for OriginalSourceChunks<'_> {
           }
         } else {
           on_chunk(
-            (!options.final_source).then_some(token),
+            (!options.final_source).then_some(source.subspan(token)),
             Mapping {
               generated_line: line,
               generated_column: column,
@@ -176,7 +176,7 @@ impl Chunks for OriginalSourceChunks<'_> {
           line += 1;
           column = 0;
         } else {
-          column += utf16_len(token) as u32;
+          column += source.utf16_len_of(token) as u32;
         }
       }
       GeneratedInfo {
@@ -186,7 +186,7 @@ impl Chunks for OriginalSourceChunks<'_> {
     } else if options.final_source {
       // Without column info and with final source we only
       // need meta info to generate mapping
-      let result = get_generated_source_info(self.0.value.as_ref());
+      let result = get_generated_source_info(source);
       if result.generated_column == 0 {
         for line in 1..result.generated_line {
           on_chunk(
@@ -228,7 +228,7 @@ impl Chunks for OriginalSourceChunks<'_> {
       let mut last_line = None;
       for l in split_into_lines(self.0.value.as_ref()) {
         on_chunk(
-          (!options.final_source).then_some(l),
+          (!options.final_source).then_some(source.subspan(l)),
           Mapping {
             generated_line: line,
             generated_column: 0,
@@ -248,7 +248,7 @@ impl Chunks for OriginalSourceChunks<'_> {
       {
         GeneratedInfo {
           generated_line: line - 1,
-          generated_column: utf16_len(last_line) as u32,
+          generated_column: source.utf16_len_of(last_line) as u32,
         }
       } else {
         GeneratedInfo {
@@ -381,7 +381,7 @@ mod tests {
       &object_pool,
       &MapOptions::default(),
       &mut |chunk, mapping| {
-        chunks.push((chunk.unwrap(), mapping));
+        chunks.push((chunk.unwrap().as_str(), mapping));
       },
       &mut |_source_index, _source, _source_content| {},
       &mut |_name_index, _name| {},

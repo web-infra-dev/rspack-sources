@@ -7,7 +7,7 @@ use std::{
 use crate::{
   helpers::{
     get_generated_source_info, stream_chunks_of_raw_source, Chunks,
-    GeneratedInfo, StreamChunks,
+    GeneratedInfo, StreamChunks, TextSpan,
   },
   object_pool::ObjectPool,
   MapOptions, Source, SourceMap, SourceValue,
@@ -124,10 +124,11 @@ impl Chunks for RawStringChunks<'_> {
     on_source: crate::helpers::OnSource<'_, 'a>,
     on_name: crate::helpers::OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {
+    let source = TextSpan::new(self.0);
     if options.final_source {
-      get_generated_source_info(self.0)
+      get_generated_source_info(source)
     } else {
-      stream_chunks_of_raw_source(self.0, options, on_chunk, on_source, on_name)
+      stream_chunks_of_raw_source(source, options, on_chunk, on_source, on_name)
     }
   }
 }
@@ -265,10 +266,11 @@ impl Chunks for RawBufferSourceChunks<'_> {
     on_name: crate::helpers::OnName<'_, 'a>,
   ) -> GeneratedInfo {
     let code = self.0.get_or_init_value_as_string();
+    let source = TextSpan::new(code);
     if options.final_source {
-      get_generated_source_info(code)
+      get_generated_source_info(source)
     } else {
-      stream_chunks_of_raw_source(code, options, on_chunk, on_source, on_name)
+      stream_chunks_of_raw_source(source, options, on_chunk, on_source, on_name)
     }
   }
 }
