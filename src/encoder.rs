@@ -1,10 +1,44 @@
+use bytes::{BufMut, BytesMut};
+
 use crate::Mapping;
 
 const B64_CHARS: &[u8] =
   b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+const INITIAL_MAPPINGS_CAPACITY: usize = 64 * 1024;
+
+struct MappingsBuffer {
+  bytes: BytesMut,
+}
+
+impl MappingsBuffer {
+  fn new() -> Self {
+    Self {
+      bytes: BytesMut::with_capacity(INITIAL_MAPPINGS_CAPACITY),
+    }
+  }
+
+  #[inline(always)]
+  fn push(&mut self, byte: u8) {
+    self.bytes.put_u8(byte);
+  }
+
+  #[inline(always)]
+  fn extend_from_slice(&mut self, bytes: &[u8]) {
+    self.bytes.put_slice(bytes);
+  }
+
+  #[inline]
+  fn extend_repeated(&mut self, byte: u8, count: usize) {
+    self.bytes.put_bytes(byte, count);
+  }
+
+  fn drain(&mut self) -> Vec<u8> {
+    std::mem::take(&mut self.bytes).to_vec()
+  }
+}
 
 #[inline(always)]
-pub fn encode_vlq(out: &mut Vec<u8>, a: u32, b: u32) {
+fn encode_vlq(out: &mut MappingsBuffer, a: u32, b: u32) {
   if a == b {
     out.push(b'A');
     return;
@@ -75,7 +109,7 @@ pub(crate) struct FullMappingsEncoder {
   active_mapping: bool,
   active_name: bool,
   initial: bool,
-  mappings: Vec<u8>,
+  mappings: MappingsBuffer,
 }
 
 impl FullMappingsEncoder {
@@ -90,7 +124,7 @@ impl FullMappingsEncoder {
       active_mapping: false,
       active_name: false,
       initial: true,
-      mappings: Vec::with_capacity(64 * 1024),
+      mappings: MappingsBuffer::new(),
     }
   }
 }
@@ -120,7 +154,7 @@ impl FullMappingsEncoder {
 
     if self.current_line < mapping.generated_line {
       let count = (mapping.generated_line - self.current_line) as usize;
-      self.mappings.extend(std::iter::repeat_n(b';', count));
+      self.mappings.extend_repeated(b';', count);
       self.current_line = mapping.generated_line;
       self.current_column = 0;
       self.initial = false;
@@ -185,7 +219,7 @@ impl FullMappingsEncoder {
   fn drain(&mut self) -> String {
     unsafe {
       // SAFETY: The `mappings` field in the source map consists solely of ASCII characters.
-      String::from_utf8_unchecked(std::mem::take(&mut self.mappings))
+      String::from_utf8_unchecked(self.mappings.drain())
     }
   }
 }
@@ -195,7 +229,7 @@ pub(crate) struct LinesOnlyMappingsEncoder {
   current_line: u32,
   current_source_index: u32,
   current_original_line: u32,
-  mappings: Vec<u8>,
+  mappings: MappingsBuffer,
 }
 
 impl LinesOnlyMappingsEncoder {
@@ -205,7 +239,7 @@ impl LinesOnlyMappingsEncoder {
       current_line: 1,
       current_source_index: 0,
       current_original_line: 1,
-      mappings: Default::default(),
+      mappings: MappingsBuffer::new(),
     }
   }
 }
@@ -222,9 +256,7 @@ impl LinesOnlyMappingsEncoder {
 
       let line_delta = mapping.generated_line - self.current_line;
       if line_delta > 0 {
-        self
-          .mappings
-          .extend(std::iter::repeat_n(b';', line_delta as usize));
+        self.mappings.extend_repeated(b';', line_delta as usize);
       }
 
       self.current_line = mapping.generated_line;
@@ -232,9 +264,9 @@ impl LinesOnlyMappingsEncoder {
       if original.source_index == self.current_source_index {
         if original.original_line == self.current_original_line + 1 {
           self.current_original_line = original.original_line;
-          self.mappings.extend(b"AACA");
+          self.mappings.extend_from_slice(b"AACA");
         } else {
-          self.mappings.extend(b"AA");
+          self.mappings.extend_from_slice(b"AA");
           encode_vlq(
             &mut self.mappings,
             original.original_line,
@@ -244,7 +276,7 @@ impl LinesOnlyMappingsEncoder {
           self.mappings.push(b'A');
         }
       } else {
-        self.mappings.extend(b"A");
+        self.mappings.extend_from_slice(b"A");
         encode_vlq(
           &mut self.mappings,
           original.source_index,
@@ -267,7 +299,7 @@ impl LinesOnlyMappingsEncoder {
   fn drain(&mut self) -> String {
     unsafe {
       // SAFETY: The `mappings` field in the source map consists solely of ASCII characters.
-      String::from_utf8_unchecked(std::mem::take(&mut self.mappings))
+      String::from_utf8_unchecked(self.mappings.drain())
     }
   }
 }

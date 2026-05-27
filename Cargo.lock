@@ -782,6 +782,7 @@ dependencies = [
 name = "rspack_sources"
 version = "0.4.23"
 dependencies = [
+ "bytes",
  "codspeed-criterion-compat",
  "criterion",
  "dyn-clone",
