@@ -17,8 +17,15 @@ impl<'object_pool> SourceContentLines<'object_pool> {
     #[allow(unsafe_code)]
     let text_ref =
       unsafe { std::mem::transmute::<&str, &'static str>(text.as_ref()) };
+    let is_ascii = text_ref.is_ascii();
     let lines = split_into_lines(text_ref)
-      .map(|line| WithUtf16::new(object_pool, line))
+      .map(|line| {
+        if is_ascii {
+          WithUtf16::with_known(object_pool, line, true)
+        } else {
+          WithUtf16::new(object_pool, line)
+        }
+      })
       .collect::<Vec<_>>();
     Self { text, lines }
   }
