@@ -48,9 +48,9 @@ codspeed = ["codspeed-criterion-compat"]
 serde = { version = "1.0.228", features = ["derive", "rc"] }
 dyn-clone = "1.0.20"
 rustc-hash = "2.1.2"
-memchr = "2.8.0"
+memchr = "2.8.1"
 
-codspeed-criterion-compat = { version = "4.6.0", default-features = false, optional = true }
+codspeed-criterion-compat = { version = "4.7.0", default-features = false, optional = true }
 static_assertions = "1.1.0"
 simd-json = "0.17.0"
 simd-utf16-len = "0.1.0"
