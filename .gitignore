@@ -10,6 +10,7 @@ trace-*.json
 
 # Added by cargo
 /target
+optimization-artifacts/
 
 # Web
 node_modules

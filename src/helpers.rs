@@ -138,6 +138,21 @@ impl<'a> TextSpan<'a> {
     }
   }
 
+  /// Create a text span and cache the all-ASCII fast path.
+  ///
+  /// This deliberately only caches positive ASCII hits.  When the whole text is
+  /// not ASCII, sub-spans may still be ASCII, so keeping the state unknown lets
+  /// small sub-spans use their own fast path instead of always paying the
+  /// UTF-16 length routine.
+  #[inline]
+  pub(crate) fn with_ascii_cache(text: &'a str) -> Self {
+    if text.is_ascii() {
+      Self::with_known(text, true)
+    } else {
+      Self::new(text)
+    }
+  }
+
   /// Create a text span from an ASCII fast-path hint.
   #[inline]
   pub fn with_ascii(text: &'a str, is_ascii: bool) -> Self {
@@ -291,7 +306,7 @@ pub fn stream_chunks_default<'a>(
   on_source: OnSource<'_, 'a>,
   on_name: OnName<'_, 'a>,
 ) -> GeneratedInfo {
-  let source = TextSpan::new(source);
+  let source = TextSpan::with_ascii_cache(source);
   if let Some(map) = source_map {
     stream_chunks_of_source_map(
       options,
@@ -950,7 +965,7 @@ pub fn stream_chunks_of_combined_source_map<'a>(
   stream_chunks_of_source_map(
     options,
     object_pool,
-    TextSpan::new(source),
+    TextSpan::with_ascii_cache(source),
     source_map,
     &mut |chunk, mapping| {
       let source_index = mapping
@@ -1279,7 +1294,7 @@ pub fn stream_chunks_of_combined_source_map<'a>(
             final_source: false,
           },
           object_pool,
-          TextSpan::new(source_content.unwrap().as_ref()),
+          TextSpan::with_ascii_cache(source_content.unwrap().as_ref()),
           inner_source_map,
           &mut |chunk, mapping| {
             let mut inner_source_map_line_data =
@@ -1430,7 +1445,7 @@ mod tests {
   use super::{
     split_into_potential_tokens, stream_chunks_of_source_map_final,
     stream_chunks_of_source_map_full, stream_chunks_of_source_map_lines_final,
-    stream_chunks_of_source_map_lines_full, utf16_len, GeneratedInfo, TextSpan,
+    stream_chunks_of_source_map_lines_full, GeneratedInfo, TextSpan,
   };
   use crate::{Mapping, ObjectPool, OriginalLocation, SourceMap};
 

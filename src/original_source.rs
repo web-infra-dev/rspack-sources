@@ -139,7 +139,7 @@ impl Chunks for OriginalSourceChunks<'_> {
     _on_name: crate::helpers::OnName<'_, 'b>,
   ) -> GeneratedInfo {
     on_source(0, Cow::Borrowed(&self.0.name), Some(&self.0.value));
-    let source = TextSpan::new(self.0.value.as_ref());
+    let source = TextSpan::with_ascii_cache(self.0.value.as_ref());
     if options.columns {
       // With column info we need to read all lines and split them
       let mut line = 1;

@@ -247,7 +247,7 @@ impl Chunks for SourceMapSourceChunks<'_> {
       stream_chunks_of_source_map(
         options,
         object_pool,
-        TextSpan::new(self.0.value.as_ref()),
+        TextSpan::with_ascii_cache(self.0.value.as_ref()),
         &self.0.source_map,
         on_chunk,
         on_source,

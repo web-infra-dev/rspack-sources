@@ -13,6 +13,7 @@ pub struct WithUtf16<'object_pool, 'text> {
 }
 
 impl<'object_pool, 'text> WithUtf16<'object_pool, 'text> {
+  #[cfg(test)]
   pub fn new(object_pool: &'object_pool ObjectPool, line: &'text str) -> Self {
     Self::with_known(object_pool, line, false)
   }
