@@ -21,6 +21,7 @@ struct CachedData {
   hash: OnceLock<u64>,
   size: OnceLock<usize>,
   is_ascii: OnceLock<bool>,
+  source: OnceLock<String>,
   chunks: OnceLock<Vec<&'static str>>,
   columns_map: OnceLock<Option<SourceMap>>,
   line_only_map: OnceLock<Option<SourceMap>>,
@@ -104,10 +105,35 @@ impl CachedSource {
 
   fn is_ascii(&self) -> bool {
     *self.cache.is_ascii.get_or_init(|| {
+      if let Some(source) = self.cache.source.get() {
+        return source.is_ascii();
+      }
       if let Some(chunks) = self.cache.chunks.get() {
         return chunks.iter().all(|chunk| chunk.is_ascii());
       }
       self.inner.source().as_bytes().is_ascii()
+    })
+  }
+
+  fn get_or_init_source(&self) -> &str {
+    self.cache.source.get_or_init(|| {
+      let chunks = self.get_or_init_chunks();
+      let mut string = String::with_capacity(self.size());
+      if self.cache.is_ascii.get().is_none() {
+        let mut is_ascii = true;
+        for chunk in chunks {
+          if is_ascii {
+            is_ascii = chunk.is_ascii();
+          }
+          string.push_str(chunk);
+        }
+        let _ = self.cache.is_ascii.set(is_ascii);
+      } else {
+        for chunk in chunks {
+          string.push_str(chunk);
+        }
+      }
+      string
     })
   }
 }
@@ -124,23 +150,7 @@ impl Source for CachedSource {
       return buffer_source.source();
     }
 
-    let chunks = self.get_or_init_chunks();
-    let mut string = String::with_capacity(self.size());
-    if self.cache.is_ascii.get().is_none() {
-      let mut is_ascii = true;
-      for chunk in chunks {
-        if is_ascii {
-          is_ascii = chunk.is_ascii();
-        }
-        string.push_str(chunk);
-      }
-      let _ = self.cache.is_ascii.set(is_ascii);
-    } else {
-      for chunk in chunks {
-        string.push_str(chunk);
-      }
-    }
-    SourceValue::String(Cow::Owned(string))
+    SourceValue::String(Cow::Borrowed(self.get_or_init_source()))
   }
 
   fn rope<'a>(&'a self, on_chunk: &mut dyn FnMut(&'a str)) {
@@ -188,21 +198,14 @@ impl Source for CachedSource {
 
 struct CachedSourceChunks<'source> {
   chunks: Box<dyn Chunks + 'source>,
-  cache: Arc<CachedData>,
-  source: Cow<'source, str>,
-  is_ascii: bool,
+  cache_source: &'source CachedSource,
 }
 
 impl<'a> CachedSourceChunks<'a> {
   fn new(cache_source: &'a CachedSource) -> Self {
-    let source = cache_source.source().into_string_lossy();
-    let is_ascii = cache_source.is_ascii();
-
     Self {
       chunks: cache_source.inner.stream_chunks(),
-      cache: cache_source.cache.clone(),
-      source,
-      is_ascii,
+      cache_source,
     }
   }
 }
@@ -217,13 +220,15 @@ impl Chunks for CachedSourceChunks<'_> {
     on_name: crate::helpers::OnName<'_, 'a>,
   ) -> GeneratedInfo {
     let cell = if options.columns {
-      &self.cache.columns_map
+      &self.cache_source.cache.columns_map
     } else {
-      &self.cache.line_only_map
+      &self.cache_source.cache.line_only_map
     };
     match cell.get() {
       Some(map) => {
-        let source = TextSpan::with_known(self.source.as_ref(), self.is_ascii);
+        let source = self.cache_source.get_or_init_source();
+        let is_ascii = self.cache_source.is_ascii();
+        let source = TextSpan::with_known(source, is_ascii);
         if let Some(map) = map {
           stream_chunks_of_source_map(
             options,

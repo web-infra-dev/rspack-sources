@@ -583,7 +583,37 @@ impl SourceMap {
   pub fn to_json(&self) -> String {
     let mut buffer = Vec::with_capacity(self.json_size_hint());
 
-    simd_json::to_writer(&mut buffer, self).unwrap();
+    buffer.extend_from_slice(br#"{"version":3"#);
+    if let Some(file) = &self.file {
+      buffer.extend_from_slice(br#","file":"#);
+      simd_json::to_writer(&mut buffer, file.as_ref()).unwrap();
+    }
+    buffer.extend_from_slice(br#","sources":"#);
+    write_json_str_array(&mut buffer, self.sources.iter().map(String::as_str));
+    if !is_all_empty(&self.sources_content) {
+      buffer.extend_from_slice(br#","sourcesContent":"#);
+      write_json_str_array(
+        &mut buffer,
+        self.sources_content.iter().map(Arc::as_ref),
+      );
+    }
+    buffer.extend_from_slice(br#","names":"#);
+    write_json_str_array(&mut buffer, self.names.iter().map(String::as_str));
+    buffer.extend_from_slice(br#","mappings":"#);
+    write_mappings_json_str(&mut buffer, self.mappings.as_ref());
+    if let Some(source_root) = &self.source_root {
+      buffer.extend_from_slice(br#","sourceRoot":"#);
+      simd_json::to_writer(&mut buffer, source_root.as_ref()).unwrap();
+    }
+    if let Some(debug_id) = &self.debug_id {
+      buffer.extend_from_slice(br#","debugId":"#);
+      simd_json::to_writer(&mut buffer, debug_id.as_ref()).unwrap();
+    }
+    if let Some(ignore_list) = &self.ignore_list {
+      buffer.extend_from_slice(br#","ignoreList":"#);
+      simd_json::to_writer(&mut buffer, ignore_list).unwrap();
+    }
+    buffer.push(b'}');
 
     // SAFETY: simd_json always produces valid UTF-8 JSON
     #[allow(unsafe_code)]
@@ -591,6 +621,34 @@ impl SourceMap {
       String::from_utf8_unchecked(buffer)
     }
   }
+}
+
+#[inline]
+fn write_json_str_array<'a>(
+  buffer: &mut Vec<u8>,
+  iter: impl Iterator<Item = &'a str>,
+) {
+  buffer.push(b'[');
+  for (i, item) in iter.enumerate() {
+    if i != 0 {
+      buffer.push(b',');
+    }
+    simd_json::to_writer(&mut *buffer, item).unwrap();
+  }
+  buffer.push(b']');
+}
+
+#[inline]
+fn write_mappings_json_str(buffer: &mut Vec<u8>, mappings: &str) {
+  debug_assert!(
+    mappings
+      .bytes()
+      .all(|b| matches!(b, b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'+' | b'/' | b',' | b';')),
+    "source map mappings must be VLQ/base64 text"
+  );
+  buffer.push(b'"');
+  buffer.extend_from_slice(mappings.as_bytes());
+  buffer.push(b'"');
 }
 
 impl TryFrom<RawSourceMap> for SourceMap {
