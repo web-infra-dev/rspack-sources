@@ -33,6 +33,7 @@ impl<'object_pool, 'text> WithUtf16<'object_pool, 'text> {
   }
 
   /// substring::SubString with cache
+  #[inline]
   #[allow(unsafe_code)]
   pub fn substring(
     &self,
