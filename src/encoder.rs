@@ -90,7 +90,7 @@ impl FullMappingsEncoder {
       active_mapping: false,
       active_name: false,
       initial: true,
-      mappings: Default::default(),
+      mappings: Vec::with_capacity(64 * 1024),
     }
   }
 }
