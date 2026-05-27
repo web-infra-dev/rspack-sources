@@ -13,6 +13,7 @@ pub struct WithUtf16<'object_pool, 'text> {
 }
 
 impl<'object_pool, 'text> WithUtf16<'object_pool, 'text> {
+  #[allow(dead_code)]
   pub fn new(object_pool: &'object_pool ObjectPool, line: &'text str) -> Self {
     Self::with_known(object_pool, line, false)
   }
@@ -42,8 +43,17 @@ impl<'object_pool, 'text> WithUtf16<'object_pool, 'text> {
       return "";
     }
 
+    let utf8_len = self.line.len();
+    if self.is_ascii {
+      let start_utf16_index = start_utf16_index.min(utf8_len);
+      let end_utf16_index = end_utf16_index.min(utf8_len);
+      return unsafe {
+        self.line.get_unchecked(start_utf16_index..end_utf16_index)
+      };
+    }
+
     let utf16_byte_indices = self.utf16_byte_indices.get_or_init(|| {
-      if self.is_ascii || self.line.is_ascii() {
+      if self.line.is_ascii() {
         return None;
       }
 
@@ -73,8 +83,6 @@ impl<'object_pool, 'text> WithUtf16<'object_pool, 'text> {
       }
       Some(vec)
     });
-
-    let utf8_len = self.line.len();
 
     let Some(utf16_byte_indices) = utf16_byte_indices else {
       let start_utf16_index = start_utf16_index.min(utf8_len);
