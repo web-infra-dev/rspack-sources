@@ -636,6 +636,16 @@ impl Chunks for ReplaceSourceChunks<'_> {
     on_source: crate::helpers::OnSource<'_, 'a>,
     on_name: crate::helpers::OnName<'_, 'a>,
   ) -> crate::helpers::GeneratedInfo {
+    if self.replacements.is_empty() {
+      return self.chunks.stream(
+        object_pool,
+        options,
+        on_chunk,
+        on_source,
+        on_name,
+      );
+    }
+
     let on_name = RefCell::new(on_name);
     let repls = &self.replacements;
     let mut pos: u32 = 0;
